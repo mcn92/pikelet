@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-// Reproduces the ablation numbers from the README's "What happens if the
-// answer is removed from the file?" section: veyra.pikelet and
-// veyra-ablated.pikelet are byte-for-byte identical except that
-// veyra-ablated.pikelet has the record "The Tovash project is housed in
-// Chamber 17." removed. Same question, same encoder, same code path —
-// only the file's contents differ.
+// Reproduces the ablation and mutation numbers from the README's "What
+// happens if the answer is changed or removed from the file?" section.
+// veyra.pikelet, veyra-ablated.pikelet, and veyra-chamber43.pikelet are
+// byte-for-byte identical except for one source record ("The Tovash
+// project is housed in Chamber 17."): veyra-ablated.pikelet has that
+// record removed, veyra-chamber43.pikelet has it edited to say Chamber 43
+// instead. Same question, same encoder, same code path — only the file's
+// contents differ. (This reproduces the retrieval side only — matchQuality,
+// confidence, and the retrieved text. The README's paired LLM-session
+// claims were run separately and aren't scripted here.)
 //
 // Usage: node examples/05-one-file-search/web/public/reproduce-ablation.mjs
 
@@ -23,5 +27,6 @@ async function run(label, file) {
     await search.close();
 }
 
-await run('full pack   ', 'veyra.pikelet');
-await run('ablated pack', 'veyra-ablated.pikelet');
+await run('full pack     ', 'veyra.pikelet');
+await run('ablated pack  ', 'veyra-ablated.pikelet');
+await run('chamber43 pack', 'veyra-chamber43.pikelet');

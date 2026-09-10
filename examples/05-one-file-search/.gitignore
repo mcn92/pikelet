@@ -11,6 +11,7 @@ web/dist/
 # rule above, not generated scratch output.
 !web/public/veyra.pikelet
 !web/public/veyra-ablated.pikelet
+!web/public/veyra-chamber43.pikelet
 
 student-pilot/
 encoder-spike/spike.mjs

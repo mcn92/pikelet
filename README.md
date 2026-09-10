@@ -117,7 +117,7 @@ The headless-Claude test above used a fresh process per question, so each invoca
 
 ---
 
-## What happens if the answer is removed from the file?
+## What happens if the answer is changed or removed from the file?
 
 This is different from asking whether search returns sensible documents. To test whether Pikelet's retrieval-quality signal could form a useful evidence boundary, a synthetic corpus called **Station Veyra Registry** was built. One version contained the fact:
 
@@ -136,7 +136,15 @@ After the model had already seen the answer, it was queried against the ablated 
 
 This does **not** mean Pikelet can prevent an LLM from hallucinating. It means the artifact can expose an explicit evidence boundary that a consuming model can choose to respect — and removing evidence from the artifact changed what that model was able to support from the mounted source.
 
-The test is synthetic and intentionally narrow. The two packs and the `matchQuality`/`confidence` numbers above are reproducible: `node examples/05-one-file-search/web/public/reproduce-ablation.mjs`.
+A second intervention changed only the Tovash location source record from **Chamber 17** to **Chamber 43**, rebuilt the pack, and repeated the same prompt in a fresh session:
+
+```text
+chamber43 pack: matchQuality: strong    confidence: 0.916   → Chamber 43
+```
+
+The model answered **Chamber 43** and cited the same logical source record. With Veyra not mounted at all, the same prompt produced no chamber number and the model declined to guess. Change the evidence and the grounded answer changes with it; remove the evidence source and the answer disappears.
+
+The test is synthetic and intentionally narrow. All three packs and the `matchQuality`/`confidence` numbers above are reproducible: `node examples/05-one-file-search/web/public/reproduce-ablation.mjs`. The retrieval side is scripted; the paired LLM-session claims (declining to confirm the removed fact, answering Chamber 43, declining without the pack mounted) were run separately and aren't reproduced by that script.
 
 ---
 
@@ -214,6 +222,8 @@ The agent gets `search`, `get_record`, `list_packs`, `verify_pack`. A search res
 
 A pack mounted with a content hash has a stable identity — `https://example.com/docs.pikelet#8d731...` — so "what body of knowledge did this agent query?" has a reproducible answer.
 
+**A mounted pack's content reaches the model as tool output.** `verify_pack` proves the bytes are intact and match their pinned identity; it does not prove the corpus itself is trustworthy. Mounting a pack from a source you don't control is the same trust decision as giving an agent any other untrusted-content tool — treat pack text the way you'd treat search results or fetched web pages, not as instructions.
+
 ---
 
 ## How a remote query runs
@@ -235,6 +245,8 @@ That architecture is why a 648.5 MiB pack can answer a fresh query while fetchin
 ## Integrity is part of the read path
 
 A range-readable artifact cannot hash the entire file on every open without defeating the point of range reads, so integrity is layered: the resident structural portion is verified during open; lazily fetched index rows and corpus records carry independent commitments and are checked when read. Bytes a query never touches don't have to cross the network merely to prove the bytes it *did* use were correct.
+
+One exception: a lexical (BM25) segment above 8 MiB opens lazily and is covered only by the manifest's whole-segment digest, not per-read like index rows and corpus records — the same transitional stance format-1 sketch rows carry. A pack large enough for this to apply can have its lexical candidates altered between open and a full verification pass without failing a query.
 
 The failure-mode suite (`bench/range-proof/failure-modes.mjs`) exercises the important cases:
 
