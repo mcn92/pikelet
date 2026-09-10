@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import {
     loadStudentModel,
     embedTextWithStudent,
-} from '../03-edge-docs-search/student-embedder.mjs';
+} from '../legacy/03-edge-docs-search/student-embedder.mjs';
 
 const require = createRequire(import.meta.url);
 const Pikelet = require('../../pikelet.js');
@@ -131,7 +131,7 @@ export async function openDocsSearch({ manifestPath, indexPath, encoderPath, cal
 
 /** Convenience: open directly over 03's committed assets. */
 export function docsAssetPaths() {
-    const assets = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '03-edge-docs-search', 'assets');
+    const assets = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'legacy', '03-edge-docs-search', 'assets');
     return {
         manifestPath: path.join(assets, 'docs-manifest.json'),
         indexPath: path.join(assets, 'docs-index.bin'),

@@ -4,7 +4,7 @@
 // is the only coupling to the encoder module (they form one
 // query-interpretation unit; see spec/COMPLETE_PROFILE.md section 3.6).
 
-import { scoreQuery } from '../03-edge-docs-search/student-embedder.mjs';
+import { scoreQuery } from '../legacy/03-edge-docs-search/student-embedder.mjs';
 
 export function buildKnownBucketTables(model) {
     const word = new Set();

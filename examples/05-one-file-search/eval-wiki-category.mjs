@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadStudentModel, embedTextWithStudent } from '../03-edge-docs-search/student-embedder.mjs';
+import { loadStudentModel, embedTextWithStudent } from '../legacy/03-edge-docs-search/student-embedder.mjs';
 import { openPancakeFile } from './pikelet-file-reader.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
