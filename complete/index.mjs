@@ -976,6 +976,7 @@ export async function openPancakeFile(input, options = {}) {
                 const pre = preScore(context);
                 let hits = [];
                 let fused = null;
+                let searched = null;
                 if (!pre) {
                     // Hybrid retrieval when the artifact carries a lexical
                     // segment: the BM25 top matches join the sketch's exact
@@ -1013,7 +1014,7 @@ export async function openPancakeFile(input, options = {}) {
                     const lexicalRaw = lexicalIndex && retrieval !== 'vector'
                         ? await lexicalIndex.search(trimmed, LEXICAL_CANDIDATES) : [];
                     const lexicalHits = lexicalRaw.filter((h) => h.score >= lexicalRaw[0].score / 3);
-                    const searched = (await sketch.search(context.vector, k, {
+                    searched = (await sketch.search(context.vector, k, {
                         rerank: queryOptions.rerank,
                         parallelism: queryOptions.parallelism ?? queryOptions.rerankParallelism ?? options.rerankParallelism,
                         // The identity-verified manifest may carry a fetch
@@ -1029,10 +1030,14 @@ export async function openPancakeFile(input, options = {}) {
                         // sketch reader ignores it for any query whose C
                         // exceeds the scanner's buffers.
                         ...(scanner ? { scanner } : {}),
-                        ...(lexicalHits.length ? {
-                            extraCandidates: lexicalHits.map((h) => h.id),
-                            fullRerankOutput: true,
-                        } : {}),
+                        ...(lexicalHits.length ? { extraCandidates: lexicalHits.map((h) => h.id) } : {}),
+                        // Always return the full reranked candidate list
+                        // (already fetched and exactly scored) rather than
+                        // truncating to k: abstention is fit at a fixed
+                        // top-10 window (calibrate.mjs) independent of the
+                        // caller's k, and needs that full window to score
+                        // consistently — see retrieval-abstention.mjs.
+                        fullRerankOutput: true,
                     })).results;
                     hits = searched.slice(0, k);
                     if (retrieval === 'augmented') {
@@ -1052,7 +1057,14 @@ export async function openPancakeFile(input, options = {}) {
                             .map((entry) => entry.hit);
                     }
                 }
-                const quality = pre || await scoreQuality(hits, context);
+                // Abstention scores the full reranked candidate window
+                // (searched), not the k-truncated hits: calibrate.mjs fits
+                // its signals at a fixed top-10 (top-5 for coverage)
+                // regardless of how many results a caller ultimately
+                // requests, so scoring must use the same window to match.
+                // preScore (kind 1) runs before search and has no window to
+                // fix, so it is unaffected.
+                const quality = pre || await scoreQuality(searched ?? hits, context);
                 const returned = quality.match_quality === 'none' ? [] : (fused || hits);
                 // The search's id and distance are authoritative: they are
                 // written last so a corpus record carrying its own `id` or

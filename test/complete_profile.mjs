@@ -829,6 +829,23 @@ console.log('\nC. kind-1 student-inline artifact compiled from examples/03 asset
         else console.log(`    golden miss [${fixture.family}] "${fixture.text}": expected ${fixture.expected}, got ${out.matchQuality} (${out.results.length} results)`);
     }
     check('all 10 abstention goldens reproduce their labels', reproduced === 10, `${reproduced}/10`);
+    // Abstention is fit at a fixed top-10 window (pikelet/src/calibrate.mjs
+    // K = min(10, candidates)), independent of the k a caller later passes
+    // to query(). The verdict for a given retrieval must not depend on k —
+    // a caller asking for k=1 should get the same matchQuality as k=20,
+    // since the underlying retrieval signals (d0, margin, mean10,
+    // coverage1) are windowed the same way regardless.
+    let kInvariant = 0;
+    for (const fixture of evaluation.goldenQueries) {
+        const verdicts = new Set();
+        for (const kk of [1, 2, 3, 5, 10, 20]) {
+            const out = await search.query(fixture.text, { k: kk });
+            verdicts.add(out.matchQuality);
+        }
+        if (verdicts.size === 1) kInvariant++;
+        else console.log(`    k-variance [${fixture.family}] "${fixture.text}": ${[...verdicts].join(', ')}`);
+    }
+    check('abstention verdict is invariant across k=1..20 for all 10 goldens', kInvariant === 10, `${kInvariant}/10`);
     const probe = await search.query('how does compaction work', { k: 3 });
     check('probe query hydrates records matching the source corpus', probe.results.length === 3 && probe.results.every((r) => {
         const src = corpusRaw[String(r.id)];

@@ -92,17 +92,29 @@ export function createAbstentionScorer(asset, bloomBytes) {
         usesPassage: !!coverageCfg,
         passagesNeeded: coverageCfg ? (coverageCfg.topK || 1) : 0,
         score(queryText, results, passageTexts) {
-            const d0 = results.length ? results[0].distance : 1;
-            const margin = results.length > 1
-                ? results[Math.min(4, results.length - 1)].distance - d0 : 0;
-            const mean10 = results.length
-                ? results.reduce((s, r) => s + r.distance, 0) / results.length : 1;
+            // Fit at build time (pikelet/src/calibrate.mjs) always scores a
+            // fixed top-10 window (K = min(10, candidates)), independent of
+            // whatever k a caller later passes to query(). Slicing to the
+            // caller's k here before windowing would shrink margin/mean10/
+            // coverage's inputs at small k and change the verdict for an
+            // identical retrieval — the window, not the caller's k, is what
+            // must match the fit.
+            const top = results.slice(0, Math.min(10, results.length));
+            const d0 = top.length ? top[0].distance : 1;
+            const margin = top.length > 1
+                ? top[Math.min(4, top.length - 1)].distance - d0 : 0;
+            const mean10 = top.length
+                ? top.reduce((s, r) => s + r.distance, 0) / top.length : 1;
             const signals = { d0, margin, mean10, known_frac: knownFrac(queryText) };
             let z = asset.bias;
             asset.features.forEach((f, j) => {
                 z += ((signals[f] - asset.standardize.mean[f]) / asset.standardize.std[f]) * asset.weights[j];
             });
             if (coverageCfg) {
+                // passageTexts is hydrated by the caller for the fixed
+                // top-COVERAGE_TOP_PASSAGES window (see passagesNeeded
+                // below), independent of the caller's k, matching
+                // calibrate.mjs's top.slice(0, COVERAGE_TOP_PASSAGES).
                 signals.coverage1 = coverageFrac(queryText, Array.isArray(passageTexts) ? passageTexts : [passageTexts]);
                 z += ((signals.coverage1 - coverageCfg.mean) / (coverageCfg.std || 1)) * coverageCfg.weight;
             }
