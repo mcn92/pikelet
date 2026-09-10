@@ -1,0 +1,16 @@
+{
+  "datasets": [
+    "scifact",
+    "nfcorpus",
+    "fiqa",
+    "arguana",
+    "trec-covid"
+  ],
+  "k": [10, 100],
+  "efSearch": 64,
+  "candidateCount": 256,
+  "hybridWeight": 0.35,
+  "encoder": "pikelet-bundled-minilm",
+  "seed": 1337,
+  "notes": "Frozen before running results. Day 1 scope builds only 'scifact' at configs A/C/E; the remaining datasets and configs B/D/F are follow-up work, not yet implemented. Do not tune these values based on observed scores without recording both a 'default configuration' and a separately labeled 'BEIR-tuned configuration' result."
+}
