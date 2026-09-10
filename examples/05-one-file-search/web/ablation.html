@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ablation — same question, one fact removed</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.45; }
+    h1 { font-size: 1.2rem; }
+    p.lede { color: gray; font-size: .9rem; }
+    .question { font-size: 1.05rem; font-weight: 600; margin: 1rem 0 1.2rem; }
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+    .panel { border: 1px solid #8884; border-radius: .5rem; padding: 1rem; }
+    .panel h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: gray; margin: 0 0 .6rem; }
+    .badge { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; color: white; }
+    .strong { background: #2c7a3f; } .weak { background: #b58a1d; } .none { background: #a33; }
+    .answer { font-size: 1.1rem; margin: .7rem 0; min-height: 1.4em; }
+    .record { border-top: 1px solid #8884; margin-top: .8rem; padding-top: .6rem; font-size: .85rem; }
+    .record .rid { font-weight: 600; }
+    .removed-fact { text-align: center; color: gray; font-size: .85rem; margin-top: .5rem; }
+    .removed-fact code { background: #8882; padding: .05rem .3rem; border-radius: .25rem; }
+    footer { margin-top: 2rem; color: gray; font-size: .8rem; }
+  </style>
+</head>
+<body>
+  <h1>Same question, one fact removed</h1>
+  <p class="lede">Two identical <code>.pikelet</code> files. The right one is missing a single record. Same model, same question, no other change.</p>
+
+  <div class="question">"What chamber is the Tovash project housed in?"</div>
+
+  <div class="panels">
+    <div class="panel">
+      <h2>Full pack</h2>
+      <div id="left-badge"></div>
+      <div class="answer" id="left-answer">loading…</div>
+      <div class="record" id="left-record"></div>
+    </div>
+    <div class="panel">
+      <h2>Ablated pack</h2>
+      <div id="right-badge"></div>
+      <div class="answer" id="right-answer">loading…</div>
+      <div class="record" id="right-record"></div>
+    </div>
+  </div>
+
+  <div class="removed-fact">removed record: <code>loc-tovash</code> — "The Tovash project is housed in Chamber 17."</div>
+
+  <footer>
+    Both sides query the same encoder and the same code path — <code>search.query()</code> against a
+    <code>.pikelet</code> file over HTTP range reads. The only difference between the two files is that
+    one record was deleted before the right-hand file was compiled.
+  </footer>
+
+  <script type="module" src="./ablation.mjs"></script>
+</body>
+</html>
