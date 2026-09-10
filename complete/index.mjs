@@ -1065,7 +1065,14 @@ export async function openPancakeFile(input, options = {}) {
                 // preScore (kind 1) runs before search and has no window to
                 // fix, so it is unaffected.
                 const quality = pre || await scoreQuality(searched ?? hits, context);
-                const returned = quality.match_quality === 'none' ? [] : (fused || hits);
+                // A 'none' verdict withholds results by default — the
+                // calibrated abstention signal is doing its job, and most
+                // callers want that. showAbstained is an explicit opt-out
+                // for a caller that wants the raw retrieval anyway (e.g. to
+                // inspect why the classifier abstained); it never changes
+                // matchQuality or confidence, only whether results ships.
+                const returned = quality.match_quality === 'none' && !queryOptions.showAbstained
+                    ? [] : (fused || hits);
                 // The search's id and distance are authoritative: they are
                 // written last so a corpus record carrying its own `id` or
                 // `distance` field cannot overwrite them (reserved names).

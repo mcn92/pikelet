@@ -158,6 +158,13 @@ export interface CompleteSearch {
     parallelism?: number;
     gap?: number;
     maxRangeBytes?: number;
+    /**
+     * A matchQuality: 'none' verdict withholds results by default. Set
+     * true to see the raw retrieval anyway (e.g. to inspect why the
+     * classifier abstained) — matchQuality and confidence are unaffected,
+     * this only controls whether results is populated. Default false.
+     */
+    showAbstained?: boolean;
   }): Promise<CompleteQueryResult>;
   /** Hydrate one corpus record by id (verified per record on format 2). */
   record(id: number): Promise<Record<string, unknown>>;

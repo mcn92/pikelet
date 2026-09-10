@@ -846,6 +846,12 @@ console.log('\nC. kind-1 student-inline artifact compiled from examples/03 asset
         else console.log(`    k-variance [${fixture.family}] "${fixture.text}": ${[...verdicts].join(', ')}`);
     }
     check('abstention verdict is invariant across k=1..20 for all 10 goldens', kInvariant === 10, `${kInvariant}/10`);
+    const abstainedFixture = evaluation.goldenQueries.find((f) => f.expected === 'none');
+    const hidden = await search.query(abstainedFixture.text, { k: 3 });
+    check('a none verdict withholds results by default', hidden.matchQuality === 'none' && hidden.results.length === 0);
+    const shown = await search.query(abstainedFixture.text, { k: 3, showAbstained: true });
+    check('showAbstained: true surfaces results under the same none verdict',
+        shown.matchQuality === 'none' && shown.confidence === hidden.confidence && shown.results.length === 3);
     const probe = await search.query('how does compaction work', { k: 3 });
     check('probe query hydrates records matching the source corpus', probe.results.length === 3 && probe.results.every((r) => {
         const src = corpusRaw[String(r.id)];
