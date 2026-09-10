@@ -128,7 +128,7 @@ The Tovash project is housed in Chamber 17.
 A second pack was byte-for-byte identical except that the record containing that fact was removed.
 
 ```text
-full pack:     matchQuality: strong    confidence: 0.908   → Chamber 17
+full pack:     matchQuality: strong    confidence: 0.915   → Chamber 17
 ablated pack:  matchQuality: none      confidence: 0.136   → unsupported
 ```
 

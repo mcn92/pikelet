@@ -6,6 +6,12 @@
 *.tampered
 web/dist/
 
+# The README's ablation reproduction packs are checked in deliberately
+# (see web/public/reproduce-ablation.mjs) — an exception to the *.pikelet
+# rule above, not generated scratch output.
+!web/public/veyra.pikelet
+!web/public/veyra-ablated.pikelet
+
 student-pilot/
 encoder-spike/spike.mjs
 encoder-spike/spike.wasm
