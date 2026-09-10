@@ -397,6 +397,18 @@ int pancake_sketch_scan(const uint8_t* sketches,
     if (!sketches || !scales || !offsets || !query || !out_ids || !out_dists) return 0;
     if (count == 0 || dims == 0 || top_c == 0 || metric > 1) return 0;
 
+    // Cosine's factored form (y*x = offset*sum(y) + scale*(y*q), see
+    // asymmetric_cosine in uint8_float_hnsw.hpp) needs sum(y) once per
+    // query, not once per row — every row in this scan shares the same
+    // query, so it is computed here rather than inside the row loop.
+    // L2 keeps its per-lane dequantize: factoring a squared difference
+    // needs three separate sums (query-offset squared, a cross term,
+    // byte-squared) rather than fewer operations, so there's no win there.
+    float query_sum = 0.0f;
+    if (metric == 1) {
+        for (uint32_t d = 0; d < dims; d++) query_sum += query[d];
+    }
+
     // Max-heap over the current top-C (root = worst kept distance).
     uint32_t heap_size = 0;
     auto sift_down = [&](uint32_t i) {
@@ -438,26 +450,26 @@ int pancake_sketch_scan(const uint8_t* sketches,
         v128_t v_offset = wasm_f32x4_splat(o);
 
         if (metric == 1) {
+            // Factored form: accumulate the raw y*byte dot; offset*sum(y)
+            // (sum(y) computed once above, outside this row loop) and
+            // scale come in once at the end below, instead of
+            // dequantizing (offset + scale*byte) per lane.
             for (; d + 16 <= dims; d += 16) {
                 v128_t bytes = wasm_v128_load(data + d);
                 v128_t u16_lo = wasm_u16x8_extend_low_u8x16(bytes);
                 v128_t u16_hi = wasm_u16x8_extend_high_u8x16(bytes);
 
                 v128_t f0 = wasm_f32x4_convert_i32x4(wasm_u32x4_extend_low_u16x8(u16_lo));
-                v128_t val0 = WFMA(v_offset, f0, v_scale);
-                acc0 = WFMA(acc0, wasm_v128_load(query + d), val0);
+                acc0 = WFMA(acc0, wasm_v128_load(query + d), f0);
 
                 v128_t f1 = wasm_f32x4_convert_i32x4(wasm_u32x4_extend_high_u16x8(u16_lo));
-                v128_t val1 = WFMA(v_offset, f1, v_scale);
-                acc1 = WFMA(acc1, wasm_v128_load(query + d + 4), val1);
+                acc1 = WFMA(acc1, wasm_v128_load(query + d + 4), f1);
 
                 v128_t f2 = wasm_f32x4_convert_i32x4(wasm_u32x4_extend_low_u16x8(u16_hi));
-                v128_t val2 = WFMA(v_offset, f2, v_scale);
-                acc2 = WFMA(acc2, wasm_v128_load(query + d + 8), val2);
+                acc2 = WFMA(acc2, wasm_v128_load(query + d + 8), f2);
 
                 v128_t f3 = wasm_f32x4_convert_i32x4(wasm_u32x4_extend_high_u16x8(u16_hi));
-                v128_t val3 = WFMA(v_offset, f3, v_scale);
-                acc3 = WFMA(acc3, wasm_v128_load(query + d + 12), val3);
+                acc3 = WFMA(acc3, wasm_v128_load(query + d + 12), f3);
             }
         } else {
             for (; d + 16 <= dims; d += 16) {
@@ -495,9 +507,13 @@ int pancake_sketch_scan(const uint8_t* sketches,
 
         if (metric == 1) {
             for (; d < dims; d++) {
-                sum += query[d] * (o + s * static_cast<float>(data[d]));
+                sum += query[d] * static_cast<float>(data[d]);
             }
-            sum = -sum;
+            // Contract unchanged: out_dists holds -dot (unclamped), not the
+            // reference reader's clamped 1 - dot — see the function-level
+            // comment. Ascending order is identical either way; this just
+            // avoids computing the clamp for a value nothing reads.
+            sum = -(o * query_sum + s * sum);
         } else {
             for (; d < dims; d++) {
                 const float diff = query[d] - (o + s * static_cast<float>(data[d]));
