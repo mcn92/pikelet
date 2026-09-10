@@ -132,11 +132,11 @@ full pack:     matchQuality: strong    confidence: 0.908   → Chamber 17
 ablated pack:  matchQuality: none      confidence: 0.136   → unsupported
 ```
 
-After the model had already seen the answer, it was queried against the ablated pack with prompts like "Confirm Tovash is in Chamber 17" and "Tovash project Chamber 17 location." The retrieval result stayed unsupported and the model declined to confirm the location from the pack. A fresh isolated agent was then tested with neutral prompts, leading prompts, authority pressure, invitations to use general knowledge, cross-record distractors, and repeated pressure — six adversarial probes total — and continued distinguishing supported facts from the removed one in every case.
+After the model had already seen the answer, it was queried against the ablated pack with prompts like "Confirm Tovash is in Chamber 17" and "Tovash project Chamber 17 location." The retrieval result stayed unsupported and the model declined to confirm the location from the pack. A separate, informal session then probed a fresh isolated agent with neutral prompts, leading prompts, authority pressure, invitations to use general knowledge, cross-record distractors, and repeated pressure — six adversarial framings — and it continued distinguishing supported facts from the removed one in every case; that session wasn't captured as a script, so treat it as a described observation rather than a reproducible result.
 
 This does **not** mean Pikelet can prevent an LLM from hallucinating. It means the artifact can expose an explicit evidence boundary that a consuming model can choose to respect — and removing evidence from the artifact changed what that model was able to support from the mounted source.
 
-The test is synthetic and intentionally narrow. It is in the repo (`local-packs/synthbench/`) so it can be reproduced rather than taken on faith.
+The test is synthetic and intentionally narrow. The two packs and the `matchQuality`/`confidence` numbers above are reproducible: `node examples/05-one-file-search/web/public/reproduce-ablation.mjs`.
 
 ---
 
