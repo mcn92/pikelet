@@ -368,9 +368,11 @@ void pancake_profile_reset() {
 // Sketch scan
 // =============================================================================
 //
-// Brute-force top-C scan over a resident tier of row-quantized sketches:
-// per-row affine u8 values (dequantized as offset + scale * byte) against a
-// float32 query. Stateless — operates on caller-provided heap buffers,
+// Brute-force top-C scan over a resident tier of row-quantized sketches
+// against a float32 query. L2 (metric 0) dequantizes each row per lane
+// (offset + scale * byte); cosine (metric 1) uses the factored form
+// (offset*sum(query) + scale*(raw dot)) instead — see the comment above
+// query_sum below. Stateless — operates on caller-provided heap buffers,
 // no index handle involved. Used by the range-artifact sketch-rerank
 // geometry, where this scan selects the records to fetch remotely.
 //
@@ -446,14 +448,13 @@ int pancake_sketch_scan(const uint8_t* sketches,
         v128_t acc1 = wasm_f32x4_splat(0.0f);
         v128_t acc2 = wasm_f32x4_splat(0.0f);
         v128_t acc3 = wasm_f32x4_splat(0.0f);
-        v128_t v_scale = wasm_f32x4_splat(s);
-        v128_t v_offset = wasm_f32x4_splat(o);
 
         if (metric == 1) {
             // Factored form: accumulate the raw y*byte dot; offset*sum(y)
             // (sum(y) computed once above, outside this row loop) and
             // scale come in once at the end below, instead of
-            // dequantizing (offset + scale*byte) per lane.
+            // dequantizing (offset + scale*byte) per lane — so, unlike
+            // the L2 branch below, this path never needs v_scale/v_offset.
             for (; d + 16 <= dims; d += 16) {
                 v128_t bytes = wasm_v128_load(data + d);
                 v128_t u16_lo = wasm_u16x8_extend_low_u8x16(bytes);
@@ -472,6 +473,8 @@ int pancake_sketch_scan(const uint8_t* sketches,
                 acc3 = WFMA(acc3, wasm_v128_load(query + d + 12), f3);
             }
         } else {
+            v128_t v_scale = wasm_f32x4_splat(s);
+            v128_t v_offset = wasm_f32x4_splat(o);
             for (; d + 16 <= dims; d += 16) {
                 v128_t bytes = wasm_v128_load(data + d);
                 v128_t u16_lo = wasm_u16x8_extend_low_u8x16(bytes);
