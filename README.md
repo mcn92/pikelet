@@ -224,6 +224,17 @@ A pack mounted with a content hash has a stable identity — `https://example.co
 
 **A mounted pack's content reaches the model as tool output.** `verify_pack` proves the bytes are intact and match their pinned identity; it does not prove the corpus itself is trustworthy. Mounting a pack from a source you don't control is the same trust decision as giving an agent any other untrusted-content tool — treat pack text the way you'd treat search results or fetched web pages, not as instructions.
 
+**Try it with your own questions.** The three Veyra packs from the ablation test above (`examples/05-one-file-search/web/public/veyra*.pikelet`) are committed to this repo, so there's a working MCP mount you can query with anything, not just the fixed prompts above:
+
+```bash
+claude -p "your question here" \
+  --mcp-config examples/05-one-file-search/web/public/veyra.mcp.json \
+  --strict-mcp-config \
+  --allowedTools "mcp__veyra-demo__search,mcp__veyra-demo__list_packs,mcp__veyra-demo__get_record"
+```
+
+or drop the flags and just run `claude` from the repo root — Claude Code picks up project-level `.mcp.json` configs automatically, so pointing one at this file (or copying its `veyra-demo` server into your own) gets the same three packs into an interactive session. All three packs share the same 94-ish-record synthetic corpus, so the interesting thing to ask about is Tovash's chamber — the full and Chamber 43 packs will disagree with each other, and the ablated pack won't answer at all.
+
 ---
 
 ## How a remote query runs

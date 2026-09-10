@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "veyra-demo": {
+      "command": "node",
+      "args": [
+        "pikelet/bin/pikelet.mjs",
+        "mcp",
+        "--pack",
+        "examples/05-one-file-search/web/public/veyra.pikelet",
+        "--pack",
+        "examples/05-one-file-search/web/public/veyra-ablated.pikelet",
+        "--pack",
+        "examples/05-one-file-search/web/public/veyra-chamber43.pikelet"
+      ]
+    }
+  }
+}
