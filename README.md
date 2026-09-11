@@ -12,7 +12,24 @@ A `.pikelet` can carry the source text, semantic index, keyword index, query enc
 npx pikelet compile --source ./docs --out docs.pikelet
 ```
 
-Then hand the resulting file to an application—or mount it directly into an LLM through MCP.
+Then query it from an LLM:
+
+```bash
+npx pikelet mcp install --client claude-code --pack ./docs.pikelet
+```
+
+Claude now has a `search` tool over your docs. Or query it directly from code:
+
+```js
+import { openPikeletFile } from 'pikelet-wasm/complete';
+const pack = await openPikeletFile('docs.pikelet');
+const out = await pack.query('how do workers restore snapshots', { k: 5 });
+// out.results, out.matchQuality ('strong' | 'weak' | 'none'), out.confidence
+```
+
+That's the whole loop. `compile` also takes a live URL (`--source https://docs.example.com`) instead of a directory. If you want a deployed search app — a Worker + UI, not a file — use `npx pikelet create` instead; see [`pikelet/README.md`](pikelet/README.md) for the full CLI reference and the tradeoffs between the two.
+
+Under the hood, the file is one container for everything a reader needs:
 
 ```text
 documents
