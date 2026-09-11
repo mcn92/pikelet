@@ -8,14 +8,33 @@ A model can interrogate a 456,153-record knowledge base whose backend is a stati
 
 A `.pikelet` can carry the source text, semantic index, keyword index, query encoder, integrity commitments, retrieval calibration, and evaluation fixtures needed to interrogate that corpus. Put the file on disk, S3, R2, a CDN, or any static HTTP host. A reader can mount it locally or over HTTP Range and search it without a vector database, embedding API, or retrieval server.
 
+Requires Node 20+.
+
 ```bash
 npx pikelet compile --source ./docs --out docs.pikelet
 ```
 
-Then query it from an LLM:
+```text
+Ingested 3 docs -> 3 chunks
+Embedded 3/3 chunks with inline transformer
+Built complete .pikelet artifact with 24.5 MB
+Compiled docs.pikelet
+  24.5 MB, 3 records, identity 8d731a...
+```
+
+First run fetches the ~25 MiB query encoder from a GitHub release and caches it; every `.pikelet` file is at least that size regardless of corpus, because the encoder ships inside it — a 5-file folder and a 500-file folder both start around 25 MiB.
+
+Then query it from an LLM — Claude Code, Claude Desktop, or any MCP client:
 
 ```bash
 npx pikelet mcp install --client claude-code --pack ./docs.pikelet
+# or --client claude-desktop; any other MCP client can run
+# `npx pikelet mcp --pack ./docs.pikelet` directly, no install step
+```
+
+```text
+Wrote MCP server "knowledge-packs" to ./.mcp.json
+Claude Code picks it up on the next session in this project.
 ```
 
 Claude now has a `search` tool over your docs. Or query it directly from code:
@@ -24,10 +43,11 @@ Claude now has a `search` tool over your docs. Or query it directly from code:
 import { openPikeletFile } from 'pikelet-wasm/complete';
 const pack = await openPikeletFile('docs.pikelet');
 const out = await pack.query('how do workers restore snapshots', { k: 5 });
-// out.results, out.matchQuality ('strong' | 'weak' | 'none'), out.confidence
+console.log(out.matchQuality, out.results[0]?.title);
+// 'strong' 'Snapshot restore'
 ```
 
-That's the whole loop. `compile` also takes a live URL (`--source https://docs.example.com`) instead of a directory. If you want a deployed search app — a Worker + UI, not a file — use `npx pikelet create` instead; see [`pikelet/README.md`](pikelet/README.md) for the full CLI reference and the tradeoffs between the two.
+That's the whole loop. `compile` also takes a live URL (`--source https://docs.example.com`) instead of a directory. If you want a deployed search app — a Worker + UI, not a file — use `npx pikelet create` instead; see [`pikelet/README.md`](pikelet/README.md) for the full CLI reference and the tradeoffs between the two. `compile` never needs the scaffold path's `@xenova/transformers` dependency; skip its ~140 MB install with `npm install -g pikelet --omit=optional` if you only need `compile`/`mcp`.
 
 Under the hood, the file is one container for everything a reader needs:
 
