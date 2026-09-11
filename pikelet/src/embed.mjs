@@ -175,7 +175,10 @@ async function embedWithInlineWorkerPool(chunks, declaration, { vocabPath, weigh
   }
   if (vectors.some((v) => !v)) throw new Error('embed worker pool returned incomplete results');
   if (windowed > 0) {
-    log(`${windowed}/${chunks.length} chunks exceeded the ${maxSeq}-token encoder window and were mean-pooled across windows`);
+    const outcome = declaration.pooling === 'cls'
+      ? 'and only their first window was embedded (cls pooling has no multi-window average; tail content was not seen by the encoder)'
+      : 'and were mean-pooled across windows';
+    log(`${windowed}/${chunks.length} chunks exceeded the ${maxSeq}-token encoder window ${outcome}`);
   }
   return vectors;
 }
@@ -218,7 +221,10 @@ async function embedChunksWithInlineTransformer(chunks, config, log, projectDir)
     embedder.dispose();
   }
   if (windowed > 0) {
-    log(`${windowed}/${chunks.length} chunks exceeded the ${embedder.maxSeq}-token encoder window and were mean-pooled across windows`);
+    const outcome = declaration.pooling === 'cls'
+      ? 'and only their first window was embedded (cls pooling has no multi-window average; tail content was not seen by the encoder)'
+      : 'and were mean-pooled across windows';
+    log(`${windowed}/${chunks.length} chunks exceeded the ${embedder.maxSeq}-token encoder window ${outcome}`);
   }
   return vectors;
 }

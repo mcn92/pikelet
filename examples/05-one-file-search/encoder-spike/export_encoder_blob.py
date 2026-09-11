@@ -22,6 +22,7 @@ embedding LayerNorm and after each layer, and the pooled+normalized output
 — all from the SAME fake-quantized computation the blob encodes, so the
 WASM forward should match to f32 accumulation noise.
 """
+import argparse
 import json
 from pathlib import Path
 
@@ -29,10 +30,22 @@ import numpy as np
 import torch
 from transformers import AutoModel, AutoTokenizer
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--model", default="sentence-transformers/all-MiniLM-L6-v2",
+                     help="HF model id. Must match the kernel's compiled-in shape "
+                          "(encoder.cpp constexpr V,P,T,D,F,L,B,H) exactly.")
+parser.add_argument("--pooling", choices=["mean", "cls"], default="mean",
+                     help="mean: average every token's final hidden state (MiniLM's "
+                          "native pooling). cls: use the [CLS] token's hidden state "
+                          "(e.g. Snowflake arctic-embed models). Must match "
+                          "inline-transformer.mjs's embed() pooling exactly, or the "
+                          "reference vectors won't match what the reader produces.")
+args = parser.parse_args()
+
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "real"
 OUT.mkdir(exist_ok=True)
-MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+MODEL = args.model
 B = 64
 TEST_TEXT = "how do volcanoes form and why do they erupt"
 
@@ -67,6 +80,23 @@ def dequant(q, scales, offsets):
 tokenizer = AutoTokenizer.from_pretrained(MODEL)
 model = AutoModel.from_pretrained(MODEL)
 model.eval()
+
+# The kernel's shape is compiled in (encoder.cpp constexpr), not read from
+# the blob or the declaration, so a mismatched model produces a blob that
+# silently corrupts every embedding rather than failing loudly. Check the
+# shape the config actually implies before spending time exporting it.
+cfg = model.config
+expected = {"vocab_size": 30522, "max_position_embeddings": 512, "type_vocab_size": 2,
+            "hidden_size": 384, "intermediate_size": 1536, "num_hidden_layers": 6,
+            "num_attention_heads": 12}
+mismatches = {k: (getattr(cfg, k, None), v) for k, v in expected.items() if getattr(cfg, k, None) != v}
+if mismatches:
+    lines = "\n".join(f"  {k}: model has {got}, kernel requires {want}" for k, (got, want) in mismatches.items())
+    raise SystemExit(f"{MODEL} does not match the compiled-in kernel shape:\n{lines}\n"
+                      f"Rebuild encoder.cpp for this shape first, or pick a model with this exact shape.")
+if cfg.hidden_act != "gelu":
+    raise SystemExit(f"{MODEL} uses hidden_act={cfg.hidden_act!r}; the kernel's activation is hardcoded to "
+                      f"(erf) gelu. A different activation needs a kernel change, not just new weights.")
 
 blob = bytearray()
 manifest = []
@@ -177,7 +207,7 @@ for i, layer in enumerate(model.encoder.layer):
                   layer.output.LayerNorm.bias.detach().numpy())
     stages[f"layer{i}"] = x.copy()
 
-pooled = x.mean(axis=0)
+pooled = x[0] if args.pooling == "cls" else x.mean(axis=0)
 pooled = pooled / np.linalg.norm(pooled)
 
 np.array(ids, dtype=np.int32).tofile(OUT / "ref-ids.i32")

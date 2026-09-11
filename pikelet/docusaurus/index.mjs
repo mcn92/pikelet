@@ -63,7 +63,7 @@ function normalizeOptions(options = {}) {
       weights: completeProfile.weights || null,
       calibration: completeProfile.calibration || null,
       model: completeProfile.model || 'sentence-transformers/all-MiniLM-L6-v2',
-      maxTokens: completeProfile.maxTokens || 128,
+      maxTokens: completeProfile.maxTokens || 512,
     },
     trainStudent: {
       enabled: completeEnabled ? false : options.trainStudent !== false && !options.studentModel,

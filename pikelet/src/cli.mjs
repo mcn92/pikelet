@@ -105,7 +105,14 @@ from the corpus at build time (skipped with a logged reason when the corpus
 cannot support a trustworthy fit); --calibration <file> supplies a prebuilt
 retrieval-signals asset instead, --skip-calibration ships the artifact
 unscored. compile also takes --source, --out, --name, --max-pages, --include,
---exclude, and --force (overwrite the output file).
+--exclude, --force (overwrite the output file), and --encoder-model/
+--encoder-weights/--encoder-vocab/--encoder-pooling/--encoder-query-prefix/
+--encoder-passage-prefix to swap the packaged MiniLM-L6 encoder for another
+BERT-shaped one built the same way (see
+examples/05-one-file-search/encoder-spike/export_encoder_blob.py) — the
+compiled kernel's dimensions are fixed at build time, so a swapped model
+must match MiniLM-L6's shape (384 hidden / 6 layers / 12 heads / 1536 FFN /
+30522 vocab) exactly.
 
 Flags:
   --name <dir>          Generated project directory
@@ -127,6 +134,34 @@ Flags:
   --exclude-url <pat>   URL-path exclude pattern ('*' wildcard), repeatable;
                         aggregate pages like mdBook's print.html are always
                         excluded
+  --encoder-model <id>  compile only: HF model id to record in the artifact's
+                        encoder declaration (default: sentence-transformers/
+                        all-MiniLM-L6-v2). Requires --encoder-weights; the
+                        model itself must match the kernel's compiled-in
+                        shape (see export_encoder_blob.py's --model check).
+  --encoder-weights <f> compile only: path to a weight blob exported by
+                        export_encoder_blob.py for --encoder-model. Required
+                        with --encoder-model.
+  --encoder-vocab <f>   compile only: path to a WordPiece vocab.txt, if
+                        different from the packaged bert-base-uncased table
+                        (default: the packaged vocab.txt)
+  --encoder-pooling mean|cls
+                        compile only: mean (default) averages every token's
+                        final hidden state; cls uses the [CLS] token (e.g.
+                        Snowflake arctic-embed models). Must match how
+                        --encoder-weights was exported. cls only pools the
+                        first 512-token window of a longer document.
+  --encoder-query-prefix <s>
+                        compile only: text prepended to every query before
+                        embedding (default: none). Some fine-tunes need one
+                        — e.g. Snowflake arctic-embed models require
+                        "Represent this sentence for searching relevant
+                        passages: " on queries and nothing on passages, or
+                        they silently lose the retrieval quality they were
+                        trained for. Check --encoder-model's model card.
+  --encoder-passage-prefix <s>
+                        compile only: text prepended to every indexed
+                        passage before embedding (default: none)
   --runtime snapshot|artifact
                         artifact is deprecated: it serves the retired
                         .pancake-range profile; prefer the default snapshot
@@ -320,6 +355,22 @@ async function compileArtifact(flags) {
   if (flags.calibration && flags['skip-calibration']) {
     throw new CliError('--calibration and --skip-calibration are mutually exclusive');
   }
+  // A non-default encoder needs its own weights: the packaged
+  // encoder-weights.bin is MiniLM-L6's blob specifically, and the only
+  // kind of mismatch that fails loudly is a wrong-sized blob (dim/vocab
+  // mismatch) — same-shaped weights from a different model would load and
+  // silently produce wrong embeddings. --encoder-pooling has no default
+  // dependency on --encoder-model (a differently-pooled export of the
+  // packaged model is valid), so it's not required here.
+  if (flags['encoder-model'] && !flags['encoder-weights']) {
+    throw new CliError('--encoder-model requires --encoder-weights (and --encoder-vocab if the '
+      + 'vocabulary differs from the packaged bert-base-uncased WordPiece table): the packaged '
+      + 'encoder-weights.bin is compiled from sentence-transformers/all-MiniLM-L6-v2 specifically.');
+  }
+  const encoderPooling = flags['encoder-pooling'] || 'mean';
+  if (!['mean', 'cls'].includes(encoderPooling)) {
+    throw new CliError(`--encoder-pooling must be mean or cls, got ${encoderPooling}`);
+  }
   const outPath = path.resolve(process.cwd(), flags.out || 'search.pikelet');
   if (fssync.existsSync(outPath) && !flags.force) {
     throw new CliError(`Output file already exists: ${outPath}\nNext: rerun with --force or choose --out`);
@@ -354,8 +405,18 @@ async function compileArtifact(flags) {
     embedding: {
       mode: 'inline-transformer',
       dims: 384,
-      prefixPolicy: { passage: '', query: '' },
-      pooling: 'mean',
+      // MiniLM-L6 needs no prefix. Some fine-tunes do — e.g. Snowflake's
+      // arctic-embed family requires an asymmetric query prefix
+      // ("Represent this sentence for searching relevant passages: ")
+      // with no passage prefix; skipping it doesn't error, it just quietly
+      // forfeits the retrieval quality the fine-tune was trained for; the
+      // query() reader and calibration's embedQuery both read this from
+      // the declaration automatically, so setting it here is sufficient.
+      prefixPolicy: {
+        passage: flags['encoder-passage-prefix'] || '',
+        query: flags['encoder-query-prefix'] || '',
+      },
+      pooling: encoderPooling,
       normalize: true,
     },
     index: { ...DEFAULT_CONFIG.index },
@@ -369,10 +430,14 @@ async function compileArtifact(flags) {
       // the unscored placeholder.
       ...(flags['skip-calibration'] || flags.calibration ? {} : { calibration: 'auto' }),
       inlineEncoder: {
-        vocabPath: path.join(INLINE_ENCODER_DIR, 'vocab.txt'),
-        weightsPath: path.join(INLINE_ENCODER_DIR, 'encoder-weights.bin'),
-        model: 'sentence-transformers/all-MiniLM-L6-v2',
-        maxTokens: 128,
+        vocabPath: flags['encoder-vocab']
+          ? path.resolve(process.cwd(), flags['encoder-vocab'])
+          : path.join(INLINE_ENCODER_DIR, 'vocab.txt'),
+        weightsPath: flags['encoder-weights']
+          ? path.resolve(process.cwd(), flags['encoder-weights'])
+          : path.join(INLINE_ENCODER_DIR, 'encoder-weights.bin'),
+        model: flags['encoder-model'] || 'sentence-transformers/all-MiniLM-L6-v2',
+        maxTokens: 512,
         ...(flags.calibration ? { calibrationPath: path.resolve(process.cwd(), flags.calibration) } : {}),
       },
     },

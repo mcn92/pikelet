@@ -187,19 +187,23 @@ async function buildCompleteArtifact({ Pikelet, projectDir, assetsDir, config, c
 }
 
 function inlineEncoderDeclaration(config, encoder = {}) {
+  const model = encoder.model || 'sentence-transformers/all-MiniLM-L6-v2';
+  const pooling = config.embedding.pooling || 'mean';
   return encoder.declaration || {
     kind: 'inline-transformer-v1',
-    model: encoder.model || 'sentence-transformers/all-MiniLM-L6-v2',
+    model,
     license: encoder.license || 'apache-2.0',
-    attribution: encoder.attribution || 'sentence-transformers/all-MiniLM-L6-v2 (quantized derivative)',
+    attribution: encoder.attribution || `${model} (quantized derivative)`,
     dim: config.embedding.dims,
-    pooling: config.embedding.pooling || 'mean',
+    pooling,
     normalized: config.embedding.normalize !== false,
-    // The compiled kernel's window is 128 tokens (encoder.cpp MAXSEQ); the
+    // The compiled kernel's window is 512 tokens (encoder.cpp MAXSEQ); the
     // declaration states what this artifact's encoder actually does, so a
     // larger configured value cannot be declared.
-    maxTokens: Math.min(encoder.maxTokens || 128, 128),
-    longInputs: 'windowed-mean-pool',
+    maxTokens: Math.min(encoder.maxTokens || 512, 512),
+    // cls pooling only reads the first window (see inline-transformer.mjs
+    // embed()); mean pooling combines every window into one average.
+    longInputs: pooling === 'cls' ? 'first-window-cls' : 'windowed-mean-pool',
     prefixPolicy: {
       passage: config.embedding.prefixPolicy?.passage || '',
       query: config.embedding.prefixPolicy?.query || '',
@@ -245,8 +249,13 @@ async function resolveInlineEncoderInputs(config, projectDir) {
   if (!fssync.existsSync(vocabPath)) throw new CliError(`Inline encoder vocab not found: ${vocabPath}`, 1);
   if (!fssync.existsSync(weightsPath)) {
     // Only the packaged default blob is auto-fetched — the digest pin is
-    // for that exact file; custom weights must be supplied by the user.
-    if (path.basename(weightsPath) !== 'encoder-weights.bin') {
+    // for that exact file. A non-default model must supply its own weights
+    // even if its output happens to be named encoder-weights.bin too (the
+    // export script's default output name): matching on the declared model
+    // rather than just the basename avoids silently overwriting a missing
+    // custom blob with MiniLM's.
+    const isDefaultModel = !encoder.model || encoder.model === 'sentence-transformers/all-MiniLM-L6-v2';
+    if (path.basename(weightsPath) !== 'encoder-weights.bin' || !isDefaultModel) {
       throw new CliError(`Inline encoder weights not found: ${weightsPath}`, 1);
     }
     await fetchInlineEncoderWeights(weightsPath);
