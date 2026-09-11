@@ -7,7 +7,7 @@ const decoder = new TextDecoder();
 // reads the declaration. Declaration/blob skew is therefore only catchable
 // here, host-side, before the first forward.
 export const KERNEL_LAYOUT = { V: 30522, P: 512, T: 2, D: 384, F: 1536, L: 6, B: 64, H: 12 };
-const KERNEL_MAX_SEQ = 128;
+const KERNEL_MAX_SEQ = 512;
 
 // Byte size the kernel's fill_layout() will consume for a given layout:
 // each quantized matrix is rows*cols u8 plus per-block f32 scales and
@@ -69,21 +69,34 @@ export async function createInlineTransformerEmbedder({ declaration, vocabText, 
   const idsPtr = EM._malloc(maxSeq * 4);
   const hiddenPtr = EM._malloc(maxSeq * dim * 4);
 
+  const usesClsPooling = declaration.pooling === 'cls';
+
   async function embed(text) {
     const allIds = tokenizer.encode(String(text || ''));
-    // Inputs longer than maxSeq are mean-pooled across [CLS]…[SEP]-framed
-    // windows instead of truncated, so long chunks keep their tail content.
+    // Inputs longer than maxSeq are windowed across [CLS]…[SEP]-framed
+    // chunks instead of truncated, so long chunks keep their tail content.
     const interior = allIds.slice(1, -1);
     const windowLen = maxSeq - 2;
     const windows = Math.max(1, Math.ceil(interior.length / windowLen));
     const pooled = new Float32Array(dim);
     let pooledTokens = 0;
-    for (let w = 0; w < windows; w++) {
+    // CLS pooling has no defined multi-window semantics (unlike mean
+    // pooling, there's no natural way to combine multiple windows' [CLS]
+    // tokens into one), so only the first window is encoded; long
+    // documents lose tail content under this pooling mode — mean pooling
+    // is the better choice for a corpus with chunks near or past maxSeq.
+    const windowsToEncode = usesClsPooling ? 1 : windows;
+    for (let w = 0; w < windowsToEncode; w++) {
       const tokenIds = [allIds[0], ...interior.slice(w * windowLen, (w + 1) * windowLen), allIds[allIds.length - 1]];
       new Int32Array(EM.HEAP32.buffer, idsPtr, tokenIds.length).set(tokenIds);
       const rc = EM._encoder_forward(blobPtr, idsPtr, tokenIds.length, hiddenPtr, 0);
       if (rc !== tokenIds.length) throw new Error(`inline encoder failed: ${rc}`);
       const hidden = new Float32Array(EM.HEAPF32.buffer, hiddenPtr, tokenIds.length * dim);
+      if (usesClsPooling) {
+        for (let d = 0; d < dim; d++) pooled[d] = hidden[d];
+        pooledTokens = 1;
+        break;
+      }
       for (let t = 0; t < tokenIds.length; t++) {
         for (let d = 0; d < dim; d++) pooled[d] += hidden[t * dim + d];
       }
@@ -91,7 +104,7 @@ export async function createInlineTransformerEmbedder({ declaration, vocabText, 
     }
     let norm = 0;
     for (let d = 0; d < dim; d++) {
-      pooled[d] /= pooledTokens;
+      if (!usesClsPooling) pooled[d] /= pooledTokens;
       norm += pooled[d] ** 2;
     }
     norm = Math.sqrt(norm);

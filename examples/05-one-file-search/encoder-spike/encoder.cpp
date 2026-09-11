@@ -2,9 +2,12 @@
 // by export_encoder_blob.py — the inline-encoder (kind 3) kernel spike.
 // Float weight tensors are never materialized: every GEMV dequantizes
 // inside the dot product. LayerNorm, softmax, GELU, biases, and residuals
-// run in f32. Correctness-first: attention is direct (seq <= 128, the
+// run in f32. Correctness-first: attention is direct (seq <= MAXSEQ, the
 // score tile is KBs), the FFN intermediate is materialized per token;
-// the streamed-accumulator variant is a later optimization.
+// the streamed-accumulator variant is a later optimization. Attention is
+// O(seq^2) per head per layer, so MAXSEQ trades embedding latency for
+// window width — pinned to P (the position-embedding table size, 512),
+// since a wider window has no positions to encode past that anyway.
 //
 // Layout constants mirror the exporter exactly; offsets are running sums
 // in the same emit order. Everything is 16-byte aligned by construction.
@@ -23,7 +26,7 @@ constexpr int V = 30522, P = 512, T = 2, D = 384, F = 1536, L = 6, B = 64;
 constexpr int H = 12, HD = 32;
 constexpr int NB = D / B;    // blocks per D-wide row
 constexpr int NBF = F / B;   // blocks per F-wide row
-constexpr int MAXSEQ = 128;
+constexpr int MAXSEQ = 512;
 constexpr float LN_EPS = 1e-12f;
 
 struct QuantMat {
