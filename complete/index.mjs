@@ -8,15 +8,15 @@
 // engine's SIMD scan kernel (options.sketchScanner — auto-staged in Node,
 // injected in browsers), which only ever changes speed, never results.
 //
-//   const search = await openPancakeFile('pancake-docs.pikelet');   // Node
-//   const search = await openPancakeFile(httpRangeSource(url));     // browser
+//   const search = await openPikeletFile('docs.pikelet');           // Node
+//   const search = await openPikeletFile(httpRangeSource(url));     // browser
 //   const out = await search.query('how do workers restore snapshots');
 //
 // Every byte of the artifact is untrusted input (contract section 7): each
 // offset, length, and count is validated — safe integer, within the header's
 // fileBytes and the source's size, under the per-open read budget — before a
 // read is issued or a buffer allocated, and every read must return exactly
-// the bytes asked for. Format 2 files (profile pancake-complete-v2) carry
+// the bytes asked for. Format 2 files (profile pikelet-complete-v2) carry
 // per-record corpus digests, so each hydrated record is verified on its own
 // range read; format 1 files verify eager segments whole and hydrate records
 // under the segment digest only (reported via info().corpusIntegrity).
@@ -25,7 +25,7 @@ import { loadStudentModel, embedTextWithStudent } from './student-embedder.mjs';
 import { computeMatchQuality, computePreSearchAbstention } from './student-abstention.mjs';
 import { createAbstentionScorer } from './retrieval-abstention.mjs';
 import { openLexicalIndex, openLexicalIndexLazy } from './lexical.mjs';
-import { PancakeSketchArtifact } from '../pikelet-artifact.js';
+import { PikeletSketchArtifact } from '../pikelet-artifact.js';
 import { MAGIC, HEADER_BYTES, TABLE_ENTRY_BYTES, KINDS, KIND_NAMES } from './format.mjs';
 
 import {
@@ -36,9 +36,11 @@ import {
 } from './inline-transformer.mjs';
 
 export { httpRangeSource } from './sources.mjs';
-// The project renamed to Pikelet (2026-09); the wire format and this
-// reader's original export keep their pancake-era names for
-// compatibility, and openPikeletFile is the documented alias.
+// Re-exported for the builder side: calibration fits coverage against the
+// same fused (vector+BM25) ranking the reader serves, which needs an
+// in-memory lexical searcher over the segment bytes already assembled by
+// buildLexicalSegment, before the artifact is written to disk.
+export { openLexicalIndex } from './lexical.mjs';
 export {
     KERNEL_LAYOUT, expectedBlobBytes, parseInlineTransformerEncoder,
     createInlineTransformerEmbedder, INLINE_TEST_VECTOR_TEXTS,
@@ -47,7 +49,7 @@ export {
 };
 
 // Supported container formats: header formatVersion -> manifest profile.
-export const SUPPORTED_PROFILES = Object.freeze({ 1: 'pancake-complete-v1', 2: 'pancake-complete-v2' });
+export const SUPPORTED_PROFILES = Object.freeze({ 1: 'pikelet-complete-v1', 2: 'pikelet-complete-v2' });
 export const CORPUS_LAYOUT_V2 = 'records-v2';
 
 // Read budgets. Open-path reads (manifest, segment table, query-interp,
@@ -63,13 +65,20 @@ const MAX_RECORDS = 2 ** 31 - 1;
 const MAX_PAGE_RECORDS = 65536;
 const DIGEST_PAGE_CACHE = 64;
 const RECORD_CACHE = 256;
-// The embedded index is a .pancake-sketch artifact (SKETCH_PROFILE.md);
+// The embedded index is a .pikelet-sketch artifact (SKETCH_PROFILE.md);
 // its fixed-size header is what format 2 commits to in the manifest.
 const SKETCH_HEADER_BYTES = 256;
 // Hybrid retrieval: BM25 candidates fetched from the lexical segment per
 // query, and the reciprocal-rank-fusion constant (the standard untuned 60).
 const LEXICAL_CANDIDATES = 24;
 const RRF_K = 60;
+// Only BM25 hits within this fraction of the top lexical score join fusion.
+// Common query terms give every matching document a near-tied score (idf
+// collapses them flat); a wide cutoff let that tied mass ride into fusion on
+// a technicality. Kept identical to pikelet/src/calibrate.mjs's
+// LEXICAL_CUTOFF so calibration is fit against the same fusion the reader
+// actually serves.
+const LEXICAL_CUTOFF = 1.5;
 // Query-interpretation segments above this size open lazily (kind 3's
 // inline encoder is ~25 MiB); smaller ones keep the one-read eager path.
 const LAZY_QI_BYTES = 4 * 1024 * 1024;
@@ -292,11 +301,11 @@ export async function verifyHostEncoder(declaration, encodeQuery, dim) {
  * { read(offset, length), size? } range source (any runtime).
  * Returns { query(text, {k}), info(), evaluation(), close() }.
  */
-export async function openPancakeFile(input, options = {}) {
+export async function openPikeletFile(input, options = {}) {
     const source = typeof input === 'string' ? await fileSource(input) : input;
     const owned = typeof input === 'string';
     if (!source || typeof source.read !== 'function') {
-        throw new Error('openPancakeFile() requires a file path or a range source with read(offset, length)');
+        throw new Error('openPikeletFile() requires a file path or a range source with read(offset, length)');
     }
     const maxReadBytes = resolveBudget(options.maxReadBytes, 'maxReadBytes', DEFAULT_OPEN_READ_BYTES);
     const maxRecordBytes = resolveBudget(options.maxRecordBytes, 'maxRecordBytes', DEFAULT_RECORD_BYTES);
@@ -506,7 +515,7 @@ export async function openPancakeFile(input, options = {}) {
                 }
                 return bytes;
             })(),
-            PancakeSketchArtifact.open(windowSource(source, idx.offset, idx.length), { maxReadBytes }),
+            PikeletSketchArtifact.open(windowSource(source, idx.offset, idx.length), { maxReadBytes }),
             readChecked(source, corpus.offset, tablesBytes, 'corpus tables', maxReadBytes, fileBytes),
             // Lexical index (kind 5, OPTIONAL). Small segments: eager
             // whole-segment read, digest-verified like the query-interp
@@ -595,16 +604,25 @@ export async function openPancakeFile(input, options = {}) {
         const retrievalScorer = () => {
             const scorer = createAbstentionScorer(calibrationJson.asset, base64Bytes(calibrationJson.vocabBloomBase64));
             const VERDICTS = { answer: 'strong', weak: 'weak', abstain: 'none' };
-            return async (hits, context) => {
+            return async (hits, context, fusedHits) => {
                 if (!scorer) return { match_quality: 'unscored' };
                 // The coverage term grounds the verdict in the top passages'
-                // text, so those records hydrate before scoring. When the
-                // query is answered the pages are already hot for result
-                // hydration; an abstained query costs these extra reads.
-                // Hydration failures propagate — on format 2 a record that
-                // fails its digest must fail the query, not skew its verdict.
-                const topTexts = scorer.usesPassage && hits.length
-                    ? (await Promise.all(hits.slice(0, scorer.passagesNeeded || 1)
+                // text, so those records hydrate before scoring. Hydrated
+                // from the fused (RRF) order when hybrid retrieval produced
+                // one — calibrate.mjs fits coverage against the same fused
+                // ranking, and a chunk BM25 ranks first but the embedding
+                // ranks far down is exactly the case coverage exists to
+                // catch; scoring it against vector-only order would miss it
+                // again. Falls back to vector order (hits) when there is no
+                // lexical segment or fusion did not change anything. When
+                // the query is answered the pages are already hot for
+                // result hydration; an abstained query costs these extra
+                // reads. Hydration failures propagate — on format 2 a
+                // record that fails its digest must fail the query, not
+                // skew its verdict.
+                const passageSource = fusedHits?.length ? fusedHits : hits;
+                const topTexts = scorer.usesPassage && passageSource.length
+                    ? (await Promise.all(passageSource.slice(0, scorer.passagesNeeded || 1)
                         .map((hit) => hydrate(hit.id)))).map((record) => record?.text)
                     : [];
                 const scored = scorer.score(context.text, hits, topTexts);
@@ -651,7 +669,7 @@ export async function openPancakeFile(input, options = {}) {
             embed = async (text) => {
                 if (!encodeQuery) {
                     throw new Error(`.pikelet declares an external encoder (${declaration.model}); `
-                        + 'pass options.encodeQuery to openPancakeFile');
+                        + 'pass options.encodeQuery to openPikeletFile');
                 }
                 return { vector: toFloat32(await encodeQuery(text), dim, 'options.encodeQuery'), text };
             };
@@ -977,6 +995,7 @@ export async function openPancakeFile(input, options = {}) {
                 let hits = [];
                 let fused = null;
                 let searched = null;
+                let fusedFull = null;
                 if (!pre) {
                     // Hybrid retrieval when the artifact carries a lexical
                     // segment: the BM25 top matches join the sketch's exact
@@ -1013,7 +1032,7 @@ export async function openPancakeFile(input, options = {}) {
                     }
                     const lexicalRaw = lexicalIndex && retrieval !== 'vector'
                         ? await lexicalIndex.search(trimmed, LEXICAL_CANDIDATES) : [];
-                    const lexicalHits = lexicalRaw.filter((h) => h.score >= lexicalRaw[0].score / 3);
+                    const lexicalHits = lexicalRaw.filter((h) => h.score >= lexicalRaw[0].score / LEXICAL_CUTOFF);
                     searched = (await sketch.search(context.vector, k, {
                         rerank: queryOptions.rerank,
                         parallelism: queryOptions.parallelism ?? queryOptions.rerankParallelism ?? options.rerankParallelism,
@@ -1040,22 +1059,25 @@ export async function openPancakeFile(input, options = {}) {
                         fullRerankOutput: true,
                     })).results;
                     hits = searched.slice(0, k);
-                    if (retrieval === 'augmented') {
-                        fused = null; // distance order, candidates already augmented
-                    } else if (retrieval === 'lexical') {
+                    // Full-window fused order (not k-truncated) for scoring:
+                    // coverage grounds its verdict in the passage fusion
+                    // actually ranks first, and calibrate.mjs fits it the
+                    // same way — a k-truncated fused list would silently
+                    // drop the fused top hit for callers requesting a small k.
+                    if (retrieval === 'lexical') {
                         const byId = new Map(searched.map((hit) => [hit.id, hit]));
-                        fused = lexicalHits.map((h) => byId.get(h.id)).filter(Boolean).slice(0, k);
-                    } else if (lexicalHits.length) {
+                        fusedFull = lexicalHits.map((h) => byId.get(h.id)).filter(Boolean);
+                    } else if (retrieval !== 'augmented' && lexicalHits.length) {
                         const lexRank = new Map(lexicalHits.map((h, i) => [h.id, i]));
-                        fused = searched
+                        fusedFull = searched
                             .map((hit, vRank) => ({
                                 hit,
                                 score: 1 / (RRF_K + vRank) + (lexRank.has(hit.id) ? 1 / (RRF_K + lexRank.get(hit.id)) : 0),
                             }))
                             .sort((a, b) => (b.score - a.score) || (a.hit.distance - b.hit.distance))
-                            .slice(0, k)
                             .map((entry) => entry.hit);
                     }
+                    fused = retrieval === 'augmented' ? null : fusedFull?.slice(0, k) ?? null;
                 }
                 // Abstention scores the full reranked candidate window
                 // (searched), not the k-truncated hits: calibrate.mjs fits
@@ -1063,8 +1085,12 @@ export async function openPancakeFile(input, options = {}) {
                 // regardless of how many results a caller ultimately
                 // requests, so scoring must use the same window to match.
                 // preScore (kind 1) runs before search and has no window to
-                // fix, so it is unaffected.
-                const quality = pre || await scoreQuality(searched ?? hits, context);
+                // fix, so it is unaffected. fusedFull (RRF over the same
+                // full window, not k-truncated) is threaded through
+                // separately so coverage grades the passage fusion actually
+                // ranks first, while d0/margin/mean10 still read vector
+                // order (searched) exactly as calibrated.
+                const quality = pre || await scoreQuality(searched ?? hits, context, fusedFull);
                 // A 'none' verdict withholds results by default — the
                 // calibrated abstention signal is doing its job, and most
                 // callers want that. showAbstained is an explicit opt-out
@@ -1138,6 +1164,3 @@ export async function openPancakeFile(input, options = {}) {
         throw err;
     }
 }
-
-// Documented alias (see the rename note at the top of this file).
-export { openPancakeFile as openPikeletFile };

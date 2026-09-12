@@ -421,7 +421,22 @@ function aucFor(posRows, negRows) {
   return score / (posRows.length * negRows.length);
 }
 
-export async function calibrateRetrievalAbstention({ Pikelet, chunks, vectors, config, embedQuery, log = () => {} }) {
+// Reciprocal-rank-fusion constant, kept identical to complete/index.mjs's
+// RRF_K so a fit-time fused ranking matches what the reader actually
+// serves. A build-time-only constant drifting from the reader's would
+// make coverage grade a passage the reader would never actually rank
+// first.
+const RRF_K = 60;
+// The lexical candidate cutoff: only BM25 hits within this fraction of
+// the top score join fusion. Kept in sync with complete/index.mjs's own
+// cutoff for the same reason as RRF_K. Tighter than the reader's original
+// /3 (tried first, then measured too permissive — see the LEX_AGREE_FEAT
+// history this replaced): idf collapses common query terms into a flat,
+// near-tied score mass, and a wide cutoff let that mass's members ride
+// into fusion on a technicality rather than a real lexical match.
+const LEXICAL_CUTOFF = 1.5;
+
+export async function calibrateRetrievalAbstention({ Pikelet, chunks, vectors, config, embedQuery, lexicalIndex = null, log = () => {} }) {
   const skip = (reason) => {
     log(`Abstention calibration skipped: ${reason}; the artifact will report match_quality "unscored"`);
     return null;
@@ -451,6 +466,33 @@ export async function calibrateRetrievalAbstention({ Pikelet, chunks, vectors, c
     .filter((pos) => !heldOut.titles.has((chunks[pos].title || '').trim()));
   const retainedSet = new Set(retainedPos);
   const K = Math.min(10, retainedPos.length);
+  // Fused ranking for coverage's passage selection: reciprocal-rank
+  // fusion of the vector top-K with the lexical (BM25) hits, same math as
+  // complete/index.mjs's hybrid retrieval. coverage1 grounds the verdict
+  // in "does the passage actually contain the query's words" — scoring it
+  // against the vector-only top passages (the original implementation)
+  // left it blind to a passage hybrid fusion already ranks first on
+  // lexical strength alone, which is exactly the shape of every observed
+  // false abstention: a chunk BM25 finds immediately but the embedding
+  // ranks far down. Restricted to the retained set so a held-out
+  // document's own title can't leak in through BM25 and inflate coverage
+  // for a query calibration expects unanswerable.
+  const fusedTop = (text, vectorHits) => {
+    if (!lexicalIndex) return vectorHits;
+    const lexHits = lexicalIndex.search(text, 5).filter((h) => retainedSet.has(h.id));
+    const cut = lexHits.length ? lexHits[0].score / LEXICAL_CUTOFF : Infinity;
+    const lexRank = new Map(lexHits.filter((h) => h.score >= cut).map((h, i) => [h.id, i]));
+    if (lexRank.size === 0) return vectorHits;
+    const byId = new Map(vectorHits.map((h) => [h.id, h]));
+    for (const id of lexRank.keys()) if (!byId.has(id)) byId.set(id, { id, distance: 1 });
+    return [...byId.values()]
+      .map((hit, vRank) => ({
+        hit,
+        score: 1 / (RRF_K + vRank) + (lexRank.has(hit.id) ? 1 / (RRF_K + lexRank.get(hit.id)) : 0),
+      }))
+      .sort((a, b) => (b.score - a.score) || (a.hit.distance - b.hit.distance))
+      .map((entry) => entry.hit);
+  };
   // Signals must be computed the way the reader computes them from its own
   // search hits (complete/retrieval-abstention.mjs): d0, the rank-4 margin,
   // and the mean over the returned list.
@@ -459,6 +501,12 @@ export async function calibrateRetrievalAbstention({ Pikelet, chunks, vectors, c
     const d0 = top.length ? top[0].distance : 1;
     const margin = top.length > 1 ? top[Math.min(4, top.length - 1)].distance - d0 : 0;
     const mean10 = top.length ? top.reduce((s, r) => s + r.distance, 0) / top.length : 1;
+    // fusedTop gets the full widened pool, not the K-sliced top: a lexical
+    // top hit ranked, say, 40th by vector distance still needs its real
+    // distance available to fuse correctly, which only the wider search()
+    // pool (not top) carries. d0/margin/mean10 above stay on top/K, matching
+    // the reader's own base-signal window exactly.
+    const fused = fusedTop(text, hits);
     return {
       d0,
       margin,
@@ -466,7 +514,7 @@ export async function calibrateRetrievalAbstention({ Pikelet, chunks, vectors, c
       known_frac: knownFrac(text, bloom, bits),
       [COVERAGE_FEAT]: coverageFrac(
         text,
-        top.slice(0, COVERAGE_TOP_PASSAGES).map((h) => chunks[h.id]?.text || ''),
+        fused.slice(0, COVERAGE_TOP_PASSAGES).map((h) => chunks[h.id]?.text || ''),
         isCommon,
       ),
     };
@@ -480,7 +528,14 @@ export async function calibrateRetrievalAbstention({ Pikelet, chunks, vectors, c
   });
   try {
     index.addBatch(vectors);
-    const search = async (text) => index.searchFiltered(await embedQuery(text), K, retainedSet);
+    // Widened beyond K: fusedTop below needs a real (not synthesized)
+    // vector distance for any lexical top hit to fuse it correctly, the
+    // same guarantee complete/index.mjs gets by feeding lexical ids into
+    // the sketch's exact rerank as extraCandidates before RRF ever runs.
+    // d0/margin/mean10 still slice back down to K — this only widens the
+    // pool fusedTop can search within, not the base signal window.
+    const FUSION_POOL = Math.min(retainedPos.length, 200);
+    const search = async (text) => index.searchFiltered(await embedQuery(text), FUSION_POOL, retainedSet);
 
     const rows = [];
     let droppedPositives = 0;
@@ -494,10 +549,14 @@ export async function calibrateRetrievalAbstention({ Pikelet, chunks, vectors, c
       // document — otherwise the query is unanswerable in practice and would
       // drag the no-false-abstain floor toward zero. Title queries verify by
       // title (any chunk of the source document counts); content-word queries
-      // verify by the chunk they were sampled from.
+      // verify by the chunk they were sampled from. Checked against the base
+      // K window, not the widened FUSION_POOL search() now returns — a
+      // source landing at, say, rank 80 is not "retrieval verifiably lands
+      // on the source" in any sense the reader's own top-K would agree with.
+      const topK = hits.slice(0, K);
       const found = sourceId !== undefined
-        ? hits.some((h) => h.id === sourceId)
-        : hits.some((h) => (chunks[h.id]?.title || '').trim() === sourceTitle);
+        ? topK.some((h) => h.id === sourceId)
+        : topK.some((h) => (chunks[h.id]?.title || '').trim() === sourceTitle);
       if (found) rows.push({ text, label: 1, sourceTitle, sourceId, ...signalsFor(text, hits) });
       else droppedPositives++;
     }
@@ -554,14 +613,18 @@ export async function calibrateRetrievalAbstention({ Pikelet, chunks, vectors, c
 
     // Weak band: retained-title questions whose source lands at rank 5..K on
     // corpora deep enough to have one. They keep the weak threshold honest so
-    // adjacent content is shown with a caveat instead of hidden.
+    // adjacent content is shown with a caveat instead of hidden. search()
+    // now returns a widened FUSION_POOL-sized pool (for fusedTop's benefit,
+    // above); rank must still be checked against the base K window — a
+    // source landing at, say, rank 40 of 200 is well outside "adjacent
+    // content", not a weak match.
     if (chunks.length >= 25) {
       const weakTemplates = titleQuestions(retainedTitles, MAX_POSITIVES, SEED ^ 0x0ddba11);
       for (const { text, sourceTitle } of weakTemplates) {
         if (rows.filter((r) => r.label === -1).length >= 24) break;
         const hits = await search(text);
         const rank = hits.findIndex((h) => (chunks[h.id]?.title || '').trim() === sourceTitle) + 1;
-        if (rank >= 5) rows.push({ text, label: -1, ...signalsFor(text, hits) });
+        if (rank >= 5 && rank <= K) rows.push({ text, label: -1, ...signalsFor(text, hits) });
       }
     }
 

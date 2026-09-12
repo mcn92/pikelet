@@ -11,10 +11,10 @@ import { calibrateRetrievalAbstention } from './calibrate.mjs';
 async function buildCompleteArtifact({ Pikelet, projectDir, assetsDir, config, chunks, snapshot, vectors, log = () => {} }) {
   const artifactContract = await loadArtifactContract();
   const {
-    assemblePancakeFile, buildCorpusSegment, buildInlineTransformerEncoderSegment, PROFILE_V2,
+    assemblePikeletFile, buildCorpusSegment, buildInlineTransformerEncoderSegment, PROFILE_V2,
     buildQueryInterpSegment, buildLexicalSegment, measureRecommendedRerank, loadInlineEncoderKernel,
   } = (await loadCompleteModules()).builder;
-  const { createInlineTransformerEmbedder, buildInlineTestVectors, openPancakeFile } = (await loadCompleteModules()).reader;
+  const { createInlineTransformerEmbedder, buildInlineTestVectors, openPikeletFile, openLexicalIndex } = (await loadCompleteModules()).reader;
   const runtime = config.runtime || {};
   const { encoder, vocabPath, weightsPath } = await resolveInlineEncoderInputs(config, projectDir);
 
@@ -35,6 +35,12 @@ async function buildCompleteArtifact({ Pikelet, projectDir, assetsDir, config, c
     }
     return embedder;
   };
+  // Built early (before calibration, not in its usual position after
+  // corpusSegment below) so calibration can fit coverage against the same
+  // fused vector+BM25 ranking the reader serves, not a vector-only
+  // approximation of it.
+  const lexical = buildLexicalSegment(chunks.map((chunk) => chunk.text || ''));
+  log(`Built lexical index: ${lexical.meta.terms.toLocaleString()} terms over ${lexical.meta.docCount.toLocaleString()} records (${(lexical.bytes.length / 1024).toFixed(0)} KiB)`);
   let calibrationBytes = null;
   let goldenQueries = [];
   try {
@@ -50,7 +56,8 @@ async function buildCompleteArtifact({ Pikelet, projectDir, assetsDir, config, c
       calibrationBytes = await fs.readFile(path.resolve(projectDir, encoder.calibrationPath));
     } else if (runtime.calibration === 'auto') {
       const embedQuery = async (text) => (await (await getEmbedder()).embed(`${declaration.prefixPolicy?.query || ''}${text}`)).vector;
-      const calibrated = await calibrateRetrievalAbstention({ Pikelet, chunks, vectors, config, embedQuery, log });
+      const lexicalIndex = openLexicalIndex(lexical.bytes);
+      const calibrated = await calibrateRetrievalAbstention({ Pikelet, chunks, vectors, config, embedQuery, lexicalIndex, log });
       if (calibrated) {
         calibrationBytes = Buffer.from(JSON.stringify(calibrated.calibrationJson), 'utf8');
         // Retrieval-verified positives double as golden queries: embedded
@@ -107,12 +114,10 @@ async function buildCompleteArtifact({ Pikelet, projectDir, assetsDir, config, c
   }), 'utf8');
   const outPath = path.join(assetsDir, runtime.fileName || 'search.pikelet');
   const corpusSegment = buildCorpusSegment(records);
-  // Lexical index for hybrid retrieval (kind 5): BM25 candidates join the
-  // sketch rerank at query time so known-item lookups survive the sketch
-  // scan's candidate cutoff. Older readers skip the segment.
-  const lexical = buildLexicalSegment(chunks.map((chunk) => chunk.text || ''));
-  log(`Built lexical index: ${lexical.meta.terms.toLocaleString()} terms over ${lexical.meta.docCount.toLocaleString()} records (${(lexical.bytes.length / 1024).toFixed(0)} KiB)`);
-  const assemble = (goldens) => assemblePancakeFile({
+  // lexical (BM25 segment for hybrid retrieval, kind 5) was built earlier,
+  // above, so calibration could fit against the same fused ranking it backs
+  // at serve time. Older readers skip the segment.
+  const assemble = (goldens) => assemblePikeletFile({
     profile: PROFILE_V2,
     corpus: {
       ...corpusSegment.corpus,
@@ -154,7 +159,7 @@ async function buildCompleteArtifact({ Pikelet, projectDir, assetsDir, config, c
   // segment does not feed retrieval, so the replay stays valid across
   // the reassembly.)
   if (goldenQueries.length) {
-    const replay = await openPancakeFile(outPath);
+    const replay = await openPikeletFile(outPath);
     let kept;
     try {
       kept = [];
