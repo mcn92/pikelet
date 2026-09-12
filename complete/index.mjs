@@ -50,6 +50,12 @@ export {
 
 // Supported container formats: header formatVersion -> manifest profile.
 export const SUPPORTED_PROFILES = Object.freeze({ 1: 'pikelet-complete-v1', 2: 'pikelet-complete-v2' });
+// Pre-rename profile strings (2026-09): every .pikelet published before this
+// date — including live GitHub release assets — carries "pancake-complete-
+// vN" in its manifest. Readers accept both spellings indefinitely so an
+// already-published pack does not go dark on a reader upgrade; only
+// SUPPORTED_PROFILES (above) is what a fresh build ever writes.
+const LEGACY_PROFILES = Object.freeze({ 1: 'pancake-complete-v1', 2: 'pancake-complete-v2' });
 export const CORPUS_LAYOUT_V2 = 'records-v2';
 
 // Read budgets. Open-path reads (manifest, segment table, query-interp,
@@ -383,7 +389,8 @@ export async function openPikeletFile(input, options = {}) {
         try { manifest = JSON.parse(decoder.decode(manifestBuf)); } catch (err) {
             throw new Error('.pikelet manifest is not valid JSON', { cause: err });
         }
-        if (!manifest || typeof manifest !== 'object' || manifest.profile !== profile) {
+        if (!manifest || typeof manifest !== 'object'
+            || (manifest.profile !== profile && manifest.profile !== LEGACY_PROFILES[formatVersion])) {
             throw new Error(`unsupported profile ${manifest?.profile} for format version ${formatVersion}`);
         }
         if (!Array.isArray(manifest.segments) || manifest.segments.length !== segmentCount) {
