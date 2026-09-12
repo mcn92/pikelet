@@ -64,7 +64,7 @@ function generateSyntheticVec(dims) {
     const engine = await Pikelet({ wasmBinary });
 
     // Check profile functions exist
-    if (!engine._pancake_profile_print || !engine._pancake_profile_reset) {
+    if (!engine._pikelet_profile_print || !engine._pikelet_profile_reset) {
         console.error('ERROR: Profile functions not found. Rebuild with: ./build.sh');
         process.exit(1);
     }
@@ -82,7 +82,7 @@ function generateSyntheticVec(dims) {
     }
 
     // quantized=1, metric=1 (cosine)
-    const handle = engine._pancake_init(DIMS, MAX_ELEM, 1, 1, M, EF_C, EF_SEARCH, 108);
+    const handle = engine._pikelet_init(DIMS, MAX_ELEM, 1, 1, M, EF_C, EF_SEARCH, 108);
 
     const insertPtr = engine._emsc_malloc(DIMS * 4);
 
@@ -99,7 +99,7 @@ function generateSyntheticVec(dims) {
         }
 
         engine.HEAPF32.set(vec, insertPtr >> 2);
-        engine._pancake_add(handle, insertPtr);
+        engine._pikelet_add(handle, insertPtr);
 
         // Report every REPORT_INTERVAL inserts
         if ((i + 1) % REPORT_INTERVAL === 0) {
@@ -108,8 +108,8 @@ function generateSyntheticVec(dims) {
             const elapsed = (performance.now() - t0) / 1000;
             const rate = (i + 1) / elapsed;
             console.log(`\n[${(i + 1).toLocaleString()} / ${COUNT.toLocaleString()}] cumulative: ${elapsed.toFixed(1)}s (${rate.toFixed(0)} vec/s)`);
-            engine._pancake_profile_print(rangeStart, rangeEnd);
-            engine._pancake_profile_reset();
+            engine._pikelet_profile_print(rangeStart, rangeEnd);
+            engine._pikelet_profile_reset();
         }
     }
 
@@ -117,10 +117,10 @@ function generateSyntheticVec(dims) {
     console.log(`\n=== TOTAL: ${COUNT.toLocaleString()} inserts in ${totalElapsed.toFixed(2)}s (${(COUNT / totalElapsed).toFixed(0)} vec/s) ===`);
 
     // Final memory stats
-    const mem = engine._pancake_memory(handle);
+    const mem = engine._pikelet_memory(handle);
     const memMB = (mem / (1024 * 1024)).toFixed(1);
     console.log(`Memory: ${memMB} MB`);
 
     engine._emsc_free(insertPtr);
-    engine._pancake_dispose(handle);
+    engine._pikelet_dispose(handle);
 })();

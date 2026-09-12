@@ -3,11 +3,11 @@
 // that the declarations match the documented runtime surface — including
 // what must NOT type-check, via @ts-expect-error.
 
-import Pikelet, { PancakeError, PANCAKE_ERROR_CODES } from 'pikelet-wasm';
+import Pikelet, { PikeletError, PIKELET_ERROR_CODES } from 'pikelet-wasm';
 import WebPikelet from 'pikelet-wasm/web';
 import {
-  PancakeRangeArtifact as RangeArtifactCtor,
-  PancakeSketchArtifact as SketchArtifactCtor,
+  PikeletRangeArtifact as RangeArtifactCtor,
+  PikeletSketchArtifact as SketchArtifactCtor,
   NodeFileRangeSource,
   buildSketchArtifactFile,
   exportSketchArtifact,
@@ -15,28 +15,28 @@ import {
   createSketchScanner,
 } from 'pikelet-wasm/artifact';
 import type {
-  PancakeIndex,
-  PancakeSketchArtifact,
+  PikeletIndex,
+  PikeletSketchArtifact,
   SearchResult,
   SketchArtifactSearchResult,
   SketchStageEvent,
   SketchTier,
 } from 'pikelet-wasm';
 
-// The entrypoints provide PancakeError / PANCAKE_ERROR_CODES as named runtime
+// The entrypoints provide PikeletError / PIKELET_ERROR_CODES as named runtime
 // exports, but NOT the artifact classes — those are properties of the API
 // object (or named exports of pikelet-wasm/artifact). Importing the name only
 // yields a type; using it as a value must not compile.
-import { PancakeRangeArtifact as NotAValue } from 'pikelet-wasm';
+import { PikeletRangeArtifact as NotAValue } from 'pikelet-wasm';
 
 async function nodeSurface(): Promise<void> {
-  const index: PancakeIndex = await Pikelet.create({ dim: 8, metric: 'l2', maxElements: 100 });
+  const index: PikeletIndex = await Pikelet.create({ dim: 8, metric: 'l2', maxElements: 100 });
   const hits: SearchResult[] = index.search(new Float32Array(8), 3, { efSearch: 50 });
   hits[0]?.distance.toFixed(3);
   index.dispose();
 
   // Staged sketch open with residency callbacks.
-  const artifact: PancakeSketchArtifact = await Pikelet.openSketchArtifactFile('x.pancake-sketch', {
+  const artifact: PikeletSketchArtifact = await Pikelet.openSketchArtifactFile('x.pikelet-sketch', {
     staged: true,
     onStage: (event: SketchStageEvent) => {
       const tier: SketchTier = event.tier;
@@ -48,7 +48,7 @@ async function nodeSurface(): Promise<void> {
   void tier;
   artifact.microDims.toFixed(0);
   artifact.microBits.toFixed(0);
-  const settled: PancakeSketchArtifact = await artifact.fullyResident;
+  const settled: PikeletSketchArtifact = await artifact.fullyResident;
   void settled;
 
   const micro = await Pikelet.createSketchScanner(artifact, { tier: 'micro', maxRerank: 512 });
@@ -68,7 +68,7 @@ async function nodeSurface(): Promise<void> {
   await artifact.close();
 
   // Build options carry the micro-tier geometry; the manifest reports it.
-  const manifest = Pikelet.buildSketchArtifactFile('snap.pnck', 'out.pancake-sketch', {
+  const manifest = Pikelet.buildSketchArtifactFile('snap.pnck', 'out.pikelet-sketch', {
     sketchDims: 192,
     sketchBits: 4,
     microDims: 48,
@@ -97,17 +97,17 @@ async function webSurface(): Promise<void> {
 }
 
 async function artifactSubpath(): Promise<void> {
-  const source = new NodeFileRangeSource('artifact.pancake-range');
+  const source = new NodeFileRangeSource('artifact.pikelet-range');
   const artifact = await RangeArtifactCtor.open(source);
   await artifact.close();
 
   const parsed = parseUint8Snapshot(new Uint8Array(0));
   parsed.scales.length.toFixed(0);
-  const manifest = exportSketchArtifact(parsed, 'out.pancake-sketch', { microDims: 24 });
+  const manifest = exportSketchArtifact(parsed, 'out.pikelet-sketch', { microDims: 24 });
   manifest.sizeBytes.toFixed(0);
-  buildSketchArtifactFile('snap.pnck', 'out.pancake-sketch');
+  buildSketchArtifactFile('snap.pnck', 'out.pikelet-sketch');
 
-  const sketch = await SketchArtifactCtor.openFile('out.pancake-sketch');
+  const sketch = await SketchArtifactCtor.openFile('out.pikelet-sketch');
   const scanner = await createSketchScanner(async () => ({}), sketch, { tier: 'full' });
   scanner.scan(new Float32Array(sketch.sketchDims), 100);
   scanner.dispose();
@@ -117,7 +117,7 @@ async function artifactSubpath(): Promise<void> {
 void nodeSurface;
 void webSurface;
 void artifactSubpath;
-// @ts-expect-error PancakeRangeArtifact is a type, not a value, on the entrypoints
+// @ts-expect-error PikeletRangeArtifact is a type, not a value, on the entrypoints
 void NotAValue;
-void PancakeError;
-void PANCAKE_ERROR_CODES;
+void PikeletError;
+void PIKELET_ERROR_CODES;

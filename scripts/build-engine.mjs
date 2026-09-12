@@ -24,7 +24,7 @@ const wasmSimd = env.WASM_SIMD ?? '1';
 const wasmRelaxedSimd = env.WASM_RELAXED_SIMD ?? '0';
 const homeDir = os.homedir();
 const defaultEmCache = path.join(homeDir, 'emsdk', 'upstream', 'emscripten', 'cache');
-const fallbackEmCache = env.EM_CACHE_FALLBACK ?? path.join(os.tmpdir(), 'pancake-emcc-cache');
+const fallbackEmCache = env.EM_CACHE_FALLBACK ?? path.join(os.tmpdir(), 'pikelet-emcc-cache');
 
 function run(command, commandArgs, options = {}) {
   const result = spawnSync(command, commandArgs, {
@@ -188,10 +188,10 @@ const emccArgs = [
   '-mbulk-memory',
   ...profileFlags,
   '-D',
-  'PANCAKE_WASM_BUILD=1',
+  'PIKELET_WASM_BUILD=1',
   '-fno-merge-all-constants',
   '-s',
-  'EXPORTED_FUNCTIONS=["_pancake_init","_pancake_add","_pancake_bulk_insert","_pancake_query","_pancake_query_filtered","_pancake_delete","_pancake_compact","_pancake_compact_remap","_pancake_count","_pancake_memory","_pancake_ghost_count","_pancake_ghost_ratio","_pancake_export","_pancake_import","_pancake_dispose","_pancake_dimension","_pancake_sketch_scan","_pancake_shutdown_all","_shutdown_all","_emsc_malloc","_emsc_free","_pancake_profile_print","_pancake_profile_reset"]',
+  'EXPORTED_FUNCTIONS=["_pikelet_init","_pikelet_add","_pikelet_bulk_insert","_pikelet_query","_pikelet_query_filtered","_pikelet_delete","_pikelet_compact","_pikelet_compact_remap","_pikelet_count","_pikelet_memory","_pikelet_ghost_count","_pikelet_ghost_ratio","_pikelet_export","_pikelet_import","_pikelet_dispose","_pikelet_dimension","_pikelet_sketch_scan","_pikelet_shutdown_all","_shutdown_all","_emsc_malloc","_emsc_free","_pikelet_profile_print","_pikelet_profile_reset"]',
   '-s',
   'EXPORTED_RUNTIME_METHODS=["ccall","cwrap","HEAPF32","HEAPU8","HEAPU32","HEAP32"]',
   '-s',

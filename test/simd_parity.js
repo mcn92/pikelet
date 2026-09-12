@@ -108,15 +108,15 @@ async function loadModule(basename) {
     });
 }
 
-function makePancakeApi(basename) {
+function makePikeletApi(basename) {
     return createPikeletApi(() => loadModule(basename));
 }
 
 async function main() {
     ensureScalarBuild();
 
-    const PikeletSimd = makePancakeApi('engine');
-    const PikeletScalar = makePancakeApi(SCALAR_BASENAME);
+    const PikeletSimd = makePikeletApi('engine');
+    const PikeletScalar = makePikeletApi(SCALAR_BASENAME);
     const rng = makeRng(0xC0FFEE);
 
     const annScenarios = [

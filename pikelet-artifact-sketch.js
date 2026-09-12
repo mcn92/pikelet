@@ -1,11 +1,11 @@
 'use strict';
-// Sketch artifact profile (.pancake-sketch) — spec/SKETCH_PROFILE.md:
-// PancakeSketchArtifact reader, the sketch-artifact builders, and the
+// Sketch artifact profile (.pikelet-sketch) — spec/SKETCH_PROFILE.md:
+// PikeletSketchArtifact reader, the sketch-artifact builders, and the
 // engine-backed resident scanner.
 // Split out of pikelet-artifact.js (the public entry, which re-exports the
 // three parts); see that file for the module map.
 
-const { pikeletError, PANCAKE_ERROR_CODES } = require('./pikelet-errors.js');
+const { pikeletError, PIKELET_ERROR_CODES } = require('./pikelet-errors.js');
 const {
     DEFAULT_OPEN_READ_BYTES,
     MAX_COALESCED_RANGE_BYTES,
@@ -26,7 +26,7 @@ const {
 } = require('./pikelet-artifact-common.js');
 
 // ============================================================================
-// Sketch artifact profile (.pancake-sketch) — spec/SKETCH_PROFILE.md
+// Sketch artifact profile (.pikelet-sketch) — spec/SKETCH_PROFILE.md
 // ============================================================================
 //
 // Layout: 256-byte header | scales f32[count] | offsets f32[count] |
@@ -40,7 +40,7 @@ const SKETCH_KIND_U8 = 1;
 
 function buildSketchArtifact(snapshotBytes, outPath, options = {}) {
     if (typeof outPath !== 'string' || outPath.length === 0) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'buildSketchArtifact() requires an output path');
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'buildSketchArtifact() requires an output path');
     }
     return exportSketchArtifact(parseUint8Snapshot(snapshotBytes), outPath, options);
 }
@@ -55,13 +55,13 @@ function exportSketchArtifact(index, outPath, options = {}) {
     const sketchBits = options.sketchBits || 4;
     const recommendedRerank = options.recommendedRerank || 0;
     if (![4, 8].includes(sketchBits)) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'sketchBits must be 4 or 8', { sketchBits });
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'sketchBits must be 4 or 8', { sketchBits });
     }
     if (!Number.isInteger(sketchDims) || sketchDims < 1 || dim % sketchDims !== 0) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'sketchDims must divide dim', { sketchDims, dim });
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'sketchDims must divide dim', { sketchDims, dim });
     }
     if (sketchBits === 4 && sketchDims % 2 !== 0) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'sketchDims must be even for 4-bit sketches', { sketchDims });
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'sketchDims must be even for 4-bit sketches', { sketchDims });
     }
     // Optional staged-boot micro tier: a second, coarser pooling of the same
     // quantized rows, stored after the full sketches so v1 readers see it
@@ -78,10 +78,10 @@ function exportSketchArtifact(index, outPath, options = {}) {
     const microBits = microDims ? (options.microBits || 4) : 0;
     if (microDims) {
         if (!Number.isInteger(microDims) || microDims < 1 || sketchDims % microDims !== 0 || microDims >= sketchDims) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'microDims must divide sketchDims and be smaller', { microDims, sketchDims });
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'microDims must divide sketchDims and be smaller', { microDims, sketchDims });
         }
         if (![4, 8].includes(microBits) || (microBits === 4 && microDims % 2 !== 0)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'invalid micro sketch encoding', { microBits, microDims });
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'invalid micro sketch encoding', { microBits, microDims });
         }
     }
     // Per-row integrity (format version 2, spec section 2.4): the vectors
@@ -97,10 +97,10 @@ function exportSketchArtifact(index, outPath, options = {}) {
     const rowDigestBytes = options.rowDigestBytes || 16;
     if (rowIntegrity) {
         if (!Number.isInteger(rowsPerBlock) || rowsPerBlock < 1 || rowsPerBlock > 4096) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'rowsPerBlock must be an integer in [1, 4096]', { rowsPerBlock });
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'rowsPerBlock must be an integer in [1, 4096]', { rowsPerBlock });
         }
         if (!Number.isInteger(rowDigestBytes) || rowDigestBytes < 8 || rowDigestBytes > 32) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'rowDigestBytes must be an integer in [8, 32]', { rowDigestBytes });
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'rowDigestBytes must be an integer in [8, 32]', { rowDigestBytes });
         }
     }
     const pool = dim / sketchDims;
@@ -256,7 +256,7 @@ function buildSketchArtifactFile(snapshotPath, outPath, options = {}) {
     return buildSketchArtifact(fs.readFileSync(snapshotPath), outPath, options);
 }
 
-class PancakeSketchArtifact {
+class PikeletSketchArtifact {
     constructor(source) {
         this.source = source;
         // Fetched rows live in a byte-budgeted LRU; search correctness never
@@ -300,25 +300,25 @@ class PancakeSketchArtifact {
 
     static async open(source, options = {}) {
         if (!source || typeof source.read !== 'function') {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'SketchArtifact.open() requires a range source with read(offset, length)');
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'SketchArtifact.open() requires a range source with read(offset, length)');
         }
-        const artifact = new PancakeSketchArtifact(source);
+        const artifact = new PikeletSketchArtifact(source);
         artifact.maxReadBytes = resolveMaxReadBytes(options.maxReadBytes);
         const header = await readChecked(source, 0, SKETCH_HEADER_BYTES, 'header');
         if (header.byteLength !== SKETCH_HEADER_BYTES) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact header is truncated');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact header is truncated');
         }
         const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
         if (view.getUint32(0, true) !== SKETCH_MAGIC) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Not a Pikelet sketch artifact (bad magic)');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Not a Pikelet sketch artifact (bad magic)');
         }
         const version = view.getUint32(4, true);
         if (version !== 1 && version !== 2) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported sketch artifact version', { version });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported sketch artifact version', { version });
         }
         artifact.formatVersion = version;
         if (view.getUint32(8, true) !== SKETCH_KIND_U8) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported sketch artifact kind');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported sketch artifact kind');
         }
         artifact.metric = view.getUint32(12, true);
         artifact.dim = view.getUint32(16, true);
@@ -344,13 +344,13 @@ class PancakeSketchArtifact {
 
         const { metric, dim, count, sketchDims, sketchBits, vectorsOffset } = artifact;
         if (metric !== 0 && metric !== 1) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported sketch artifact metric', { metric });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported sketch artifact metric', { metric });
         }
         if (dim < 1 || count < 1 || sketchDims < 1 || dim % sketchDims !== 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Invalid sketch artifact geometry', { dim, count, sketchDims });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Invalid sketch artifact geometry', { dim, count, sketchDims });
         }
         if (![4, 8].includes(sketchBits) || (sketchBits === 4 && sketchDims % 2 !== 0)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Invalid sketch encoding', { sketchBits, sketchDims });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Invalid sketch encoding', { sketchBits, sketchDims });
         }
         const sketchRowBytes = (sketchDims * sketchBits) / 8;
         // Version 2 interleaves a digest page ahead of each rowsPerBlock rows
@@ -360,7 +360,7 @@ class PancakeSketchArtifact {
             const P = artifact.rowsPerBlock;
             const D = artifact.rowDigestBytes;
             if (!Number.isInteger(P) || P < 1 || P > 4096 || !Number.isInteger(D) || D < 8 || D > 32) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Invalid sketch row-integrity geometry', { rowsPerBlock: P, rowDigestBytes: D });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Invalid sketch row-integrity geometry', { rowsPerBlock: P, rowDigestBytes: D });
             }
             artifact.numBlocks = Math.ceil(count / P);
             artifact.pageBytes = P * D;
@@ -370,7 +370,7 @@ class PancakeSketchArtifact {
             if (!Number.isSafeInteger(artifact.vectorsRegionBytes)
                 || pageTableOffset < sketchesOffset + count * sketchRowBytes
                 || pageTableOffset + artifact.numBlocks * 32 > vectorsOffset) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact page table layout is inconsistent', { pageTableOffset });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact page table layout is inconsistent', { pageTableOffset });
             }
         } else {
             artifact.numBlocks = 0;
@@ -384,7 +384,7 @@ class PancakeSketchArtifact {
             || vectorsOffset < sketchesOffset + count * sketchRowBytes
             || vectorsOffset % 16 !== 0
             || fileBytes !== vectorsOffset + expectVectors) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact layout is inconsistent');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact layout is inconsistent');
         }
         let microRowBytes = 0;
         if (artifact.microDims) {
@@ -393,7 +393,7 @@ class PancakeSketchArtifact {
                 || ![4, 8].includes(artifact.microBits) || (artifact.microBits === 4 && artifact.microDims % 2 !== 0)
                 || microOffset !== sketchesOffset + count * sketchRowBytes
                 || microOffset + count * microRowBytes > vectorsOffset) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact micro tier layout is inconsistent', { microDims: artifact.microDims });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact micro tier layout is inconsistent', { microDims: artifact.microDims });
             }
         }
         artifact.microOffset = microOffset;
@@ -402,7 +402,7 @@ class PancakeSketchArtifact {
             // still inside the resident prefix residentSha256 covers.
             const tiersEnd = artifact.microDims ? microOffset + count * microRowBytes : sketchesOffset + count * sketchRowBytes;
             if (pageTableOffset !== tiersEnd) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact page table layout is inconsistent', { pageTableOffset, tiersEnd });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact page table layout is inconsistent', { pageTableOffset, tiersEnd });
             }
         }
         artifact.pageTableOffset = pageTableOffset;
@@ -418,7 +418,7 @@ class PancakeSketchArtifact {
         if (!staged) {
             const resident = await readChecked(source, SKETCH_HEADER_BYTES, vectorsOffset - SKETCH_HEADER_BYTES, 'resident prefix', artifact.maxReadBytes);
             if (resident.byteLength !== vectorsOffset - SKETCH_HEADER_BYTES) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact resident prefix is truncated');
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact resident prefix is truncated');
             }
             // Copy into an aligned buffer so the typed-array views are valid
             // regardless of the source's byteOffset.
@@ -447,7 +447,7 @@ class PancakeSketchArtifact {
         ]);
         if (affineBytes.byteLength !== sketchesOffset - SKETCH_HEADER_BYTES || microBytes.byteLength !== count * microRowBytes
             || (version >= 2 && pageTableRead.byteLength !== pageTableBytes)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact stage-1 read is truncated');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact stage-1 read is truncated');
         }
         const affineCopy = new Uint8Array(affineBytes.byteLength);
         affineCopy.set(affineBytes);
@@ -463,13 +463,13 @@ class PancakeSketchArtifact {
             const digest = await sha256BytesAsync(stage1);
             if (!digest) {
                 // Verification requested but no crypto backend: fail closed.
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                     'Sketch artifact verification requested but no crypto backend is available; pass verify:false to skip');
             }
             const expected = header.subarray(136, 168);
             for (let b = 0; b < 32; b++) {
                 if (digest[b] !== expected[b]) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact stage-1 prefix failed hash verification');
+                    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact stage-1 prefix failed hash verification');
                 }
             }
             artifact.residentVerified = true;
@@ -486,7 +486,7 @@ class PancakeSketchArtifact {
         artifact.fullyResident = (async () => {
             const rest = await readChecked(source, sketchesOffset, vectorsOffset - sketchesOffset, 'stage-2 sketches', artifact.maxReadBytes);
             if (rest.byteLength !== vectorsOffset - sketchesOffset) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact stage-2 read is truncated');
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact stage-2 read is truncated');
             }
             const residentCopy = new Uint8Array((sketchesOffset - SKETCH_HEADER_BYTES) + rest.byteLength);
             residentCopy.set(affineCopy, 0);
@@ -522,13 +522,13 @@ class PancakeSketchArtifact {
             // Verification was requested (callers gate this on verify) but no
             // crypto backend is available. Fail closed rather than admit
             // unverified bytes.
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 'Sketch artifact verification requested but no crypto backend is available; pass verify:false to skip');
         }
         const expected = header.subarray(56, 88);
         for (let b = 0; b < 32; b++) {
             if (digest[b] !== expected[b]) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact resident prefix failed hash verification');
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact resident prefix failed hash verification');
             }
         }
         this.residentVerified = true;
@@ -539,7 +539,7 @@ class PancakeSketchArtifact {
         // open must release it, or every corrupt artifact leaks an fd.
         const source = new NodeFileRangeSource(filePath);
         try {
-            return await PancakeSketchArtifact.open(source, options);
+            return await PikeletSketchArtifact.open(source, options);
         } catch (err) {
             await source.close().catch(() => {});
             throw err;
@@ -607,7 +607,7 @@ class PancakeSketchArtifact {
         for (const id of ids) {
             if (rows.has(id)) continue;
             if (!Number.isInteger(id) || id < 0 || id >= this.count) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'row id out of range', { id });
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'row id out of range', { id });
             }
             const cached = this.cachedRow(id);
             if (cached !== undefined) rows.set(id, cached);
@@ -647,7 +647,7 @@ class PancakeSketchArtifact {
             const length = (endId - startId) * dim;
             const bytes = await readChecked(this.source, offset, length, 'row');
             if (bytes.byteLength !== length) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row read returned a truncated range', { offset, length });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row read returned a truncated range', { offset, length });
             }
             this.rangeRequests++;
             this.rangeBytes += length;
@@ -687,7 +687,7 @@ class PancakeSketchArtifact {
         for (const id of ids) {
             if (rows.has(id)) continue;
             if (!Number.isInteger(id) || id < 0 || id >= this.count) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'row id out of range', { id });
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'row id out of range', { id });
             }
             const cached = this.cachedRow(id);
             if (cached !== undefined) rows.set(id, cached);
@@ -730,7 +730,7 @@ class PancakeSketchArtifact {
             const length = r.end - r.start;
             const bytes = await readChecked(this.source, r.start, length, 'row block');
             if (bytes.byteLength !== length) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row read returned a truncated range', { offset: r.start, length });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row read returned a truncated range', { offset: r.start, length });
             }
             this.rangeRequests++;
             this.rangeBytes += length;
@@ -743,13 +743,13 @@ class PancakeSketchArtifact {
                 if (this.verifyRows) {
                     const pageDigest = await sha256BytesAsync(page);
                     if (!pageDigest) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                             'Sketch artifact row verification requested but no crypto backend is available; pass verify:false to skip');
                     }
                     const expected = this.pageTable.subarray(b * 32, b * 32 + 32);
                     for (let i = 0; i < 32; i++) {
                         if (pageDigest[i] !== expected[i]) {
-                            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row digest page failed hash verification', { block: b });
+                            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row digest page failed hash verification', { block: b });
                         }
                     }
                 }
@@ -761,7 +761,7 @@ class PancakeSketchArtifact {
                         const slot = page.subarray(idx * rowDigestBytes, (idx + 1) * rowDigestBytes);
                         for (let i = 0; i < rowDigestBytes; i++) {
                             if (digest[i] !== slot[i]) {
-                                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row failed digest verification', { id });
+                                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row failed digest verification', { id });
                             }
                         }
                     }
@@ -802,7 +802,7 @@ class PancakeSketchArtifact {
             for (let d = 0; d < dim; d++) norm += query[d] * query[d];
             norm = Math.sqrt(norm);
             if (!(norm > 0) || !Number.isFinite(norm)) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'cosine query must have a nonzero finite norm');
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'cosine query must have a nonzero finite norm');
             }
             q = new Float32Array(dim);
             for (let d = 0; d < dim; d++) q[d] = query[d] / norm;
@@ -828,10 +828,10 @@ class PancakeSketchArtifact {
             // declaration: a metric-blind scanner silently loses recall there.
             const scannerMetric = scanner.metric;
             if (scannerMetric !== undefined && scannerMetric !== this.metric) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'scanner metric does not match artifact metric', { scannerMetric, metric: this.metric });
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'scanner metric does not match artifact metric', { scannerMetric, metric: this.metric });
             }
             if (this.metric === 1 && scannerMetric !== 1) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'cosine sketch artifacts require a metric-aware scanner (scanner.metric === 1)', { metric: this.metric });
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'cosine sketch artifacts require a metric-aware scanner (scanner.metric === 1)', { metric: this.metric });
             }
             ids = scanner.scan(qPool, C);
         } else if (C >= count) {
@@ -879,13 +879,13 @@ class PancakeSketchArtifact {
         // even when the resident scan's top-C missed it.
         if (options.extraCandidates !== undefined) {
             if (!Array.isArray(options.extraCandidates)) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'extraCandidates must be an array of row ids');
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'extraCandidates must be an array of row ids');
             }
             if (!Array.isArray(ids)) ids = Array.from(ids); // a custom scanner may return a typed array
             const have = new Set(ids);
             for (const id of options.extraCandidates) {
                 if (!Number.isInteger(id) || id < 0 || id >= count) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'extraCandidates ids must be integers in [0, count)', { id, count });
+                    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'extraCandidates ids must be integers in [0, count)', { id, count });
                 }
                 if (!have.has(id)) {
                     have.add(id);
@@ -915,7 +915,7 @@ class PancakeSketchArtifact {
         }
         exact.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
         // Rerank accumulates squared L2; the API contract (README "Distance
-        // values") reports Euclidean, matching PancakeIndex.search.
+        // values") reports Euclidean, matching PikeletIndex.search.
         const sqrtL2 = this.metric !== 1;
         // fullRerankOutput returns every reranked candidate in distance
         // order instead of the top k — the candidates are already fetched
@@ -936,26 +936,26 @@ class PancakeSketchArtifact {
 }
 
 // Build a WASM-backed scanner for a sketch artifact's resident tier, usable
-// as the `scanner` option to PancakeSketchArtifact.search(). The engine's
-// pancake_sketch_scan SIMD kernel runs the O(count*sketchDims) resident scan
+// as the `scanner` option to PikeletSketchArtifact.search(). The engine's
+// pikelet_sketch_scan SIMD kernel runs the O(count*sketchDims) resident scan
 // that is otherwise the browser query bottleneck. `loadEngine` is the
 // entrypoint's own async engine loader (Node/web/workerd all supply one);
 // the sketch tier is staged in the engine heap once at creation.
 async function createSketchScanner(loadEngine, artifact, options = {}) {
     if (typeof loadEngine !== 'function') {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'createSketchScanner() requires an engine loader');
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'createSketchScanner() requires an engine loader');
     }
-    if (!artifact || !(artifact instanceof PancakeSketchArtifact)) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'createSketchScanner() requires a sketch artifact');
+    if (!artifact || !(artifact instanceof PikeletSketchArtifact)) {
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'createSketchScanner() requires a sketch artifact');
     }
     const engine = await loadEngine();
     const { count, metric } = artifact;
     const tierName = options.tier === 'micro' ? 'micro' : 'full';
     if (tierName === 'micro' && !artifact.microDims) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'artifact has no micro tier');
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'artifact has no micro tier');
     }
     if (tierName === 'full' && !artifact.sketches) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'full sketches are not resident yet (staged open still in stage 1; await artifact.fullyResident)');
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'full sketches are not resident yet (staged open still in stage 1; await artifact.fullyResident)');
     }
     const sketchDims = tierName === 'micro' ? artifact.microDims : artifact.sketchDims;
     const tierBits = tierName === 'micro' ? artifact.microBits : artifact.sketchBits;
@@ -984,7 +984,7 @@ async function createSketchScanner(loadEngine, artifact, options = {}) {
         for (const ptr of [sketchesPtr, scalesPtr, offsetsPtr, queryPtr, outIdsPtr, outDistsPtr]) {
             if (ptr) engine._emsc_free(ptr);
         }
-        throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED, 'sketch scanner heap allocation failed');
+        throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED, 'sketch scanner heap allocation failed');
     }
     engine.HEAPU8.set(expanded, sketchesPtr);
     engine.HEAPF32.set(artifact.scales, scalesPtr >> 2);
@@ -997,25 +997,25 @@ async function createSketchScanner(loadEngine, artifact, options = {}) {
         sketchDims,
         tier: tierName,
         scan(pooledQuery, c) {
-            if (disposed) throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'sketch scanner disposed');
+            if (disposed) throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'sketch scanner disposed');
             const query = pooledQuery instanceof Float32Array ? pooledQuery : Float32Array.from(pooledQuery);
             // The query is copied into a queryPtr sized for exactly sketchDims
             // floats: an over- or under-sized input would read/write outside
             // that buffer in the WASM heap. Validate before the copy.
             if (query.length !== sketchDims) {
-                throw pikeletError(PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
+                throw pikeletError(PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
                     `scan() pooled query has ${query.length} values, expected ${sketchDims}`,
                     { expected: sketchDims, actual: query.length });
             }
             for (let i = 0; i < query.length; i++) {
                 if (!Number.isFinite(query[i])) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR,
+                    throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR,
                         'scan() pooled query contains a non-finite value', { index: i });
                 }
             }
             engine.HEAPF32.set(query, queryPtr >> 2);
             const topC = Math.min(Math.max(1, Math.trunc(c)), maxC);
-            const n = engine._pancake_sketch_scan(
+            const n = engine._pikelet_sketch_scan(
                 sketchesPtr, scalesPtr, offsetsPtr, count, sketchDims, queryPtr, metric, topC, outIdsPtr, outDistsPtr
             );
             return Array.from(engine.HEAPU32.subarray(outIdsPtr >> 2, (outIdsPtr >> 2) + n));
@@ -1031,7 +1031,7 @@ async function createSketchScanner(loadEngine, artifact, options = {}) {
 }
 
 module.exports = {
-    PancakeSketchArtifact,
+    PikeletSketchArtifact,
     createSketchScanner,
     buildSketchArtifact,
     buildSketchArtifactBytes,

@@ -1,14 +1,14 @@
 // Types for the browser / Cloudflare Workers entrypoints (`pikelet-wasm/web`).
 // These runtimes expose the portable API, including range-readable Search
-// Artifacts. Only PancakeError and PANCAKE_ERROR_CODES exist as named runtime
+// Artifacts. Only PikeletError and PIKELET_ERROR_CODES exist as named runtime
 // exports; every other re-export below is type-only. Node-only helpers
 // (NodeFileRangeSource, the build*/open*File functions, loadJsonFile /
 // loadSnapshotFile) are absent from this surface so using them is a compile
 // error rather than a runtime throw.
-export { PancakeError, PANCAKE_ERROR_CODES } from './pikelet.js';
+export { PikeletError, PIKELET_ERROR_CODES } from './pikelet.js';
 export type {
   Metric,
-  PancakeErrorCode,
+  PikeletErrorCode,
   VectorInput,
   VectorRecord,
   CreateOptions,
@@ -20,7 +20,7 @@ export type {
   SearchResult,
   MemoryUsage,
   ResolvedConfig,
-  PancakeIndex,
+  PikeletIndex,
   RangeReadSource,
   RangeArtifactSearchOptions,
   RangeArtifactNode,
@@ -28,8 +28,8 @@ export type {
   RangeArtifactRound,
   RangeArtifactSearchResult,
   RangeArtifactOpenOptions,
-  PancakeRangeArtifact,
-  PancakeRangeArtifactConstructor,
+  PikeletRangeArtifact,
+  PikeletRangeArtifactConstructor,
   SketchTier,
   SketchStageEvent,
   SketchArtifactOpenOptions,
@@ -38,13 +38,13 @@ export type {
   SketchArtifactSearchOptions,
   SketchArtifactSearchResult,
   SketchArtifactStats,
-  PancakeSketchArtifact,
-  PancakeSketchArtifactConstructor,
-  PancakeApi,
+  PikeletSketchArtifact,
+  PikeletSketchArtifactConstructor,
+  PikeletApi,
 } from './pikelet.js';
 
-import type { PancakeApi } from './pikelet.js';
+import type { PikeletApi } from './pikelet.js';
 
-declare const Pikelet: PancakeApi;
+declare const Pikelet: PikeletApi;
 
 export default Pikelet;

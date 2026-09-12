@@ -313,7 +313,7 @@ async function buildPack(dataPath) {
     const snapshotPath = path.join(dataPath, 'wiki.pnck');
     fs.writeFileSync(snapshotPath, index.export());
     index.dispose();
-    Pikelet.buildSketchArtifactFile(snapshotPath, path.join(dataPath, 'wiki.pancake-sketch'), {
+    Pikelet.buildSketchArtifactFile(snapshotPath, path.join(dataPath, 'wiki.pikelet-sketch'), {
         sketchDims: 192,
         sketchBits: 4,
         recommendedRerank: RERANK,
@@ -419,7 +419,7 @@ function syntheticGibberish(n, seed, bloom) {
 const embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { dtype: 'fp16' });
 
 async function openPack(dir, bloom) {
-    const artifact = await Pikelet.openSketchArtifactFile(path.join(dir, 'wiki.pancake-sketch'));
+    const artifact = await Pikelet.openSketchArtifactFile(path.join(dir, 'wiki.pikelet-sketch'));
     const scanner = await Pikelet.createSketchScanner(artifact);
     const offsetsBuf = fs.readFileSync(path.join(dir, 'corpus-offsets.u32'));
     const offsets = new Uint32Array(offsetsBuf.buffer, offsetsBuf.byteOffset, offsetsBuf.byteLength / 4);

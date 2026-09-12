@@ -6,14 +6,14 @@ import createPikeletApi from './pikelet-core.js';
 import errorContract from './pikelet-errors.js';
 import loaderContract from './pikelet-loader.js';
 import artifactContract from './pikelet-artifact.js';
-const { PancakeError, PANCAKE_ERROR_CODES, pikeletError } = errorContract;
+const { PikeletError, PIKELET_ERROR_CODES, pikeletError } = errorContract;
 const { createCachedModuleLoader } = loaderContract;
-const { PancakeRangeArtifact, PancakeSketchArtifact, createSketchScanner } = artifactContract;
+const { PikeletRangeArtifact, PikeletSketchArtifact, createSketchScanner } = artifactContract;
 let engineVariantPromise = null;
 
 function makeLoadError(message, error) {
   const detail = error && error.message ? error.message : String(error);
-  return pikeletError(PANCAKE_ERROR_CODES.WASM_LOAD_FAILED, `${message}: ${detail}`, undefined, error);
+  return pikeletError(PIKELET_ERROR_CODES.WASM_LOAD_FAILED, `${message}: ${detail}`, undefined, error);
 }
 
 function isUrlLikeWasmAsset(asset) {
@@ -25,7 +25,7 @@ async function loadWasmAsset(asset) {
   const href = asset instanceof URL ? asset.href : asset;
   const response = await fetch(href, { credentials: 'same-origin' });
   if (!response.ok) {
-    throw pikeletError(PANCAKE_ERROR_CODES.WASM_LOAD_FAILED,
+    throw pikeletError(PIKELET_ERROR_CODES.WASM_LOAD_FAILED,
       `${response.status} ${response.statusText}`.trim(), { status: response.status });
   }
   return response.arrayBuffer();
@@ -70,15 +70,15 @@ async function loadWebEngine() {
 }
 
 const Pikelet = createPikeletApi(loadWebEngine);
-export { PancakeError, PANCAKE_ERROR_CODES };
+export { PikeletError, PIKELET_ERROR_CODES };
 
-Pikelet.RangeArtifact = PancakeRangeArtifact;
-Pikelet.SketchArtifact = PancakeSketchArtifact;
+Pikelet.RangeArtifact = PikeletRangeArtifact;
+Pikelet.SketchArtifact = PikeletSketchArtifact;
 Pikelet.createSketchScanner = (artifact, options) => createSketchScanner(loadWebEngine, artifact, options);
 
 function unsupportedNodeFileHelper(name) {
   return async function unsupported() {
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `${name}() is only available in the Node.js entrypoints`);
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `${name}() is only available in the Node.js entrypoints`);
   };
 }
 

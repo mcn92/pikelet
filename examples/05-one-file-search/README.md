@@ -74,7 +74,7 @@ smoke, provenance, identity, abstention, and embedded-evaluation checks.
 
 - `compile.mjs` — assembles a `.pikelet` per the spec: 64 B header,
   canonical-JSON manifest (its SHA-256 is the artifact identity), segment
-  table, and four segments — the index is an embedded `.pancake-sketch`,
+  table, and four segments — the index is an embedded `.pikelet-sketch`,
   the corpus is an offsets table + JSON records (one range read per
   hydration), encoder+calibration share one query-interpretation segment,
   and the evaluation segment carries the golden queries. `--inspect`

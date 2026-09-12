@@ -72,7 +72,7 @@ async function loadBrowserRuntime() {
   const artifactModule = await import('pikelet-wasm/artifact');
   const contract = artifactModule.default || artifactModule;
   return {
-    RangeArtifact: contract.PancakeRangeArtifact,
+    RangeArtifact: contract.PikeletRangeArtifact,
   };
 }
 
@@ -147,7 +147,7 @@ class PikeletDocusaurusSearch {
       return r.json();
     });
     const urls = manifest.docusaurus || {
-      artifactUrl: `${this.assetBase}/index.pancake-range`,
+      artifactUrl: `${this.assetBase}/index.pikelet-range`,
       corpusUrl: `${this.assetBase}/corpus.json`,
       studentModelUrl: `${this.assetBase}/student-model.bin`,
       abstentionUrl: `${this.assetBase}/student-abstention.json`,

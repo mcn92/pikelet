@@ -1,6 +1,6 @@
 export type Metric = 'cosine' | 'l2';
 
-export const PANCAKE_ERROR_CODES: Readonly<{
+export const PIKELET_ERROR_CODES: Readonly<{
   INVALID_ARGUMENT: 'INVALID_ARGUMENT';
   DIMENSION_MISMATCH: 'DIMENSION_MISMATCH';
   INVALID_VECTOR: 'INVALID_VECTOR';
@@ -18,13 +18,13 @@ export const PANCAKE_ERROR_CODES: Readonly<{
   INDEX_LIMIT: 'INDEX_LIMIT';
 }>;
 
-export type PancakeErrorCode = typeof PANCAKE_ERROR_CODES[keyof typeof PANCAKE_ERROR_CODES];
+export type PikeletErrorCode = typeof PIKELET_ERROR_CODES[keyof typeof PIKELET_ERROR_CODES];
 
-export class PancakeError extends Error {
-  readonly code: PancakeErrorCode;
+export class PikeletError extends Error {
+  readonly code: PikeletErrorCode;
   readonly details?: Readonly<Record<string, unknown>>;
   readonly cause?: unknown;
-  constructor(code: PancakeErrorCode, message: string, details?: Readonly<Record<string, unknown>>, cause?: unknown);
+  constructor(code: PikeletErrorCode, message: string, details?: Readonly<Record<string, unknown>>, cause?: unknown);
 }
 
 export type VectorInput = Float32Array | readonly number[];
@@ -68,7 +68,7 @@ export interface SearchOptions {
 
 export interface FromVectorsResult<Id = unknown> {
   /** Created and populated index. Caller owns dispose(). */
-  index: PancakeIndex;
+  index: PikeletIndex;
   /** Stable Pikelet IDs returned in insertion order. */
   ids: number[];
   /** Mapping from Pikelet IDs back to caller-provided source IDs. */
@@ -141,7 +141,7 @@ export interface RangeArtifactSearchOptions {
   maxRangeBytes?: number;
 }
 
-/** A decoded graph record, as returned by {@link PancakeRangeArtifact.readNode}. */
+/** A decoded graph record, as returned by {@link PikeletRangeArtifact.readNode}. */
 export interface RangeArtifactNode {
   readonly id: number;
   readonly level: number;
@@ -259,7 +259,7 @@ export interface NodeFileRangeSourceConstructor {
  * export of any entrypoint: reach it via `Pikelet.RangeArtifact` or the
  * `pikelet-wasm/artifact` subpath.
  */
-export interface PancakeRangeArtifact {
+export interface PikeletRangeArtifact {
   readonly version: number;
   readonly kind: number;
   readonly dim: number;
@@ -299,11 +299,11 @@ export interface PancakeRangeArtifact {
   close(): Promise<void>;
 }
 
-export interface PancakeRangeArtifactConstructor {
-  open(source: RangeReadSource, options?: RangeArtifactOpenOptions): Promise<PancakeRangeArtifact>;
+export interface PikeletRangeArtifactConstructor {
+  open(source: RangeReadSource, options?: RangeArtifactOpenOptions): Promise<PikeletRangeArtifact>;
   /** Node entrypoints only. */
-  openFile(filePath: string, options?: RangeArtifactOpenOptions): Promise<PancakeRangeArtifact>;
-  readonly prototype: PancakeRangeArtifact;
+  openFile(filePath: string, options?: RangeArtifactOpenOptions): Promise<PikeletRangeArtifact>;
+  readonly prototype: PikeletRangeArtifact;
 }
 
 /** Resident sketch tier: the coarse staged-boot tier or the full tier. */
@@ -335,7 +335,7 @@ export interface SketchArtifactOpenOptions {
   /**
    * Staged boot: when the artifact carries a micro tier, become searchable
    * after loading only the stage-1 prefix and swap to the full tier in the
-   * background (see {@link PancakeSketchArtifact.fullyResident}). Ignored for
+   * background (see {@link PikeletSketchArtifact.fullyResident}). Ignored for
    * artifacts without a micro tier. Default: false.
    */
   staged?: boolean;
@@ -492,7 +492,7 @@ export interface SketchArtifactBuildManifest {
  * any entrypoint: reach it via `Pikelet.SketchArtifact` or the
  * `pikelet-wasm/artifact` subpath.
  */
-export interface PancakeSketchArtifact {
+export interface PikeletSketchArtifact {
   readonly metric: number;
   readonly dim: number;
   readonly count: number;
@@ -509,7 +509,7 @@ export interface PancakeSketchArtifact {
    * Already resolved for non-staged opens; rejects if the background stage-2
    * load fails.
    */
-  readonly fullyResident: Promise<PancakeSketchArtifact>;
+  readonly fullyResident: Promise<PikeletSketchArtifact>;
   readonly recommendedRerank: number;
   readonly residentBytes: number;
   readonly residentVerified: boolean;
@@ -531,11 +531,11 @@ export interface PancakeSketchArtifact {
   close(): Promise<void>;
 }
 
-export interface PancakeSketchArtifactConstructor {
-  open(source: RangeReadSource, options?: SketchArtifactOpenOptions): Promise<PancakeSketchArtifact>;
+export interface PikeletSketchArtifactConstructor {
+  open(source: RangeReadSource, options?: SketchArtifactOpenOptions): Promise<PikeletSketchArtifact>;
   /** Node entrypoints only. */
-  openFile(filePath: string, options?: SketchArtifactOpenOptions): Promise<PancakeSketchArtifact>;
-  readonly prototype: PancakeSketchArtifact;
+  openFile(filePath: string, options?: SketchArtifactOpenOptions): Promise<PikeletSketchArtifact>;
+  readonly prototype: PikeletSketchArtifact;
 }
 
 export interface MemoryUsage {
@@ -558,7 +558,7 @@ export interface ResolvedConfig {
   readonly seed: number;
 }
 
-export interface PancakeIndex {
+export interface PikeletIndex {
   /** Insert a single vector. Returns its stable external ID. */
   add(vector: VectorInput): number;
   /** Insert multiple vectors. Returns stable external IDs in insertion order. */
@@ -617,23 +617,23 @@ export interface PancakeIndex {
 /**
  * The portable API exposed by every entrypoint (Node, browser, Workers).
  * The browser/Workers entrypoints expose exactly this surface; the Node
- * entrypoints add file helpers (see {@link NodePancakeApi}).
+ * entrypoints add file helpers (see {@link NodePikeletApi}).
  */
-export interface PancakeApi {
-  readonly PancakeError: typeof PancakeError;
-  readonly PANCAKE_ERROR_CODES: typeof PANCAKE_ERROR_CODES;
-  readonly RangeArtifact: PancakeRangeArtifactConstructor;
-  readonly SketchArtifact: PancakeSketchArtifactConstructor;
+export interface PikeletApi {
+  readonly PikeletError: typeof PikeletError;
+  readonly PIKELET_ERROR_CODES: typeof PIKELET_ERROR_CODES;
+  readonly RangeArtifact: PikeletRangeArtifactConstructor;
+  readonly SketchArtifact: PikeletSketchArtifactConstructor;
   /** Build a WASM-backed SIMD scanner for a sketch artifact's resident tier. */
-  createSketchScanner(artifact: PancakeSketchArtifact, options?: SketchScannerOptions): Promise<SketchScanner>;
+  createSketchScanner(artifact: PikeletSketchArtifact, options?: SketchScannerOptions): Promise<SketchScanner>;
   /** Create a new Pikelet index using the runtime-specific packaged entrypoint. */
-  create(opts: CreateOptions): Promise<PancakeIndex>;
+  create(opts: CreateOptions): Promise<PikeletIndex>;
   /** Restore an envelope snapshot, inferring its construction config. */
-  restore(snapshot: Uint8Array | ArrayBufferLike, overrides?: RestoreOptions): Promise<PancakeIndex>;
+  restore(snapshot: Uint8Array | ArrayBufferLike, overrides?: RestoreOptions): Promise<PikeletIndex>;
   /** Validate and inspect snapshot headers without creating a WASM index. */
   inspectSnapshot(snapshot: Uint8Array | ArrayBufferLike): SnapshotInspection;
   /** Create an index, run a callback, and always dispose the index afterward. */
-  withIndex<T>(opts: CreateOptions, fn: (index: PancakeIndex) => T | Promise<T>): Promise<T>;
+  withIndex<T>(opts: CreateOptions, fn: (index: PikeletIndex) => T | Promise<T>): Promise<T>;
   /** Create and populate an index from raw vectors. Infers dim and maxElements by default. */
   fromVectors(vectors: readonly VectorInput[], opts?: Omit<CreateOptions, 'dim'> & Partial<Pick<CreateOptions, 'dim'>>): Promise<FromVectorsResult<never>>;
   /** Create and populate an index from { id, vector } records. */
@@ -644,26 +644,26 @@ export interface PancakeApi {
  * The Node.js API: the portable surface plus filesystem helpers. These helpers
  * exist only on the Node entrypoints (`pikelet-wasm`, `pikelet-wasm/node`); the
  * browser/Workers entrypoints do not expose them, and importing those returns
- * the narrower {@link PancakeApi}.
+ * the narrower {@link PikeletApi}.
  */
-export interface NodePancakeApi extends PancakeApi {
+export interface NodePikeletApi extends PikeletApi {
   readonly NodeFileRangeSource: NodeFileRangeSourceConstructor;
   /**
    * Build a range-readable Search Artifact from a uint8 Pikelet snapshot.
-   * @deprecated The `.pancake-range` profile is deprecated
-   * (spec/SEARCH_ARTIFACT_CONTRACT.md 9.2); build a `.pancake-sketch`
+   * @deprecated The `.pikelet-range` profile is deprecated
+   * (spec/SEARCH_ARTIFACT_CONTRACT.md 9.2); build a `.pikelet-sketch`
    * artifact instead. Readers stay supported for existing artifacts.
    */
   buildRangeArtifact(snapshot: Uint8Array | ArrayBufferLike, outPath: string, opts?: RangeArtifactBuildOptions): RangeArtifactBuildManifest;
   /**
    * Build a range-readable Search Artifact from a uint8 Pikelet snapshot file.
-   * @deprecated The `.pancake-range` profile is deprecated
-   * (spec/SEARCH_ARTIFACT_CONTRACT.md 9.2); build a `.pancake-sketch`
+   * @deprecated The `.pikelet-range` profile is deprecated
+   * (spec/SEARCH_ARTIFACT_CONTRACT.md 9.2); build a `.pikelet-sketch`
    * artifact instead. Readers stay supported for existing artifacts.
    */
   buildRangeArtifactFile(snapshotPath: string, outPath: string, opts?: RangeArtifactBuildOptions): RangeArtifactBuildManifest;
   /** Open a range-readable Search Artifact from a local file. */
-  openRangeArtifactFile(filePath: string, opts?: RangeArtifactOpenOptions): Promise<PancakeRangeArtifact>;
+  openRangeArtifactFile(filePath: string, opts?: RangeArtifactOpenOptions): Promise<PikeletRangeArtifact>;
   /** Build a sketch Search Artifact from a uint8 Pikelet snapshot. */
   buildSketchArtifact(snapshot: Uint8Array | ArrayBufferLike, outPath: string, opts?: SketchArtifactBuildOptions): SketchArtifactBuildManifest;
   /** Build a sketch Search Artifact from a uint8 Pikelet snapshot file. */
@@ -675,7 +675,7 @@ export interface NodePancakeApi extends PancakeApi {
    */
   buildSketchArtifactBytes(snapshot: Uint8Array | ArrayBufferLike, opts?: SketchArtifactBuildOptions): { bytes: Uint8Array; manifest: SketchArtifactBuildManifest };
   /** Open a sketch Search Artifact from a local file. */
-  openSketchArtifactFile(filePath: string, opts?: SketchArtifactOpenOptions): Promise<PancakeSketchArtifact>;
+  openSketchArtifactFile(filePath: string, opts?: SketchArtifactOpenOptions): Promise<PikeletSketchArtifact>;
   /** Load vectors from a JSON/JSONL file and build an index. */
   loadJsonFile<Id = unknown>(filePath: string, opts?: JsonFileOptions): Promise<FromVectorsResult<Id>>;
   /**
@@ -683,9 +683,9 @@ export interface NodePancakeApi extends PancakeApi {
    * carry their own config, so `opts` is only required for raw engine
    * snapshots (which need the full create config).
    */
-  loadSnapshotFile(filePath: string, opts?: SnapshotFileOptions): Promise<PancakeIndex>;
+  loadSnapshotFile(filePath: string, opts?: SnapshotFileOptions): Promise<PikeletIndex>;
 }
 
-declare const Pikelet: NodePancakeApi;
+declare const Pikelet: NodePikeletApi;
 
 export default Pikelet;

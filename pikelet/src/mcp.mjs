@@ -263,7 +263,7 @@ function callListPacks(packs) {
   };
 }
 
-async function mountPack(packs, spec, { openPancakeFile, httpRangeSource, log }) {
+async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log }) {
   const isUrl = /^https?:\/\//i.test(spec.location);
   // URL packs are the format's native habitat: range-read off dumb HTTP,
   // nothing downloaded but the resident slice and per-query ranges. The
@@ -278,9 +278,9 @@ async function mountPack(packs, spec, { openPancakeFile, httpRangeSource, log })
       ? await (async () => {
         const source = httpRangeSource(spec.location);
         await source.init();
-        return openPancakeFile(source, openOptions);
+        return openPikeletFile(source, openOptions);
       })()
-      : await openPancakeFile(path.resolve(spec.location), openOptions);
+      : await openPikeletFile(path.resolve(spec.location), openOptions);
   } catch (err) {
     if (/identity mismatch/.test(String(err?.message))) {
       throw new Error(`${spec.location}: ${err.message} — the pack at this location is not the `
@@ -415,10 +415,10 @@ export async function loadShelf(location) {
 
 /**
  * Mount packs and serve MCP on stdio until stdin closes. `openPack` is
- * injected (the CLI passes pikelet-wasm/complete's openPancakeFile) so
+ * injected (the CLI passes pikelet-wasm/complete's openPikeletFile) so
  * tests can stub it.
  */
-export async function runMcpServer({ packPaths, openPancakeFile, httpRangeSource, serverVersion = '0.0.0', stdin = process.stdin, stdout = process.stdout, log = (line) => process.stderr.write(`${line}\n`) }) {
+export async function runMcpServer({ packPaths, openPikeletFile, httpRangeSource, serverVersion = '0.0.0', stdin = process.stdin, stdout = process.stdout, log = (line) => process.stderr.write(`${line}\n`) }) {
   if (!Array.isArray(packPaths) || packPaths.length === 0) {
     throw new Error('mcp requires at least one --pack <file.pikelet>');
   }
@@ -432,7 +432,7 @@ export async function runMcpServer({ packPaths, openPancakeFile, httpRangeSource
     specs.push(hash ? { location: hash[1], identity: hash[2].toLowerCase() } : { location: raw });
   }
   for (const spec of specs) {
-    await mountPack(packs, spec, { openPancakeFile, httpRangeSource, log });
+    await mountPack(packs, spec, { openPikeletFile, httpRangeSource, log });
   }
   // Warm every pack in the background so the first tool call pays for
   // retrieval, not for staging: the query forces the deferred encoder,

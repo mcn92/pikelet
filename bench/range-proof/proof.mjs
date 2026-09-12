@@ -4,7 +4,7 @@
 //
 // Serves a real .pikelet pack from a deliberately dumb static HTTP server
 // (fs.createReadStream + Range, nothing else), mounts it remotely through
-// Pikelet's real httpRangeSource/openPancakeFile, runs several queries, and
+// Pikelet's real httpRangeSource/openPikeletFile, runs several queries, and
 // reports exactly how many bytes and HTTP range requests each step cost —
 // next to proof that the server process knows nothing about vectors.
 //
@@ -14,7 +14,7 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { startDumbServer } from './dumb-server.mjs';
-import { openPancakeFile, httpRangeSource } from '../../complete/index.mjs';
+import { openPikeletFile, httpRangeSource } from '../../complete/index.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const packPath = path.resolve(process.argv[2] || path.join(ROOT, 'examples/05-one-file-search/pancake-wiki-inline.pancake'));
@@ -94,7 +94,7 @@ async function main() {
   // not asserted — a mismatched pin must refuse to mount. Also pulls the
   // pack's own sampleQueries when it declares any: those are guaranteed to
   // match what the pack actually covers, unlike a hardcoded guess.
-  const localSearch = await openPancakeFile(packPath);
+  const localSearch = await openPikeletFile(packPath);
   const localInfo = localSearch.info();
   const identity = localInfo.identity;
   await localSearch.close();
@@ -115,7 +115,7 @@ async function main() {
   // little a plain remount/re-open costs once the encoder is cached.
   const source = httpRangeSource(url);
   const beforeMount = snapshot(source.stats);
-  const remote = await openPancakeFile(source, { expectedIdentity: identity, prefetchEncoder: false });
+  const remote = await openPikeletFile(source, { expectedIdentity: identity, prefetchEncoder: false });
   const afterMount = snapshot(source.stats);
   const mountDelta = delta(beforeMount, afterMount);
   const info = remote.info();

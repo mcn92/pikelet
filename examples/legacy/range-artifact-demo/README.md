@@ -1,7 +1,7 @@
 # Search Artifact Demo
 
 This is the smallest demo of Pikelet's range-readable Search Artifact path.
-It opens a compiled `.pancake-range` artifact, keeps the v2 router segment
+It opens a compiled `.pikelet-range` artifact, keeps the v2 router segment
 resident, and lazily materializes base-layer records through byte-range reads.
 
 From the repository root:
@@ -11,7 +11,7 @@ npm run demo:artifact
 ```
 
 A companion demo compares this profile against the sketch profile
-(`.pancake-sketch`) on the same corpus and queries, cold per query — same
+(`.pikelet-sketch`) on the same corpus and queries, cold per query — same
 byte volume, but sequential fetch depth drops from ~11 miss rounds to
 exactly 1. The sketch artifact is derived from the committed range artifact
 in-process, demonstrating `SKETCH_PROFILE.md`'s derivability claim:
@@ -29,7 +29,7 @@ the comparison is the graph's frontier against the sketch's single point:
 
 ```bash
 node examples/legacy/range-artifact-demo/sketch_demo.js --compact \
-  --artifact benchmark_results/layout/pancake-sift1m-u8-metis-split.pancake-range \
+  --artifact benchmark_results/layout/pancake-sift1m-u8-metis-split.pikelet-range \
   --query-file sift/sift_query.fvecs --gt-file sift/sift_groundtruth.ivecs \
   --rerank 300 --ef-search 60 --range-sweep --queries 100
 ```
@@ -72,7 +72,7 @@ For full JSON output:
 
 ```bash
 node examples/legacy/range-artifact-demo/demo.js \
-  --artifact benchmark_results/layout/pancake-sift1m-u8-metis-split.pancake-range \
+  --artifact benchmark_results/layout/pancake-sift1m-u8-metis-split.pikelet-range \
   --query-file sift/sift_query.fvecs \
   --queries 10 \
   --k 10 \
@@ -90,7 +90,7 @@ The demo intentionally does not load the base index into memory. It uses the
 same public API a Worker or HTTP/R2 deployment would use:
 
 ```js
-const artifact = await Pikelet.openRangeArtifactFile('index.pancake-range');
+const artifact = await Pikelet.openRangeArtifactFile('index.pikelet-range');
 const result = await artifact.search(query, 10, { efSearch: 10 });
 ```
 
@@ -103,7 +103,7 @@ HTTP range source:
 const { PancakeRangeArtifact } = require('pikelet-wasm/artifact');
 const { createHttpRangeSource } = require('./range_sources.js');
 
-const source = createHttpRangeSource('https://example.com/index.pancake-range');
+const source = createHttpRangeSource('https://example.com/index.pikelet-range');
 const artifact = await PancakeRangeArtifact.open(source);
 ```
 
@@ -112,7 +112,7 @@ R2 range source:
 ```js
 const source = {
   async read(offset, length) {
-    const object = await env.INDEX_BUCKET.get('index.pancake-range', {
+    const object = await env.INDEX_BUCKET.get('index.pikelet-range', {
       range: { offset, length },
     });
     if (!object) throw new Error('artifact missing');

@@ -12,7 +12,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startDumbServer } from './dumb-server.mjs';
-import { openPancakeFile } from '../../complete/index.mjs';
+import { openPikeletFile } from '../../complete/index.mjs';
 import { PikeletMcpClient } from '../../examples/06-mcp-knowledge-pack/mcp_client.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -43,7 +43,7 @@ async function main() {
   console.log('(fs.createReadStream + Range support only — no database, no index, no query logic)');
   console.log();
 
-  const localSearch = await openPancakeFile(packPath);
+  const localSearch = await openPikeletFile(packPath);
   const identity = localSearch.info().identity;
   await localSearch.close();
 

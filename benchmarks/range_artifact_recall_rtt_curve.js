@@ -110,7 +110,7 @@ function modelQueryLatency(rounds, fixedMs, bandwidthMiBps, parallelism) {
 }
 
 async function main() {
-  const artifactPath = path.resolve(arg('artifact', 'benchmark_results/layout/pancake-sift1m-u8-metis-split.pancake-range'));
+  const artifactPath = path.resolve(arg('artifact', 'benchmark_results/layout/pancake-sift1m-u8-metis-split.pikelet-range'));
   const dataDir = path.resolve(arg('data-dir', 'sift'));
   const queryCount = parseIntArg('queries', 1000);
   const k = parseIntArg('k', 10);

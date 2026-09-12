@@ -2,7 +2,7 @@
 
 This is a static browser demo for Pikelet range-readable artifacts. It is a
 fully client-side semantic search over the Pikelet documentation: a
-`.pancake-range` index opened through HTTP range requests, a 1.08 MiB distilled
+`.pikelet-range` index opened through HTTP range requests, a 1.08 MiB distilled
 student encoder that embeds queries locally, and the docs corpus for result
 display. No backend, no outbound API calls — a static host only distributes
 bytes, and the browser accumulates cache state as it searches.
@@ -28,8 +28,8 @@ too literally.
 Bundled assets under `public/`:
 
 ```text
-artifacts/pancake-docs.pancake-range   docs index (208 chunks, 384D, 135 KiB)
-artifacts/pancake-smoke-split.pancake-range   tiny SIFT-shaped smoke artifact
+artifacts/pikelet-docs.pikelet-range   docs index (208 chunks, 384D, 135 KiB)
+artifacts/pikelet-smoke-split.pikelet-range   tiny SIFT-shaped smoke artifact
 models/docs-student.bin                distilled query encoder (1.08 MiB)
 corpus/docs-corpus.json                doc chunks for result display
 ```
@@ -39,7 +39,7 @@ The docs artifact is built from the worker-semantic-search snapshot:
 ```bash
 node -e "require('./pikelet.js').buildRangeArtifactFile(
   'examples/legacy/03-edge-docs-search/assets/docs-index.bin',
-  'examples/legacy/range-artifact-demo/static/public/artifacts/pancake-docs.pancake-range',
+  'examples/legacy/range-artifact-demo/static/public/artifacts/pikelet-docs.pikelet-range',
   { layout: 'rcm' })"
 ```
 

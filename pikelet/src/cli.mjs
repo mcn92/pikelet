@@ -50,7 +50,7 @@ export async function main(argv) {
     const { reader } = await loadCompleteModules();
     await runMcpServer({
       packPaths,
-      openPancakeFile: reader.openPancakeFile,
+      openPikeletFile: reader.openPikeletFile,
       httpRangeSource: reader.httpRangeSource,
       serverVersion: CLI_VERSION,
     });
@@ -164,10 +164,10 @@ Flags:
                         passage before embedding (default: none)
   --runtime snapshot|artifact
                         artifact is deprecated: it serves the retired
-                        .pancake-range profile; prefer the default snapshot
+                        .pikelet-range profile; prefer the default snapshot
                         runtime or 'compile' for a complete .pikelet
   --artifact <file>     Deprecated with --runtime artifact: prebuilt
-                        .pancake-range artifact
+                        .pikelet-range artifact
   --out <file>          compile only: output path (default search.pikelet)
   --deploy / --no-deploy
   --yes

@@ -4,21 +4,21 @@
 //   pikelet-artifact-common.js  read budgets + range validation, range sources
 //                               (NodeFileRangeSource), result heap, snapshot
 //                               parsing (parseUint8Snapshot), SHA-256 helpers
-//   pikelet-artifact-range.js   .pancake-range reader (PancakeRangeArtifact) + builder
-//   pikelet-artifact-sketch.js  .pancake-sketch reader (PancakeSketchArtifact),
+//   pikelet-artifact-range.js   .pikelet-range reader (PikeletRangeArtifact) + builder
+//   pikelet-artifact-sketch.js  .pikelet-sketch reader (PikeletSketchArtifact),
 //                               builders, and createSketchScanner
 // The export list below is the package's contract (pikelet-artifact.d.ts).
 
 const { NodeFileRangeSource, parseUint8Snapshot } = require('./pikelet-artifact-common.js');
-const { PancakeRangeArtifact, buildRangeArtifact, buildRangeArtifactFile } = require('./pikelet-artifact-range.js');
+const { PikeletRangeArtifact, buildRangeArtifact, buildRangeArtifactFile } = require('./pikelet-artifact-range.js');
 const {
-    PancakeSketchArtifact, createSketchScanner,
+    PikeletSketchArtifact, createSketchScanner,
     buildSketchArtifact, buildSketchArtifactBytes, buildSketchArtifactFile, exportSketchArtifact,
 } = require('./pikelet-artifact-sketch.js');
 
 module.exports = {
-    PancakeRangeArtifact,
-    PancakeSketchArtifact,
+    PikeletRangeArtifact,
+    PikeletSketchArtifact,
     createSketchScanner,
     NodeFileRangeSource,
     buildRangeArtifact,

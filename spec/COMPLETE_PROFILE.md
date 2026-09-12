@@ -21,7 +21,7 @@ can answer natural-language queries with hydrated, confidence-scored results
 using nothing but the file and byte-range reads against it.
 
 The profile composes formats this repository has already frozen rather than
-inventing new ones: the index segment is a complete `.pancake-sketch`
+inventing new ones: the index segment is a complete `.pikelet-sketch`
 artifact embedded verbatim, and the query-interpretation segment carries the
 existing student-encoder and calibration formats. The container contributes
 identity, addressing, and the corpus layout — the three things the
@@ -36,7 +36,7 @@ missing between the components.
    snapshot with a non-identity internal/external id map MUST renumber the
    corpus to match the index's internal order (or rebuild) at compile time.
 2. **Embedded sketch artifact as the index segment.** The index segment's
-   bytes are a valid `.pancake-sketch` file (SKETCH_PROFILE.md), opened by
+   bytes are a valid `.pikelet-sketch` file (SKETCH_PROFILE.md), opened by
    the existing sketch reader at `indexOffset`. Depth-1 execution, staged
    boot, and resident-hash verification are inherited, not re-specified.
 3. **One query-interpretation unit.** Encoder and calibration share a
@@ -71,7 +71,7 @@ All integers little-endian. All offsets absolute. Segments begin at
 | Offset | Type | Field | Notes |
 | ---: | --- | --- | --- |
 | 0 | u32 | magic | `0x31465350` (`PSF1`) |
-| 4 | u32 | formatVersion | `1` (corpus layout v1, profile `pancake-complete-v1`) or `2` (corpus layout v2, profile `pancake-complete-v2`); readers MUST reject other values |
+| 4 | u32 | formatVersion | `1` (corpus layout v1, profile `pikelet-complete-v1`) or `2` (corpus layout v2, profile `pikelet-complete-v2`); readers MUST reject other values |
 | 8 | u32 | manifestBytes | length of the canonical manifest JSON (readers MUST reject > 16 MiB) |
 | 12 | u32 | segmentCount | number of segment-table entries |
 | 16 | u64 | fileBytes | total file size; MUST match |
@@ -92,7 +92,7 @@ fields:
 
 ```jsonc
 {
-  "profile": "pancake-complete-v2",                    // "pancake-complete-v1" for format-1 files
+  "profile": "pikelet-complete-v2",                    // "pikelet-complete-v1" for format-1 files
   "corpus": {
     "records": 208,
     "provenance": null,                                 // reserved per contract 4.3
@@ -139,7 +139,7 @@ Unknown kinds MUST be skipped (they are still committed via the manifest).
 
 ### 3.4 Index segment (kind 1)
 
-A byte-for-byte valid `.pancake-sketch` artifact (magic `PSA1`), row ids
+A byte-for-byte valid `.pikelet-sketch` artifact (magic `PSA1`), row ids
 `[0, count)` binding positionally to corpus records. Readers open it with
 the sketch reader against a range source offset by the segment's `offset`;
 `staged` open is RECOMMENDED for interactive hosts.
@@ -468,14 +468,19 @@ fetches it: nothing that influences a query goes unauthenticated, per
 read. `info().indexRowIntegrity` reports `'per-row-sha256'`.
 
 What remains transitional applies only to artifacts whose embedded sketch
-is **format 1** (every released artifact as of 0.4.0): their lazy rerank
-rows are covered by the identity-anchored whole-segment `vectorsSha256`
-but are NOT verified on the reads that feed reranking, so between open
-and a full vectors pass, modified vector bytes can alter results under an
-unchanged identity. Hosts serving format-1-sketch artifacts that need
-every byte authenticated MUST run the full pass — `verifyIndexVectors:
-true` at open or `verifyVectors()` afterwards (`info().vectorsVerified`
-reports the state).
+is **format 1**. Format 1 was every released artifact through 0.4.0
+(2026-08-25); format 2 has been the builder's default, and every artifact
+actually released, since 0.5.0 (2026-08-26) — format 1 is no longer
+produced by any in-repo build path, but a reader MUST still open one
+correctly, since "released" only constrains what this project ships, not
+what every artifact a host might serve was built with. Format-1 lazy
+rerank rows are covered by the identity-anchored whole-segment
+`vectorsSha256` but are NOT verified on the reads that feed reranking, so
+between open and a full vectors pass, modified vector bytes can alter
+results under an unchanged identity. Hosts serving format-1-sketch
+artifacts that need every byte authenticated MUST run the full pass —
+`verifyIndexVectors: true` at open or `verifyVectors()` afterwards
+(`info().vectorsVerified` reports the state).
 
 Format-1 files keep Draft 1's stance — whole-segment digests only, lazy
 record reads not independently verifiable — and readers MUST report which
@@ -490,7 +495,7 @@ both as equivalent.
   builder variants (spike lesson) and compile-time renumbering.
 - **Hosts:** a static page with the browser reader, a Worker, and Node all
   open the same file; the Worker example becomes one host among three.
-- **Existing profiles:** `.pnck`, `.pancake-range`, and `.pancake-sketch`
+- **Existing profiles:** `.pnck`, `.pikelet-range`, and `.pikelet-sketch`
   remain valid standalone profiles; this container embeds the sketch
   profile and does not deprecate anything.
 
@@ -505,8 +510,10 @@ both as equivalent.
    (section 8), revisit only with a concrete host need.
 5. Browser reader packaging (the encoder runs in plain JS today; confirm
    no Node-only dependencies before freezing the host story).
-6. Per-row vector commitments (closing section 6's transitional gap per
-   read). Measured 2026-08-25 on the wiki workload — byte/run model,
+6. ~~Per-row vector commitments (closing section 6's transitional gap per
+   read).~~ **Resolved and shipped as SKETCH_PROFILE.md's format 2**,
+   default since 0.5.0 (2026-08-26) — kept here as the design record.
+   Measured 2026-08-25 on the wiki workload — byte/run model,
    adversarial dispersion, and real-HTTP wall-clock replay
    (`docs/measurements/row-commitments/ROW_COMMITMENT_MEASUREMENT.md`).
    Outcome, for SKETCH_PROFILE.md's next revision: **interleaved digest

@@ -8,7 +8,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 
 const VERSIONED_ASSETS = [
-    'wiki.pancake-sketch',
+    'wiki.pikelet-sketch',
     'corpus.bin',
     'corpus-offsets.u32',
     'wiki-abstention.json',

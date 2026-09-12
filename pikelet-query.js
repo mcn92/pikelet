@@ -1,4 +1,4 @@
-import { openPancakeFile } from 'pikelet-wasm/complete';
+import { openPikeletFile } from 'pikelet-wasm/complete';
 
 const file = process.argv[2];
 const query = process.argv[3];
@@ -8,7 +8,7 @@ if (!file || !query) {
   process.exit(1);
 }
 
-const reader = await openPancakeFile(file);
+const reader = await openPikeletFile(file);
 console.log(reader.info());
 
 const result = await reader.query(query, { k: 3 });

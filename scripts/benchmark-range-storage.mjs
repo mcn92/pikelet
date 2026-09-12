@@ -334,7 +334,7 @@ async function worker(options) {
   const warnings = [];
   try {
     const baselineMemory = memorySnapshot();
-    const { openPancakeFile, httpRangeSource } = await import(
+    const { openPikeletFile, httpRangeSource } = await import(
       pathToFileURL(path.join(ROOT, 'complete', 'index.mjs')).href
     );
     const encodeQuery = await loadExternalEncoder(options.encoderModule);
@@ -345,7 +345,7 @@ async function worker(options) {
 
     const beforeOpen = { requests: source.stats.requests, bytes: source.stats.bytes };
     const openStarted = performance.now();
-    const search = await openPancakeFile(source, {
+    const search = await openPikeletFile(source, {
       ...(encodeQuery ? { encodeQuery } : {}),
       verifyRecords: options.verifyRecords,
       verifyEncoder: options.verifyEncoder,

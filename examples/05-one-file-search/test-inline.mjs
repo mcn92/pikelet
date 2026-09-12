@@ -8,7 +8,7 @@ import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openPancakeFile } from './pikelet-file-reader.mjs';
+import { openPikeletFile } from './pikelet-file-reader.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // data-perm is the canonical pack layout (cluster-ordered rows, 192-dim
@@ -115,7 +115,7 @@ const identity = readIdentity(pikeletPath);
 check('manifest identity matches release notes', identity === expectedIdentity, identity);
 
 const openStart = performance.now();
-const search = await openPancakeFile(pikeletPath);
+const search = await openPikeletFile(pikeletPath);
 const openMs = performance.now() - openStart;
 const info = search.info();
 console.log(`opened ${path.basename(pikeletPath)} in ${(openMs / 1000).toFixed(1)}s: `

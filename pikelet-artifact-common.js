@@ -5,7 +5,7 @@
 // Split out of pikelet-artifact.js (the public entry, which re-exports the
 // three parts); see that file for the module map.
 
-const { pikeletError, PANCAKE_ERROR_CODES } = require('./pikelet-errors.js');
+const { pikeletError, PIKELET_ERROR_CODES } = require('./pikelet-errors.js');
 
 const PIKELET_MAGIC = 0x504E434B;
 const V1_ENVELOPE_HEADER_SIZE = 24;
@@ -54,16 +54,16 @@ async function mapLimit(items, limit, fn) {
 function checkArtifactRange(source, offset, length, label, limit = MAX_ARTIFACT_READ_BYTES) {
     if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length)
         || offset < 0 || length < 0 || !Number.isSafeInteger(offset + length)) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             `Artifact ${label} range is out of bounds`, { offset, length });
     }
     const max = Math.min(limit, MAX_ARTIFACT_READ_BYTES);
     if (length > max) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             `Artifact ${label} range exceeds the maximum read size`, { length, max });
     }
     if (source && Number.isSafeInteger(source.size) && offset + length > source.size) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             `Artifact ${label} range extends past the source size`, { offset, length, size: source.size });
     }
     return length;
@@ -84,7 +84,7 @@ function resolveMaxReadBytes(value) {
     if (value === undefined) return DEFAULT_OPEN_READ_BYTES;
     if (value === Infinity) return MAX_ARTIFACT_READ_BYTES;
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
             'maxReadBytes must be a positive number or Infinity', { maxReadBytes: value });
     }
     return value;
@@ -95,7 +95,7 @@ function asUint8Array(bytes) {
     if (ArrayBuffer.isView(bytes)) {
         return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     }
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'Range source returned a non-binary value');
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'Range source returned a non-binary value');
 }
 
 // Both readers accept a maxCacheBytes option: undefined keeps the default,
@@ -106,7 +106,7 @@ function resolveMaxCacheBytes(value, floorBytes, defaultBytes) {
     if (value === undefined) return defaultBytes;
     if (value === Infinity) return Infinity;
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'maxCacheBytes must be a positive number or Infinity', { maxCacheBytes: value });
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'maxCacheBytes must be a positive number or Infinity', { maxCacheBytes: value });
     }
     return Math.max(value, floorBytes);
 }
@@ -213,7 +213,7 @@ class NodeFileRangeSource {
 
     async read(offset, length) {
         if (this.fd === null) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'NodeFileRangeSource is closed', { filePath: this.filePath });
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'NodeFileRangeSource is closed', { filePath: this.filePath });
         }
         // Defense in depth: the callers validate artifact-derived ranges, but
         // a future caller must not be able to drive a giant Buffer.alloc or a
@@ -221,7 +221,7 @@ class NodeFileRangeSource {
         if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length)
             || offset < 0 || length < 0 || length > MAX_ARTIFACT_READ_BYTES
             || offset + length > this.size) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 'NodeFileRangeSource.read() range is out of bounds', { offset, length, size: this.size });
         }
         const buffer = Buffer.alloc(length);
@@ -253,31 +253,31 @@ class NodeFileRangeSource {
 function normalizeQuery(query, dim, metric = 0) {
     if (!(query instanceof Float32Array)) {
         if (!Array.isArray(query)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR, 'search() query must be a Float32Array or number[]');
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR, 'search() query must be a Float32Array or number[]');
         }
         for (let i = 0; i < query.length; i++) {
             if (typeof query[i] !== 'number') {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR,
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR,
                     `search() query must contain only numbers; found ${typeof query[i]} at index ${i}`, { index: i, actualType: typeof query[i] });
             }
         }
         query = Float32Array.from(query);
     }
     if (query.length !== dim) {
-        throw pikeletError(PANCAKE_ERROR_CODES.DIMENSION_MISMATCH, `search() query dimension ${query.length} does not match artifact dimension ${dim}`, { queryDim: query.length, dim });
+        throw pikeletError(PIKELET_ERROR_CODES.DIMENSION_MISMATCH, `search() query dimension ${query.length} does not match artifact dimension ${dim}`, { queryDim: query.length, dim });
     }
     let norm = 0;
     for (let i = 0; i < query.length; i++) {
         const value = query[i];
         if (!Number.isFinite(value)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR, 'search() query contains non-finite value (NaN or Infinity)', { index: i, reason: 'non_finite' });
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR, 'search() query contains non-finite value (NaN or Infinity)', { index: i, reason: 'non_finite' });
         }
         norm += value * value;
     }
     if (metric === 1) {
         norm = Math.sqrt(norm);
         if (!Number.isFinite(norm) || norm <= 1e-30) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR, 'search() query has invalid cosine norm', { reason: 'invalid_cosine_norm' });
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR, 'search() query has invalid cosine norm', { reason: 'invalid_cosine_norm' });
         }
         const normalized = new Float32Array(query.length);
         for (let i = 0; i < query.length; i++) normalized[i] = query[i] / norm;
@@ -292,7 +292,7 @@ function normalizeQuery(query, dim, metric = 0) {
 // count results, so a k of 1e9 over 300 rows must not allocate 1e9 slots.
 function resolveSearchK(k, count) {
     if (!Number.isSafeInteger(k) || k < 1) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'search() k must be a positive integer', { k });
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'search() k must be a positive integer', { k });
     }
     return Math.min(k, count);
 }
@@ -302,7 +302,7 @@ function resolveSearchK(k, count) {
 function resolveOptionalPositiveInt(value, name, fallback) {
     if (value === undefined || value === null || value === 0) return fallback;
     if (!Number.isSafeInteger(value) || value < 1) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `search() ${name} must be a positive integer (0 or undefined selects the default)`, { [name]: value });
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `search() ${name} must be a positive integer (0 or undefined selects the default)`, { [name]: value });
     }
     return value;
 }
@@ -314,29 +314,29 @@ function unwrapSnapshot(bytes) {
     // checked against the actual buffer before slicing, so a corrupt
     // envelope fails closed with a coded error instead of a raw RangeError.
     if (bytes.byteLength < 8) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Pikelet envelope is truncated', { byteLength: bytes.byteLength });
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Pikelet envelope is truncated', { byteLength: bytes.byteLength });
     }
     const version = view.getUint32(4, true);
     if (version === 1 || version === 2) {
         const headerSize = version === 1 ? V1_ENVELOPE_HEADER_SIZE : V2_ENVELOPE_HEADER_SIZE;
         if (bytes.byteLength < headerSize) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Pikelet envelope is truncated', { version, byteLength: bytes.byteLength });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Pikelet envelope is truncated', { version, byteLength: bytes.byteLength });
         }
         return bytes.subarray(headerSize);
     }
     if (version === 3) {
         if (bytes.byteLength < V3_ENVELOPE_HEADER_SIZE) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Pikelet envelope is truncated', { version, byteLength: bytes.byteLength });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Pikelet envelope is truncated', { version, byteLength: bytes.byteLength });
         }
         const mappingCount = view.getUint32(24, true);
         const rawSize = view.getUint32(28, true);
         const rawOffset = V3_ENVELOPE_HEADER_SIZE + mappingCount * MAPPING_ENTRY_SIZE;
         if (rawOffset + rawSize > bytes.byteLength) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Pikelet envelope declares more data than the snapshot contains', { mappingCount, rawSize, byteLength: bytes.byteLength });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Pikelet envelope declares more data than the snapshot contains', { mappingCount, rawSize, byteLength: bytes.byteLength });
         }
         return bytes.subarray(rawOffset, rawOffset + rawSize);
     }
-    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, `Unsupported Pikelet envelope version ${version}`, { version });
+    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, `Unsupported Pikelet envelope version ${version}`, { version });
 }
 
 function parseUint8Snapshot(bytes) {
@@ -346,7 +346,7 @@ function parseUint8Snapshot(bytes) {
     // Snapshot bytes are untrusted: sizes read from the header drive every
     // subsequent read, so each read checks the remaining buffer and fails
     // closed with a coded error instead of a raw RangeError.
-    const truncated = () => pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot is truncated', { offset, byteLength: raw.byteLength });
+    const truncated = () => pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot is truncated', { offset, byteLength: raw.byteLength });
     const u32 = () => {
         if (raw.byteLength - offset < 4) throw truncated();
         const value = view.getUint32(offset, true);
@@ -371,22 +371,22 @@ function parseUint8Snapshot(bytes) {
     const metric = u32();
     const efConstruction = u32();
     if (magic !== UINT8_HNSW_MAGIC_V1) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Search Artifact export currently supports uint8 Pikelet snapshots only');
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Search Artifact export currently supports uint8 Pikelet snapshots only');
     }
     // Contract §6: reject unknown future versions instead of parsing them
     // as v2 — a changed layout must fail closed, not misparse.
     if (version > 2) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported uint8 snapshot format version', { version });
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported uint8 snapshot format version', { version });
     }
     if (metric !== 0 && metric !== 1) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported uint8 snapshot metric', { metric });
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported uint8 snapshot metric', { metric });
     }
     // Same structural sanity the engine's own deserialize enforces; the
     // level cap mirrors MAX_DESERIALIZE_LEVEL in src/uint8_float_hnsw.hpp.
     if (dim < 1 || count < 1 || entryPoint >= count || maxLevel > 64
         || !Number.isSafeInteger(count * dim)
         || raw.byteLength - offset < count * 8 + count * dim) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot header is inconsistent', { dim, count, entryPoint, maxLevel, byteLength: raw.byteLength });
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot header is inconsistent', { dim, count, entryPoint, maxLevel, byteLength: raw.byteLength });
     }
 
     const scales = new Float32Array(count);
@@ -405,7 +405,7 @@ function parseUint8Snapshot(bytes) {
     // Same envelope as the engine: create() accepts M in [2, 128] and fixes
     // M0 = 2*M, and its own import rejects M outside that range.
     if (!(M >= 2 && M <= 128) || !(M0 >= M && M0 <= 256)) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot graph parameters are implausible', { M, M0 });
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot graph parameters are implausible', { M, M0 });
     }
     // Edge layout follows the engine's deserializer (uint8_float_hnsw.hpp):
     // version >= 2 stores {u32 id, f32 distance} per edge, version 1 stores
@@ -418,21 +418,21 @@ function parseUint8Snapshot(bytes) {
     for (let id = 0; id < count; id++) {
         const level = u32();
         if (level > maxLevel) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot node level exceeds header maxLevel', { id, level, maxLevel });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot node level exceeds header maxLevel', { id, level, maxLevel });
         }
         levels[id] = level;
         for (let l = 0; l <= level; l++) {
             const size = u32();
             const cap = l === 0 ? M0 : M;
             if (size > cap) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot adjacency exceeds the graph parameter bound', { id, level: l, size, cap });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot adjacency exceeds the graph parameter bound', { id, level: l, size, cap });
             }
             if (raw.byteLength - offset < size * edgeBytes) throw truncated();
             const edges = new Uint32Array(size);
             for (let e = 0; e < size; e++) {
                 const neighbor = u32();
                 if (neighbor >= count) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot neighbor id is out of range', { id, level: l, neighbor, count });
+                    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'uint8 snapshot neighbor id is out of range', { id, level: l, neighbor, count });
                 }
                 edges[e] = neighbor;
                 if (version >= 2) offset += 4; // the serialized float edge distance, unused here
@@ -468,12 +468,12 @@ async function sha256BytesAsync(bytes) {
 async function verifySha256(bytes, expected, label) {
     const digest = await sha256BytesAsync(bytes);
     if (!digest) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             'Artifact verification requested but no crypto backend is available; pass verify:false to skip');
     }
     for (let b = 0; b < 32; b++) {
         if (digest[b] !== expected[b]) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, `${label} failed hash verification`);
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, `${label} failed hash verification`);
         }
     }
 }
@@ -498,7 +498,7 @@ async function verifySegmentSha256(source, offset, totalBytes, expected, label, 
             const len = Math.min(chunkBytes, totalBytes - done);
             const bytes = await readChecked(source, offset + done, len, label);
             if (bytes.byteLength !== len) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                     `Artifact ${label} is truncated`, { offset: offset + done, expected: len, actual: bytes.byteLength });
             }
             hash.update(bytes);
@@ -507,20 +507,20 @@ async function verifySegmentSha256(source, offset, totalBytes, expected, label, 
         const digest = new Uint8Array(hash.digest());
         for (let b = 0; b < 32; b++) {
             if (digest[b] !== expected[b]) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, `${label} failed hash verification`);
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, `${label} failed hash verification`);
             }
         }
         return;
     }
     const oneShotLimit = options.oneShotLimit || DEFAULT_OPEN_READ_BYTES;
     if (totalBytes > oneShotLimit) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             `Artifact ${label} is too large to verify without a streaming crypto backend`,
             { totalBytes, oneShotLimit });
     }
     const bytes = await readChecked(source, offset, totalBytes, label, oneShotLimit);
     if (bytes.byteLength !== totalBytes) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             `Artifact ${label} is truncated`, { offset, expected: totalBytes, actual: bytes.byteLength });
     }
     await verifySha256(bytes, expected, label);

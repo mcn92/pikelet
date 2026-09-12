@@ -4,10 +4,10 @@
 // Head-to-head of the two lazy Search Artifact profiles on the same corpus
 // and the same queries:
 //
-//   range  (.pancake-range)  resident router + lazy graph traversal —
+//   range  (.pikelet-range)  resident router + lazy graph traversal —
 //                            each hop depends on the previous read, so a
 //                            query pays ~15 sequential fetch rounds cold.
-//   sketch (.pancake-sketch) resident sketch scan + exact rerank — every
+//   sketch (.pikelet-sketch) resident sketch scan + exact rerank — every
 //                            candidate row is known before the first fetch,
 //                            so a query pays ONE parallel fetch round by
 //                            construction (spec/SKETCH_PROFILE.md section 3).
@@ -28,7 +28,7 @@ const DEFAULT_ARTIFACT = path.join(
     'static',
     'public',
     'artifacts',
-    'pancake-docs.pancake-range'
+    'pikelet-docs.pikelet-range'
 );
 
 function getArg(name, fallback) {
@@ -149,7 +149,7 @@ function readFvecs(filePath, limit) {
 async function main() {
     if (hasArg('help')) {
         console.log('Usage: node examples/legacy/range-artifact-demo/sketch_demo.js '
-            + '[--artifact file.pancake-range] [--queries 10] [--k 10] [--ef-search 10] [--rerank 64] [--compact]');
+            + '[--artifact file.pikelet-range] [--queries 10] [--k 10] [--ef-search 10] [--rerank 64] [--compact]');
         process.exit(0);
     }
 
@@ -160,13 +160,13 @@ async function main() {
     const rerank = parsePositiveInt('rerank', 96);
 
     if (!fs.existsSync(artifactPath)) {
-        throw new Error(`Artifact not found: ${artifactPath}\nPass --artifact <file.pancake-range>.`);
+        throw new Error(`Artifact not found: ${artifactPath}\nPass --artifact <file.pikelet-range>.`);
     }
 
     const range = await Pikelet.openRangeArtifactFile(artifactPath);
     const sketchPath = path.join(
         fs.mkdtempSync(path.join(os.tmpdir(), 'pikelet-sketch-demo-')),
-        path.basename(artifactPath).replace(/\.pancake-range$/, '') + '.pancake-sketch'
+        path.basename(artifactPath).replace(/\.pikelet-range$/, '') + '.pikelet-sketch'
     );
     try {
         const source = await deriveSketchSource(range);

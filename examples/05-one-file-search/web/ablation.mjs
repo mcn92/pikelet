@@ -1,6 +1,6 @@
 // Minimal two-panel ablation demo: same question against a full pack and
 // a pack missing one record, to show the answer is a function of the file.
-import { openPancakeFile } from '../pikelet-file-reader.mjs';
+import { openPikeletFile } from '../pikelet-file-reader.mjs';
 import { httpRangeSource } from '../sources.mjs';
 
 const QUESTION = 'What chamber is the Tovash project housed in?';
@@ -8,7 +8,7 @@ const QUESTION = 'What chamber is the Tovash project housed in?';
 async function runPanel(url, badgeEl, answerEl, recordEl) {
     const source = httpRangeSource(url);
     await source.init();
-    const search = await openPancakeFile(source);
+    const search = await openPikeletFile(source);
     const out = await search.query(QUESTION, { k: 1 });
 
     badgeEl.innerHTML = `<span class="badge ${out.matchQuality}">${out.matchQuality}</span> confidence ${out.confidence.toFixed(3)}`;

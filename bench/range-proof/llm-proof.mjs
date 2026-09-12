@@ -29,7 +29,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { startDumbServer } from './dumb-server.mjs';
-import { openPancakeFile } from '../../complete/index.mjs';
+import { openPikeletFile } from '../../complete/index.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PIKELET_BIN = path.join(ROOT, 'pikelet/bin/pikelet.mjs');
@@ -93,7 +93,7 @@ async function main() {
   console.log('(fs.createReadStream + Range support only — no database, no index, no query logic)');
   console.log();
 
-  const localSearch = await openPancakeFile(packPath);
+  const localSearch = await openPikeletFile(packPath);
   const identity = localSearch.info().identity;
   await localSearch.close();
 

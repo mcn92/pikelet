@@ -1,8 +1,8 @@
 'use strict';
 
 const {
-    PancakeError,
-    PANCAKE_ERROR_CODES,
+    PikeletError,
+    PIKELET_ERROR_CODES,
     pikeletError,
 } = require('./pikelet-errors.js');
 
@@ -31,7 +31,7 @@ const DEFAULT_SEED = 108;
 
 function validateEfSearch(value, label = 'efSearch') {
     if (!Number.isInteger(value) || value < 1 || value > MAX_EF) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
             `${label} must be an integer between 1 and ${MAX_EF}`,
             { argument: label, value, min: 1, max: MAX_EF });
     }
@@ -41,7 +41,7 @@ function validateEfSearch(value, label = 'efSearch') {
 function resolveSearchEf(options, fallback, methodName) {
     if (options === undefined) return fallback;
     if (!options || typeof options !== 'object' || Array.isArray(options)) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
             `${methodName}() options must be an object`, { argument: 'options' });
     }
     return options.efSearch === undefined
@@ -61,7 +61,7 @@ function assertNumericVector(vec, label) {
     if (vec == null || typeof vec.length !== 'number') return; // length check handles these
     for (let i = 0; i < vec.length; i++) {
         if (typeof vec[i] !== 'number') {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR,
                 `${label} must contain only numbers; found ${typeof vec[i]} at index ${i}`,
                 { index: i, actualType: typeof vec[i] });
         }
@@ -73,18 +73,18 @@ function validateVectorValues(f32, label, validateCosineNorm) {
     for (let i = 0; i < f32.length; i++) {
         const value = f32[i];
         if (!Number.isFinite(value)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR,
                 `${label} contains non-finite value (NaN or Infinity)`, { reason: 'non_finite' });
         }
         if (validateCosineNorm) normSq += value * value;
     }
     if (validateCosineNorm && (!(normSq > 0) || !Number.isFinite(normSq))) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR,
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR,
             `${label} has invalid cosine norm`, { reason: 'invalid_cosine_norm' });
     }
 }
 
-class PancakeIndex {
+class PikeletIndex {
     constructor(engine, opts, handle, vecPtr, idPtr, distPtr, bufferCapacity) {
         this._e = engine;
         this._dim = opts.dim;
@@ -116,7 +116,7 @@ class PancakeIndex {
         assertNumericVector(vec, 'Vector');
         const f32 = vec instanceof Float32Array ? vec : new Float32Array(vec);
         if (f32.length !== this._dim) {
-            throw pikeletError(PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
                 `Expected vector of length ${this._dim}, got ${f32.length}`,
                 { expected: this._dim, actual: f32.length });
         }
@@ -128,14 +128,14 @@ class PancakeIndex {
         // unmutated. Ids survive deletes, so a long-lived high-churn index
         // can reach this without ever holding 2^32 vectors at once.
         if (this._nextExtId >= 0xFFFFFFFF) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INDEX_LIMIT,
+            throw pikeletError(PIKELET_ERROR_CODES.INDEX_LIMIT,
                 'Stable id space exhausted: ids are serialized as uint32 and the next id would not fit',
                 { nextExtId: this._nextExtId });
         }
         this._e.HEAPF32.set(f32, this._vecPtr >> 2);
-        const intId = this._e._pancake_add(this._handle, this._vecPtr);
+        const intId = this._e._pikelet_add(this._handle, this._vecPtr);
         if (intId === 0xFFFFFFFF || intId < 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INDEX_FULL,
+            throw pikeletError(PIKELET_ERROR_CODES.INDEX_FULL,
                 'Insert failed (index full or not initialized)');
         }
 
@@ -148,18 +148,18 @@ class PancakeIndex {
     addBatch(vectors) {
         this._checkDisposed();
         if (!Array.isArray(vectors)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'addBatch() requires an array of vectors');
         }
         if (vectors.length === 0) return [];
         if (this.count + vectors.length > this._maxElements) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INDEX_FULL,
+            throw pikeletError(PIKELET_ERROR_CODES.INDEX_FULL,
                 'Insert failed (index full or not initialized)');
         }
         // Same u32 stable-id bound as add(), preflighted for the whole batch
         // so the failure happens before any row is inserted.
         if (this._nextExtId + vectors.length > 0xFFFFFFFF) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INDEX_LIMIT,
+            throw pikeletError(PIKELET_ERROR_CODES.INDEX_LIMIT,
                 'Stable id space exhausted: ids are serialized as uint32 and this batch would run past the last representable id',
                 { nextExtId: this._nextExtId, batch: vectors.length });
         }
@@ -173,7 +173,7 @@ class PancakeIndex {
             const v = vectors[i];
             const len = (v instanceof Float32Array) ? v.length : (v && v.length);
             if (len !== this._dim) {
-                throw pikeletError(PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
+                throw pikeletError(PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
                     `Expected vector of length ${this._dim}, got ${len} at index ${i}`,
                     { expected: this._dim, actual: len, index: i });
             }
@@ -187,7 +187,7 @@ class PancakeIndex {
         // intermediate JS Float32Array), call bulk_insert once.
         const totalFloats = vectors.length * this._dim;
         const dataPtr = this._e._emsc_malloc(totalFloats * 4);
-        if (!dataPtr) throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED,
+        if (!dataPtr) throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED,
             'WASM malloc failed for bulk insert');
 
         try {
@@ -196,10 +196,10 @@ class PancakeIndex {
                 this._e.HEAPF32.set(converted[i], heapOffset + i * this._dim);
             }
             const countBefore = this.count;
-            const inserted = this._e._pancake_bulk_insert(this._handle, dataPtr, vectors.length);
+            const inserted = this._e._pikelet_bulk_insert(this._handle, dataPtr, vectors.length);
             const ids = this._recordInsertedRange(countBefore, inserted);
             if (inserted !== vectors.length) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INTERNAL_INVARIANT,
+                throw pikeletError(PIKELET_ERROR_CODES.INTERNAL_INVARIANT,
                     'bulk_insert inserted fewer vectors than the prevalidated batch',
                     { requested: vectors.length, inserted, ids });
             }
@@ -212,13 +212,13 @@ class PancakeIndex {
     search(query, k, options) {
         this._checkDisposed();
         if (!Number.isSafeInteger(k) || k < 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'search() requires a non-negative integer k', { argument: 'k', value: k });
         }
         assertNumericVector(query, 'Query vector');
         const f32 = query instanceof Float32Array ? query : new Float32Array(query);
         if (f32.length !== this._dim) {
-            throw pikeletError(PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
                 `Expected query of length ${this._dim}, got ${f32.length}`,
                 { expected: this._dim, actual: f32.length });
         }
@@ -233,7 +233,7 @@ class PancakeIndex {
         if (boundedK === 0) return [];
         this._ensureSearchCapacity(boundedK);
         this._e.HEAPF32.set(f32, this._vecPtr >> 2);
-        const found = this._e._pancake_query(
+        const found = this._e._pikelet_query(
             this._handle, this._vecPtr, boundedK, efSearch, this._idPtr, this._distPtr
         );
         return this._readResults(found);
@@ -242,20 +242,20 @@ class PancakeIndex {
     searchFiltered(query, k, allowedIds, options) {
         this._checkDisposed();
         if (!Number.isSafeInteger(k) || k < 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'searchFiltered() requires a non-negative integer k', { argument: 'k', value: k });
         }
         assertNumericVector(query, 'Query vector');
         const f32 = query instanceof Float32Array ? query : new Float32Array(query);
         if (f32.length !== this._dim) {
-            throw pikeletError(PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
                 `Expected query of length ${this._dim}, got ${f32.length}`,
                 { expected: this._dim, actual: f32.length });
         }
         validateVectorValues(f32, 'Query vector', !this._isL2);
         const efSearch = resolveSearchEf(options, this._efSearch, 'searchFiltered');
         if (!(allowedIds instanceof Set)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'searchFiltered() requires allowedIds to be a Set<number>', { argument: 'allowedIds' });
         }
         const boundedK = Math.min(k, this.count);
@@ -263,10 +263,10 @@ class PancakeIndex {
         this._ensureSearchCapacity(boundedK);
 
         // Build bitset over internal IDs
-        const count = this._e._pancake_count(this._handle);
+        const count = this._e._pikelet_count(this._handle);
         const bitsetLen = (count + 7) >> 3;
         const bitsetPtr = this._e._emsc_malloc(bitsetLen);
-        if (!bitsetPtr) throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED,
+        if (!bitsetPtr) throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED,
             'WASM malloc failed for filter bitset');
 
         try {
@@ -282,7 +282,7 @@ class PancakeIndex {
             }
 
             this._e.HEAPF32.set(f32, this._vecPtr >> 2);
-            const found = this._e._pancake_query_filtered(
+            const found = this._e._pikelet_query_filtered(
                 this._handle, this._vecPtr, boundedK, efSearch,
                 this._idPtr, this._distPtr,
                 bitsetPtr, bitsetLen
@@ -297,7 +297,7 @@ class PancakeIndex {
         this._checkDisposed();
         const intId = this._extToInt.get(id);
         if (intId === undefined || this._deletedExt.has(id)) return false;
-        this._e._pancake_delete(this._handle, intId);
+        this._e._pikelet_delete(this._handle, intId);
         this._deletedExt.add(id);
         return true;
     }
@@ -319,18 +319,18 @@ class PancakeIndex {
         // JS: how compaction assigns new IDs is the engine's contract, and
         // re-implementing it here would silently corrupt the external-ID
         // translation if the engine's assignment order ever changed.
-        const countBefore = this._e._pancake_count(this._handle);
+        const countBefore = this._e._pikelet_count(this._handle);
         if (countBefore === 0) {
-            this._e._pancake_compact(this._handle);
+            this._e._pikelet_compact(this._handle);
             return;
         }
 
         const mapPtr = this._e._emsc_malloc(countBefore * 4);
-        if (!mapPtr) throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED,
+        if (!mapPtr) throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED,
             'WASM malloc failed for compact remap');
 
         try {
-            const written = this._e._pancake_compact_remap(this._handle, mapPtr, countBefore);
+            const written = this._e._pikelet_compact_remap(this._handle, mapPtr, countBefore);
             const base = mapPtr >> 2;
             const remapped = [];
             for (let oldInt = 0; oldInt < written; oldInt++) {
@@ -349,10 +349,10 @@ class PancakeIndex {
                 this._extToInt.set(extId, newInt);
             }
 
-            const liveCount = this._e._pancake_count(this._handle);
+            const liveCount = this._e._pikelet_count(this._handle);
             if (this._intToExt.size !== liveCount) {
                 this._clearMappings();
-                throw pikeletError(PANCAKE_ERROR_CODES.INTERNAL_INVARIANT,
+                throw pikeletError(PIKELET_ERROR_CODES.INTERNAL_INVARIANT,
                     `compact() remap mismatch: engine reports ${liveCount} live vectors, remap yielded ${this._intToExt.size}`,
                     { liveCount, mappingCount: this._intToExt.size });
             }
@@ -364,18 +364,18 @@ class PancakeIndex {
     export() {
         this._checkDisposed();
         if (this.ghostCount > 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.COMPACTION_REQUIRED,
+            throw pikeletError(PIKELET_ERROR_CODES.COMPACTION_REQUIRED,
                 'Export failed: compact() required before export when ghostCount > 0',
                 { deletedCount: this.ghostCount });
         }
 
         const sizePtr = this._e._emsc_malloc(4);
-        if (!sizePtr) throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED,
+        if (!sizePtr) throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED,
             'WASM malloc failed for export');
         try {
-            const dataPtr = this._e._pancake_export(this._handle, sizePtr);
+            const dataPtr = this._e._pikelet_export(this._handle, sizePtr);
             if (!dataPtr) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INTERNAL_INVARIANT, 'Export failed');
+                throw pikeletError(PIKELET_ERROR_CODES.INTERNAL_INVARIANT, 'Export failed');
             }
 
             const wasmSize = this._e.HEAPU32[sizePtr >> 2];
@@ -432,13 +432,13 @@ class PancakeIndex {
 
                 if (version === 1) {
                     if (bytes.length < V1_ENVELOPE_HEADER_SIZE) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Import failed: truncated v1 envelope');
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Import failed: truncated v1 envelope');
                     }
 
                     dim = view.getUint32(8, true);
                     const compressed = view.getUint32(12, true);
                     if (compressed !== dim) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                             'Import failed: DCT/PCA indexes are no longer supported');
                     }
 
@@ -446,7 +446,7 @@ class PancakeIndex {
                     quantizedVal = view.getUint32(20, true);
                 } else if (version === ENVELOPE_VERSION) {
                     if (bytes.length < V3_ENVELOPE_HEADER_SIZE) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Import failed: truncated v3 envelope');
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Import failed: truncated v3 envelope');
                     }
 
                     dim = view.getUint32(8, true);
@@ -459,12 +459,12 @@ class PancakeIndex {
                     wasmOffset = mappingOffset + mappingCount * MAPPING_ENTRY_SIZE;
 
                     if (wasmOffset > bytes.length || wasmOffset + wasmSize > bytes.length) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                             'Import failed: truncated v3 envelope payload');
                     }
                 } else {
                     if (version !== 2) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                             `Import failed: unsupported envelope version ${version}`, { version });
                     }
 
@@ -474,7 +474,7 @@ class PancakeIndex {
                 }
 
                 if (dim !== this._dim) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+                    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                         `Import failed: dim mismatch (exported ${dim}, expected ${this._dim})`,
                         { field: 'dim', exported: dim, expected: this._dim });
                 }
@@ -483,13 +483,13 @@ class PancakeIndex {
                 if (exportedL2 !== this._isL2) {
                     const got = exportedL2 ? 'l2' : 'cosine';
                     const want = this._isL2 ? 'l2' : 'cosine';
-                    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+                    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                         `Import failed: metric mismatch (exported ${got}, expected ${want})`,
                         { field: 'metric', exported: got, expected: want });
                 }
 
                 if (!!quantizedVal !== this._quantized) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+                    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                         'Import failed: quantized mismatch',
                         { field: 'quantized', exported: !!quantizedVal, expected: this._quantized });
                 }
@@ -498,12 +498,12 @@ class PancakeIndex {
                     wasmBytes = bytes.subarray(wasmOffset, wasmOffset + wasmSize);
                     const metadata = parseRawSnapshotMetadata(wasmBytes);
                     if (metadata === null) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                             'Import failed: unsupported raw snapshot format');
                     }
                     this._validateRawSnapshotMetadata(metadata);
                     if (mappingCount !== metadata.count) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                             'Import failed: envelope mapping count mismatch');
                     }
                     pendingMappings = new Map();
@@ -532,28 +532,28 @@ class PancakeIndex {
         // about both query behavior and distance interpretation.
         const rawMetadata = parseRawSnapshotMetadata(wasmBytes);
         if (rawMetadata === null) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 'Import failed: unsupported raw snapshot format');
         }
         this._validateRawSnapshotMetadata(rawMetadata);
 
         const dataPtr = this._e._emsc_malloc(wasmBytes.length);
-        if (!dataPtr) throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED,
+        if (!dataPtr) throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED,
             'WASM malloc failed for import');
 
         let status;
         try {
             this._e.HEAPU8.set(wasmBytes, dataPtr);
-            status = this._e._pancake_import(this._handle, dataPtr, wasmBytes.length);
+            status = this._e._pikelet_import(this._handle, dataPtr, wasmBytes.length);
         } finally {
             this._e._emsc_free(dataPtr);
         }
 
         if (status !== 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Import failed');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Import failed');
         }
 
-        const count = this._e._pancake_count(this._handle);
+        const count = this._e._pikelet_count(this._handle);
         if (pendingMappings === null) {
             this._setIdentityMappings(count);
             return;
@@ -569,22 +569,22 @@ class PancakeIndex {
 
     get count() {
         this._checkDisposed();
-        return this._e._pancake_count(this._handle);
+        return this._e._pikelet_count(this._handle);
     }
 
     get ghostCount() {
         this._checkDisposed();
-        return this._e._pancake_ghost_count(this._handle);
+        return this._e._pikelet_ghost_count(this._handle);
     }
 
     get ghostRatio() {
         this._checkDisposed();
-        return this._e._pancake_ghost_ratio(this._handle);
+        return this._e._pikelet_ghost_ratio(this._handle);
     }
 
     get memory() {
         this._checkDisposed();
-        return this._e._pancake_memory(this._handle);
+        return this._e._pikelet_memory(this._handle);
     }
 
     get dim() { return this._dim; }
@@ -627,7 +627,7 @@ class PancakeIndex {
     get memoryUsage() {
         this._checkDisposed();
         return Object.freeze({
-            logicalIndexBytes: this._e._pancake_memory(this._handle),
+            logicalIndexBytes: this._e._pikelet_memory(this._handle),
             wasmHeapBytes: this._e.HEAPU8.buffer.byteLength,
             snapshotBufferBytes: this._snapshotBufferBytes,
         });
@@ -637,7 +637,7 @@ class PancakeIndex {
         if (this._disposed) return;
         let thrown = null;
         try {
-            this._e._pancake_dispose(this._handle);
+            this._e._pikelet_dispose(this._handle);
         } catch (err) {
             thrown = err;
         } finally {
@@ -661,8 +661,8 @@ class PancakeIndex {
     _checkDisposed() {
         if (this._disposed) {
             throw pikeletError(
-                PANCAKE_ERROR_CODES.INDEX_DISPOSED,
-                'PancakeIndex has been disposed'
+                PIKELET_ERROR_CODES.INDEX_DISPOSED,
+                'PikeletIndex has been disposed'
             );
         }
     }
@@ -675,7 +675,7 @@ class PancakeIndex {
         if (!newIdPtr || !newDistPtr) {
             if (newIdPtr) this._e._emsc_free(newIdPtr);
             if (newDistPtr) this._e._emsc_free(newDistPtr);
-            throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED,
+            throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED,
                 `WASM malloc failed while growing search buffers to k=${k}`, { k });
         }
 
@@ -716,11 +716,11 @@ class PancakeIndex {
 
     _validateV3Mappings(intToExt, nextExtId, count) {
         if (intToExt.size !== count) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 'Import failed: envelope mapping count mismatch');
         }
         if (!Number.isInteger(nextExtId) || nextExtId < count) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 'Import failed: envelope nextExtId is invalid');
         }
 
@@ -728,22 +728,22 @@ class PancakeIndex {
         let maxExtId = -1;
         for (const [intId, extId] of intToExt) {
             if (!Number.isInteger(intId) || intId < 0 || intId >= count) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                     'Import failed: envelope mapping contains invalid internal ID');
             }
             if (!Number.isInteger(extId) || extId < 0) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                     'Import failed: envelope mapping contains invalid external ID');
             }
             if (extIds.has(extId)) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                     'Import failed: envelope mapping contains duplicates');
             }
             extIds.add(extId);
             if (extId > maxExtId) maxExtId = extId;
         }
         if (nextExtId <= maxExtId) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 'Import failed: envelope nextExtId is invalid');
         }
     }
@@ -765,23 +765,23 @@ class PancakeIndex {
         // reads in the native deserializers.
         const maxVersion = metadata.quantized ? 2 : 1;
         if (!Number.isInteger(metadata.version) || metadata.version > maxVersion) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 `Import failed: unsupported snapshot format version ${metadata.version}`,
                 { version: metadata.version, maxSupported: maxVersion });
         }
         if (!Number.isInteger(metadata.count) || metadata.count < 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 'Import failed: snapshot count is invalid');
         }
         if (metadata.count > this._maxElements) {
             throw pikeletError(
-                PANCAKE_ERROR_CODES.SNAPSHOT_CAPACITY_EXCEEDED,
+                PIKELET_ERROR_CODES.SNAPSHOT_CAPACITY_EXCEEDED,
                 `Import failed: snapshot count ${metadata.count} exceeds maxElements ${this._maxElements}`,
                 { count: metadata.count, maxElements: this._maxElements }
             );
         }
         if (metadata.dim !== this._dim) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                 `Import failed: dim mismatch (exported ${metadata.dim}, expected ${this._dim})`,
                 { field: 'dim', exported: metadata.dim, expected: this._dim });
         }
@@ -790,23 +790,23 @@ class PancakeIndex {
         if (exportedL2 !== this._isL2) {
             const got = exportedL2 ? 'l2' : 'cosine';
             const want = this._isL2 ? 'l2' : 'cosine';
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                 `Import failed: metric mismatch (exported ${got}, expected ${want})`,
                 { field: 'metric', exported: got, expected: want });
         }
 
         if (metadata.quantized !== this._quantized) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                 'Import failed: quantized mismatch',
                 { field: 'quantized', exported: metadata.quantized, expected: this._quantized });
         }
         if (metadata.M !== this._M) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                 `Import failed: M mismatch (exported ${metadata.M}, expected ${this._M})`,
                 { field: 'M', exported: metadata.M, expected: this._M });
         }
         if (metadata.efConstruction !== this._efConstruction) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                 `Import failed: efConstruction mismatch (exported ${metadata.efConstruction}, expected ${this._efConstruction})`,
                 { field: 'efConstruction', exported: metadata.efConstruction, expected: this._efConstruction });
         }
@@ -824,7 +824,7 @@ class PancakeIndex {
             const extId = this._intToExt.get(intId);
             if (extId === undefined) {
                 throw pikeletError(
-                    PANCAKE_ERROR_CODES.INTERNAL_INVARIANT,
+                    PIKELET_ERROR_CODES.INTERNAL_INVARIANT,
                     `Search invariant failed: missing external ID mapping for internal ID ${intId}`,
                     { internalId: intId }
                 );
@@ -845,7 +845,7 @@ function createPikeletApi(loadEngineImpl) {
             return { vector: item, hasSourceId: false, sourceId: undefined };
         }
         if (!item || typeof item !== 'object' || !('vector' in item)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'fromVectors() requires vectors or { vector, id? } records');
         }
         const sourceId = item.id;
@@ -854,40 +854,40 @@ function createPikeletApi(loadEngineImpl) {
     }
 
     async function create(opts) {
-        if (!opts || !opts.dim) throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+        if (!opts || !opts.dim) throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
             'opts.dim is required', { argument: 'dim' });
         if (!Number.isInteger(opts.dim) || opts.dim <= 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'opts.dim must be a positive integer', { argument: 'dim', value: opts.dim });
         }
         if ('compressed' in opts) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'opts.compressed has been removed');
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'opts.compressed has been removed');
         }
         if ('varianceSample' in opts) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'opts.varianceSample has been removed');
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'opts.varianceSample has been removed');
         }
         if (opts.metric !== undefined && opts.metric !== 'cosine' && opts.metric !== 'l2') {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 "opts.metric must be 'cosine' or 'l2'", { argument: 'metric', value: opts.metric });
         }
         // Upper bound matches the engine ABI: pancake_init takes max_elem as a
         // C int, so anything above 2^31-1 would truncate or go negative.
         if (opts.maxElements !== undefined && (!Number.isInteger(opts.maxElements) || opts.maxElements <= 0 || opts.maxElements > 0x7fffffff)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'opts.maxElements must be an integer between 1 and 2147483647', { argument: 'maxElements', value: opts.maxElements });
         }
         if (opts.M !== undefined && (!Number.isInteger(opts.M) || opts.M <= 1 || opts.M > 128)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'opts.M must be an integer between 2 and 128', { argument: 'M', value: opts.M });
         }
         if (opts.efConstruction !== undefined && (!Number.isInteger(opts.efConstruction) || opts.efConstruction <= 0 || opts.efConstruction > 4096)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'opts.efConstruction must be an integer between 1 and 4096',
                 { argument: 'efConstruction', value: opts.efConstruction });
         }
         if (opts.efSearch !== undefined) validateEfSearch(opts.efSearch, 'opts.efSearch');
         if (opts.seed !== undefined && (!Number.isInteger(opts.seed) || opts.seed <= 0 || opts.seed > 0x7fffffff)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'opts.seed must be an integer between 1 and 2147483647',
                 { argument: 'seed', value: opts.seed });
         }
@@ -912,7 +912,7 @@ function createPikeletApi(loadEngineImpl) {
         const bytesPerElement = isQuantized ? dim + 16 * M + 39 : 4 * dim + 8 * M + 23;
         const estimatedBytes = maxElements * bytesPerElement;
         if (estimatedBytes > MAX_INDEX_ARENA_BYTES) {
-            throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED,
+            throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED,
                 `Index configuration needs ~${Math.ceil(estimatedBytes / (1024 * 1024))} MiB `
                 + `(${isQuantized ? 'quantized' : 'float32'} backend: maxElements ${maxElements} × ~${bytesPerElement} B/element), `
                 + `above the ${Math.floor(MAX_INDEX_ARENA_BYTES / (1024 * 1024))} MiB wasm32 index budget; `
@@ -943,10 +943,10 @@ function createPikeletApi(loadEngineImpl) {
             if (vecPtr) e._emsc_free(vecPtr);
             if (idPtr) e._emsc_free(idPtr);
             if (distPtr) e._emsc_free(distPtr);
-            throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED, 'WASM malloc failed');
+            throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED, 'WASM malloc failed');
         }
 
-        const handle = e._pancake_init(dim, maxElements, quantized, metric, M, efConstruction, efSearch, seed);
+        const handle = e._pikelet_init(dim, maxElements, quantized, metric, M, efConstruction, efSearch, seed);
 
         // The engine returns uint32_t INVALID_HANDLE (0xFFFFFFFF), which the
         // Emscripten i32 ABI delivers to JS as -1.
@@ -954,18 +954,18 @@ function createPikeletApi(loadEngineImpl) {
             e._emsc_free(vecPtr);
             e._emsc_free(idPtr);
             e._emsc_free(distPtr);
-            throw pikeletError(PANCAKE_ERROR_CODES.WASM_ALLOCATION_FAILED, 'Backend init failed');
+            throw pikeletError(PIKELET_ERROR_CODES.WASM_ALLOCATION_FAILED, 'Backend init failed');
         }
 
-        return new PancakeIndex(e, resolvedOpts, handle, vecPtr, idPtr, distPtr, initialBufferCapacity);
+        return new PikeletIndex(e, resolvedOpts, handle, vecPtr, idPtr, distPtr, initialBufferCapacity);
     }
 
     async function fromVectors(items, opts = {}) {
         if (!Array.isArray(items)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'fromVectors() requires an array');
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'fromVectors() requires an array');
         }
         if (items.length === 0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'fromVectors() requires at least one vector');
         }
 
@@ -977,18 +977,18 @@ function createPikeletApi(loadEngineImpl) {
         for (let i = 0; i < items.length; i++) {
             const { vector, hasSourceId, sourceId } = extractVectorRecord(items[i]);
             if (!isVectorInput(vector)) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR,
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR,
                     `fromVectors() expected a vector at index ${i}`, { index: i });
             }
             const dim = vector.length;
             if (!Number.isInteger(dim) || dim <= 0) {
-                throw pikeletError(PANCAKE_ERROR_CODES.INVALID_VECTOR,
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR,
                     `fromVectors() expected a non-empty vector at index ${i}`, { index: i });
             }
             if (inferredDim === null) {
                 inferredDim = dim;
             } else if (dim !== inferredDim) {
-                throw pikeletError(PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
+                throw pikeletError(PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
                     `fromVectors() found mixed vector dimensions (${inferredDim} and ${dim})`,
                     { expected: inferredDim, actual: dim, index: i });
             }
@@ -998,7 +998,7 @@ function createPikeletApi(loadEngineImpl) {
         }
 
         if (opts.dim !== undefined && opts.dim !== inferredDim) {
-            throw pikeletError(PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
+            throw pikeletError(PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
                 `fromVectors() dim mismatch (inferred ${inferredDim}, got opts.dim=${opts.dim})`,
                 { expected: inferredDim, actual: opts.dim });
         }
@@ -1029,7 +1029,7 @@ function createPikeletApi(loadEngineImpl) {
 
     async function withIndex(options, fn) {
         if (typeof fn !== 'function') {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'withIndex() requires a callback function', { argument: 'fn' });
         }
         const index = await create(options);
@@ -1046,7 +1046,7 @@ function createPikeletApi(loadEngineImpl) {
 
     async function restore(snapshot, overrides = {}) {
         if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'restore() overrides must be an object', { argument: 'overrides' });
         }
 
@@ -1062,7 +1062,7 @@ function createPikeletApi(loadEngineImpl) {
         if (metadata.format === 'raw') {
             for (const field of Object.keys(fixedConfig)) {
                 if (overrides[field] === undefined) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+                    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                         `restore() requires overrides.${field} for legacy raw snapshots`,
                         { argument: field, format: 'raw' });
                 }
@@ -1071,7 +1071,7 @@ function createPikeletApi(loadEngineImpl) {
 
         for (const [field, expected] of Object.entries(fixedConfig)) {
             if (overrides[field] !== undefined && overrides[field] !== expected) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
                     `restore() ${field} override does not match the snapshot`,
                     { field, exported: expected, override: overrides[field] });
             }
@@ -1102,8 +1102,8 @@ function createPikeletApi(loadEngineImpl) {
         withIndex,
         restore,
         inspectSnapshot,
-        PancakeError,
-        PANCAKE_ERROR_CODES,
+        PikeletError,
+        PIKELET_ERROR_CODES,
     };
 }
 
@@ -1153,14 +1153,14 @@ function snapshotBytes(data, methodName) {
     if (ArrayBuffer.isView(data)) {
         return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
     }
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
         `${methodName}() requires snapshot bytes`, { argument: 'snapshot' });
 }
 
 function inspectSnapshotMetadata(data) {
     const bytes = snapshotBytes(data, 'inspectSnapshot');
     if (bytes.byteLength < 4) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot is too small to inspect');
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot is too small to inspect');
     }
 
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -1175,17 +1175,17 @@ function inspectSnapshotMetadata(data) {
     if (view.getUint32(0, true) === PIKELET_MAGIC) {
         format = 'pikelet';
         if (bytes.byteLength < 8) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot envelope is truncated');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot envelope is truncated');
         }
         envelopeVersion = view.getUint32(4, true);
         let rawOffset;
         if (envelopeVersion === 1) {
             if (bytes.byteLength < V1_ENVELOPE_HEADER_SIZE) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot v1 envelope is truncated');
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot v1 envelope is truncated');
             }
             envelopeDim = view.getUint32(8, true);
             if (view.getUint32(12, true) !== envelopeDim) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                     'DCT/PCA snapshots are no longer supported');
             }
             envelopeMetric = view.getUint32(16, true);
@@ -1193,7 +1193,7 @@ function inspectSnapshotMetadata(data) {
             rawOffset = V1_ENVELOPE_HEADER_SIZE;
         } else if (envelopeVersion === 2) {
             if (bytes.byteLength < V2_ENVELOPE_HEADER_SIZE) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot v2 envelope is truncated');
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot v2 envelope is truncated');
             }
             envelopeDim = view.getUint32(8, true);
             envelopeMetric = view.getUint32(12, true);
@@ -1201,7 +1201,7 @@ function inspectSnapshotMetadata(data) {
             rawOffset = V2_ENVELOPE_HEADER_SIZE;
         } else if (envelopeVersion === ENVELOPE_VERSION) {
             if (bytes.byteLength < V3_ENVELOPE_HEADER_SIZE) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot v3 envelope is truncated');
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot v3 envelope is truncated');
             }
             envelopeDim = view.getUint32(8, true);
             envelopeMetric = view.getUint32(12, true);
@@ -1212,12 +1212,12 @@ function inspectSnapshotMetadata(data) {
             rawOffset = V3_ENVELOPE_HEADER_SIZE + mappingCount * MAPPING_ENTRY_SIZE;
             if (!Number.isSafeInteger(rawOffset) || rawOffset > bytes.byteLength ||
                 rawSize > bytes.byteLength - rawOffset) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                     'Snapshot v3 envelope payload is truncated');
             }
             rawBytes = bytes.subarray(rawOffset, rawOffset + rawSize);
         } else {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 `Unsupported snapshot envelope version ${envelopeVersion}`, { version: envelopeVersion });
         }
         if (envelopeVersion !== ENVELOPE_VERSION) rawBytes = bytes.subarray(rawOffset);
@@ -1225,22 +1225,22 @@ function inspectSnapshotMetadata(data) {
 
     const raw = parseRawSnapshotMetadata(rawBytes);
     if (raw === null) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             'Unsupported or truncated raw snapshot format');
     }
     if (raw.dim <= 0 || raw.metric > 1 || raw.M < 2 || raw.M > 128 ||
         raw.M0 !== raw.M * 2 || raw.efConstruction < 1 || raw.efConstruction > 4096) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             'Snapshot header contains invalid index configuration');
     }
     if (format === 'pikelet' && (envelopeDim !== raw.dim || envelopeMetric !== raw.metric ||
         !!envelopeQuantized !== raw.quantized)) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
             'Snapshot envelope does not match its raw index header');
     }
     if (nextId === null) nextId = raw.count;
     if (nextId < raw.count) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot nextId is invalid');
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Snapshot nextId is invalid');
     }
 
     return Object.freeze({
@@ -1258,11 +1258,11 @@ function inspectSnapshotMetadata(data) {
 
 module.exports = createPikeletApi;
 module.exports.default = createPikeletApi;
-module.exports.PancakeError = PancakeError;
-module.exports.PANCAKE_ERROR_CODES = PANCAKE_ERROR_CODES;
+module.exports.PikeletError = PikeletError;
+module.exports.PIKELET_ERROR_CODES = PIKELET_ERROR_CODES;
 
 if (typeof Symbol.dispose === 'symbol') {
-    PancakeIndex.prototype[Symbol.dispose] = function disposeWithSymbol() {
+    PikeletIndex.prototype[Symbol.dispose] = function disposeWithSymbol() {
         this.dispose();
     };
 }

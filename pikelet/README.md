@@ -44,7 +44,7 @@ npm run dev
 
 The generated project contains a bundled Pikelet snapshot, corpus metadata, a
 Workers AI search worker, and a static UI. A second runtime,
-`--runtime artifact`, serves the deprecated `.pancake-range` profile; it
+`--runtime artifact`, serves the deprecated `.pikelet-range` profile; it
 still works, but new projects should use the default snapshot runtime, or
 `compile` (below) when the deliverable is a complete `.pikelet` file.
 
@@ -55,7 +55,7 @@ corpus-distilled encoder with `--mode student` (see below), which removes the
 Cloudflare AI dependency entirely. For workers-ai projects, `LOCAL_STUB_AI=1`
 can exercise the endpoint mechanics locally without Workers AI.
 
-In the deprecated artifact runtime, a prebuilt `.pancake-range` file can be
+In the deprecated artifact runtime, a prebuilt `.pikelet-range` file can be
 supplied with `--artifact`; external artifacts must have dimension, count,
 and IDs that match the generated corpus.
 
@@ -318,7 +318,7 @@ config a scaffold is generated from. The work lives beside it:
 
 Range-read artifacts depend on transport properties that hosts get wrong
 silently, and the symptom is "the demo is slow", not an error. Before (or
-after) deploying a `.pikelet`, `.pancake-sketch`, or `.pancake-range` file,
+after) deploying a `.pikelet`, `.pikelet-sketch`, or `.pikelet-range` file,
 probe the URL it is served from:
 
 ```bash
@@ -365,7 +365,7 @@ and degrades to a bounded download-once on hosts that ignore `Range`.
 Zero configuration: the packaged encoder assets stage automatically
 (weights digest-pinned, fetched once). Opt-outs: `mode: 'student'` keeps
 the small Python-trained student encoder with the range-artifact runtime;
-`mode: 'artifact'` keeps the deprecated `.pancake-range` output; both log
+`mode: 'artifact'` keeps the deprecated `.pikelet-range` output; both log
 a deprecation note for the range format.
 
 That means docs, blog posts, pages, and rendered MDX all flow through the
@@ -424,7 +424,7 @@ every chunk through the packaged encoder at build time (inputs longer than
 ### Student mode (deprecated range profile)
 
 `mode: 'student'` (or configuring any `studentModel`/`trainStudent` option)
-keeps the previous default: a `.pancake-range` artifact plus a
+keeps the previous default: a `.pikelet-range` artifact plus a
 corpus-distilled student encoder trained at build time. It needs a Python
 environment with `torch` and `transformers`; set `trainStudent.python` if
 Docusaurus should call a specific interpreter:
@@ -452,7 +452,7 @@ bare student model because that silently changes the index geometry. A
 Wikipedia-trained student is only useful for smoke testing the mechanics; it is
 not a general-purpose docs encoder. `mode: 'artifact'` keeps the range
 artifact without any student training (queries need an external embedding
-path). Both modes log a deprecation note for the `.pancake-range` format.
+path). Both modes log a deprecation note for the `.pikelet-range` format.
 
 ## Limitations
 

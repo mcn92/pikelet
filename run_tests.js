@@ -458,7 +458,7 @@ async function testCreation() {
         const FailingInit = createPikeletApi(async () => ({
             _emsc_malloc: () => (nextPtr += 8),
             _emsc_free: (p) => freed.push(p),
-            _pancake_init: () => -1,
+            _pikelet_init: () => -1,
         }));
         let err = null;
         try { await FailingInit.create({ dim: 4, maxElements: 10 }); } catch (e) { err = e; }
@@ -1419,13 +1419,13 @@ async function testEdgeCases() {
         idx.delete(ids[1]);
         assert(idx.ghostCount === 1, 'compact_remap guard setup has one ghost');
 
-        const nullResult = idx._e._pancake_compact_remap(idx._handle, 0, 3);
+        const nullResult = idx._e._pikelet_compact_remap(idx._handle, 0, 3);
         assert(nullResult === 0, 'compact_remap with null output returns 0');
         assert(idx.count === 3, 'compact_remap with null output does not compact');
         assert(idx.ghostCount === 1, 'compact_remap with null output preserves ghost count');
 
         const ptr = idx._e._emsc_malloc(4);
-        const zeroCapacityResult = idx._e._pancake_compact_remap(idx._handle, ptr, 0);
+        const zeroCapacityResult = idx._e._pikelet_compact_remap(idx._handle, ptr, 0);
         idx._e._emsc_free(ptr);
         assert(zeroCapacityResult === 0, 'compact_remap with zero capacity returns 0');
         assert(idx.count === 3, 'compact_remap with zero capacity does not compact');
@@ -1693,8 +1693,8 @@ async function testAddBatchPartialFailure() {
     // the wrapper must not present it as a normal capacity error.
     {
         const idx = await Pikelet.create({ ...DEFAULT_CONFIG, maxElements: 5 });
-        const originalBulkInsert = idx._e._pancake_bulk_insert;
-        idx._e._pancake_bulk_insert = (handle, dataPtr, n) => originalBulkInsert(handle, dataPtr, n - 1);
+        const originalBulkInsert = idx._e._pikelet_bulk_insert;
+        idx._e._pikelet_bulk_insert = (handle, dataPtr, n) => originalBulkInsert(handle, dataPtr, n - 1);
         try {
             let err = null;
             try {
@@ -1702,13 +1702,13 @@ async function testAddBatchPartialFailure() {
             } catch (e) {
                 err = e;
             }
-            assert(err instanceof Pikelet.PancakeError, 'short bulk_insert throws PancakeError');
-            assert(err?.code === Pikelet.PANCAKE_ERROR_CODES.INTERNAL_INVARIANT, 'short bulk_insert reports INTERNAL_INVARIANT');
+            assert(err instanceof Pikelet.PikeletError, 'short bulk_insert throws PikeletError');
+            assert(err?.code === Pikelet.PIKELET_ERROR_CODES.INTERNAL_INVARIANT, 'short bulk_insert reports INTERNAL_INVARIANT');
             assert(err?.details?.inserted === 1 && err?.details?.requested === 2, 'short bulk_insert reports partial insert details');
             assert(idx.count === 1, 'short bulk_insert leaves the actual inserted row visible');
             assert(idx.search(normalizedVec(DIM), 1).length === 1, 'index remains searchable after short bulk_insert invariant failure');
         } finally {
-            idx._e._pancake_bulk_insert = originalBulkInsert;
+            idx._e._pikelet_bulk_insert = originalBulkInsert;
             idx.dispose();
         }
     }
@@ -2826,15 +2826,15 @@ async function testDemoVectorGenerator() {
     assert(dot(0, 4) > dot(0, 1), 'same-cluster demo vectors are closer than different-cluster vectors');
 }
 
-async function testPancakeErrorContract() {
-    section('PancakeError contract');
+async function testPikeletErrorContract() {
+    section('PikeletError contract');
 
     const expectCode = (fn, code, message) => {
         try {
             fn();
             assert(false, `${message} (expected ${code})`);
         } catch (error) {
-            assert(error instanceof Pikelet.PancakeError, `${message} throws PancakeError`);
+            assert(error instanceof Pikelet.PikeletError, `${message} throws PikeletError`);
             assert(error.code === code, `${message} has ${code} code`);
         }
     };
@@ -2843,45 +2843,45 @@ async function testPancakeErrorContract() {
             await fn();
             assert(false, `${message} (expected ${code})`);
         } catch (error) {
-            assert(error instanceof Pikelet.PancakeError, `${message} throws PancakeError`);
+            assert(error instanceof Pikelet.PikeletError, `${message} throws PikeletError`);
             assert(error.code === code, `${message} has ${code} code`);
         }
     };
 
-    assert(typeof Pikelet.PancakeError === 'function', 'CJS API exposes PancakeError');
-    assert(Pikelet.PANCAKE_ERROR_CODES.INDEX_DISPOSED === 'INDEX_DISPOSED',
+    assert(typeof Pikelet.PikeletError === 'function', 'CJS API exposes PikeletError');
+    assert(Pikelet.PIKELET_ERROR_CODES.INDEX_DISPOSED === 'INDEX_DISPOSED',
         'CJS API exposes stable error codes');
 
     const esm = await import(pathToFileURL(path.join(process.cwd(), 'pikelet.node.mjs')).href);
-    assert(esm.PancakeError === Pikelet.PancakeError, 'Node ESM exposes the same PancakeError class');
+    assert(esm.PikeletError === Pikelet.PikeletError, 'Node ESM exposes the same PikeletError class');
 
     await expectCodeAsync(
         () => Pikelet.create({ dim: 0 }),
-        Pikelet.PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+        Pikelet.PIKELET_ERROR_CODES.INVALID_ARGUMENT,
         'invalid construction options'
     );
 
     const full = await Pikelet.create({ dim: 4, maxElements: 1, metric: 'l2', quantized: false });
     expectCode(
         () => full.add(new Float32Array(3)),
-        Pikelet.PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
+        Pikelet.PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
         'wrong-length vector'
     );
     expectCode(
         () => full.add(new Float32Array([NaN, 0, 0, 0])),
-        Pikelet.PANCAKE_ERROR_CODES.INVALID_VECTOR,
+        Pikelet.PIKELET_ERROR_CODES.INVALID_VECTOR,
         'non-finite vector'
     );
     full.add(new Float32Array(4));
     expectCode(
         () => full.add(new Float32Array(4)),
-        Pikelet.PANCAKE_ERROR_CODES.INDEX_FULL,
+        Pikelet.PIKELET_ERROR_CODES.INDEX_FULL,
         'capacity overflow'
     );
     full.delete(0);
     expectCode(
         () => full.export(),
-        Pikelet.PANCAKE_ERROR_CODES.COMPACTION_REQUIRED,
+        Pikelet.PIKELET_ERROR_CODES.COMPACTION_REQUIRED,
         'snapshot export with deleted nodes'
     );
     full.dispose();
@@ -2892,13 +2892,13 @@ async function testPancakeErrorContract() {
     const mismatched = await Pikelet.create({ dim: 4, maxElements: 2, metric: 'cosine', quantized: false });
     expectCode(
         () => mismatched.import(snapshot),
-        Pikelet.PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+        Pikelet.PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
         'snapshot configuration mismatch'
     );
     const undersized = await Pikelet.create({ dim: 4, maxElements: 1, metric: 'l2', quantized: false });
     expectCode(
         () => undersized.import(snapshot),
-        Pikelet.PANCAKE_ERROR_CODES.SNAPSHOT_CAPACITY_EXCEEDED,
+        Pikelet.PIKELET_ERROR_CODES.SNAPSHOT_CAPACITY_EXCEEDED,
         'snapshot capacity overflow'
     );
     source.dispose();
@@ -2911,12 +2911,12 @@ async function testPancakeErrorContract() {
         fs.writeFileSync(invalidJson, '{');
         await expectCodeAsync(
             () => Pikelet.loadJsonFile(invalidJson),
-            Pikelet.PANCAKE_ERROR_CODES.PARSE_FAILED,
+            Pikelet.PIKELET_ERROR_CODES.PARSE_FAILED,
             'malformed JSON file'
         );
         await expectCodeAsync(
             () => Pikelet.loadJsonFile(path.join(tmpDir, 'missing.json')),
-            Pikelet.PANCAKE_ERROR_CODES.FILE_IO_FAILED,
+            Pikelet.PIKELET_ERROR_CODES.FILE_IO_FAILED,
             'missing JSON file'
         );
     } finally {
@@ -2927,10 +2927,10 @@ async function testPancakeErrorContract() {
     idx.dispose();
     try {
         idx.search(new Float32Array(4), 1);
-        assert(false, 'disposed index throws PancakeError');
+        assert(false, 'disposed index throws PikeletError');
     } catch (error) {
-        assert(error instanceof Pikelet.PancakeError, 'disposed index error is a PancakeError');
-        assert(error.code === Pikelet.PANCAKE_ERROR_CODES.INDEX_DISPOSED,
+        assert(error instanceof Pikelet.PikeletError, 'disposed index error is a PikeletError');
+        assert(error.code === Pikelet.PIKELET_ERROR_CODES.INDEX_DISPOSED,
             'disposed index error has INDEX_DISPOSED code');
     }
 }
@@ -2948,13 +2948,13 @@ async function testPerQueryEfSearch() {
     idx.addBatch([unitVec(4, 0), unitVec(4, 1), unitVec(4, 2)]);
 
     const observed = [];
-    const originalQuery = idx._e._pancake_query;
-    const originalFiltered = idx._e._pancake_query_filtered;
-    idx._e._pancake_query = (...args) => {
+    const originalQuery = idx._e._pikelet_query;
+    const originalFiltered = idx._e._pikelet_query_filtered;
+    idx._e._pikelet_query = (...args) => {
         observed.push(['search', args[3]]);
         return originalQuery(...args);
     };
-    idx._e._pancake_query_filtered = (...args) => {
+    idx._e._pikelet_query_filtered = (...args) => {
         observed.push(['filtered', args[3]]);
         return originalFiltered(...args);
     };
@@ -2980,15 +2980,15 @@ async function testPerQueryEfSearch() {
                 idx.search(unitVec(4, 0), 1, { efSearch: invalid });
                 assert(false, `search() rejects invalid efSearch ${String(invalid)}`);
             } catch (error) {
-                assert(error instanceof Pikelet.PancakeError,
-                    `invalid efSearch ${String(invalid)} throws PancakeError`);
-                assert(error.code === Pikelet.PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+                assert(error instanceof Pikelet.PikeletError,
+                    `invalid efSearch ${String(invalid)} throws PikeletError`);
+                assert(error.code === Pikelet.PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                     `invalid efSearch ${String(invalid)} has INVALID_ARGUMENT code`);
             }
         }
     } finally {
-        idx._e._pancake_query = originalQuery;
-        idx._e._pancake_query_filtered = originalFiltered;
+        idx._e._pikelet_query = originalQuery;
+        idx._e._pikelet_query_filtered = originalFiltered;
         idx.dispose();
     }
 }
@@ -3398,7 +3398,7 @@ async function main() {
         testSearchFiltered,
         testSearchFilteredInputContract,
         testDemoVectorGenerator,
-        testPancakeErrorContract,
+        testPikeletErrorContract,
         testPerQueryEfSearch,
         testAdditiveIndexSurface,
         testSnapshotInspectionAndRestore,

@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { openPancakeFile } from '../pikelet-file-reader.mjs';
+import { openPikeletFile } from '../pikelet-file-reader.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const DATA = path.join(here, '..', '..', '04-static-wiki-pack', 'data-full');
@@ -28,7 +28,7 @@ const sources = [
 ];
 
 for (const [label, vecFor] of sources) {
-    const search = await openPancakeFile(path.join(here, '..', 'pancake-wiki.pancake'), {
+    const search = await openPikeletFile(path.join(here, '..', 'pancake-wiki.pancake'), {
         encodeQuery: async (text) => vecFor(evalQueries.findIndex((q) => q.text === text)),
     });
     let hits = 0;

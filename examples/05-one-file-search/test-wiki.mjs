@@ -8,7 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { openPancakeFile } from './pikelet-file-reader.mjs';
+import { openPikeletFile } from './pikelet-file-reader.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 // data-perm: the pack's canonical cluster-ordered layout; its eval ground
@@ -33,7 +33,7 @@ const vectorFor = new Map(evalQueries.map((q, i) => [q.text,
         vectorsRaw.byteOffset + (i + 1) * dim * 4))]));
 
 const openStart = performance.now();
-const search = await openPancakeFile(pikeletPath, {
+const search = await openPikeletFile(pikeletPath, {
     encodeQuery: async (text) => {
         const vector = vectorFor.get(text);
         if (!vector) throw new Error(`no precomputed embedding for "${text}"`);

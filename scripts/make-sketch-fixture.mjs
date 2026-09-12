@@ -35,7 +35,7 @@ for (const metric of ['l2', 'cosine']) {
     const snap = path.join(tmp, 's.pnck');
     fs.writeFileSync(snap, index.export());
     index.dispose();
-    const art = path.join(tmp, 'a.pancake-sketch');
+    const art = path.join(tmp, 'a.pikelet-sketch');
     Pikelet.buildSketchArtifactFile(snap, art, { sketchDims: 16, sketchBits, recommendedRerank: 64 });
     const bytes = fs.readFileSync(art);
 

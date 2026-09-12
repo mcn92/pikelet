@@ -100,7 +100,7 @@ contains:
   "runtime": {
     "mode": "artifact",
     "storage": "bundled",
-    "artifactPath": "./index.pancake-range"
+    "artifactPath": "./index.pikelet-range"
   }
 }
 ```
@@ -114,7 +114,7 @@ npm run reindex -- --runtime artifact
 To use an artifact built elsewhere:
 
 ```bash
-npm run reindex -- --runtime artifact --artifact ./index.pancake-range
+npm run reindex -- --runtime artifact --artifact ./index.pikelet-range
 ```
 
 An externally supplied artifact must be built from the exact generated corpus:

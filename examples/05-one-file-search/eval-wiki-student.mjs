@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadStudentModel, embedTextWithStudent } from '../legacy/03-edge-docs-search/student-embedder.mjs';
-import { openPancakeFile } from './pikelet-file-reader.mjs';
+import { openPikeletFile } from './pikelet-file-reader.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const DATA = path.join(here, '..', '04-static-wiki-pack', 'data-full');
@@ -50,7 +50,7 @@ for (const [source, sims] of bySource) {
 }
 
 // 2. End-to-end recall@10 through the container, student as host encoder.
-const search = await openPancakeFile(path.join(here, 'pancake-wiki.pancake'), {
+const search = await openPikeletFile(path.join(here, 'pancake-wiki.pancake'), {
     encodeQuery: async (text) => embedTextWithStudent(text, student).vector,
 });
 const recallBySource = new Map();

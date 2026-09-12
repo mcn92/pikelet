@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import createModule from './encoder.node.mjs';
 import { createWordPiece } from './wordpiece.mjs';
-import { openPancakeFile } from '../pikelet-file-reader.mjs';
+import { openPikeletFile } from '../pikelet-file-reader.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const REAL = path.join(here, 'real');
@@ -45,7 +45,7 @@ function encode(text) {
 const evalQueries = JSON.parse(fs.readFileSync(path.join(DATA, 'eval-queries.json'), 'utf8'));
 const groundTruth = JSON.parse(fs.readFileSync(path.join(DATA, 'eval-gt.json'), 'utf8'));
 
-const search = await openPancakeFile(path.join(here, '..', 'pancake-wiki.pancake'), {
+const search = await openPikeletFile(path.join(here, '..', 'pancake-wiki.pancake'), {
     encodeQuery: async (text) => encode(text),
 });
 let hits = 0;

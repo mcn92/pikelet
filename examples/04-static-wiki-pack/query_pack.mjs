@@ -39,7 +39,7 @@ for (const id of parityIds) {
 console.log(`encoder parity (JS fp32 vs Python fp32): worst cosine ${worst.toFixed(5)} over ${parityIds.length} chunks`);
 
 // --- Search + hydrate ----------------------------------------------------
-const artifact = await Pikelet.openSketchArtifactFile(path.join(dataDir, 'wiki.pancake-sketch'));
+const artifact = await Pikelet.openSketchArtifactFile(path.join(dataDir, 'wiki.pikelet-sketch'));
 const scanner = await Pikelet.createSketchScanner(artifact);
 // View through byteOffset/byteLength: small readFileSync results share
 // Node's buffer pool, so bare .buffer would alias unrelated bytes.

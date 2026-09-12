@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { assertIdentityMapping, docsAssetPaths } from './search-reader.mjs';
 import {
     MAGIC, HEADER_BYTES, TABLE_ENTRY_BYTES, KIND_NAMES,
-    sha256, buildQueryInterpSegment, buildCorpusSegment, assemblePancakeFile,
+    sha256, buildQueryInterpSegment, buildCorpusSegment, assemblePikeletFile,
     measureRecommendedRerank, PROFILE_V2, FORMAT_VERSIONS,
 } from '../../complete/builder.mjs';
 
@@ -98,7 +98,7 @@ async function compile(paths, outPath) {
         },
     ];
 
-    return assemblePancakeFile({
+    return assemblePikeletFile({
         profile: PROFILE_V2,
         corpus: { ...corpusSegment.corpus, provenance: null },
         dim: sourceManifest.dim,

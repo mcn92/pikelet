@@ -178,10 +178,10 @@ static void free_handle(uint32_t h) {
 extern "C" {
 
 // =============================================================================
-// Handle-based pancake_* API
+// Handle-based pikelet_* API
 // =============================================================================
 
-uint32_t pancake_init(int dim, int max_elem, int quantized, int metric,
+uint32_t pikelet_init(int dim, int max_elem, int quantized, int metric,
                       int M, int ef_c, int ef_s, int seed) {
     if (dim <= 0 || max_elem <= 0) return INVALID_HANDLE;
 
@@ -194,7 +194,7 @@ uint32_t pancake_init(int dim, int max_elem, int quantized, int metric,
     // The constructors allocate the whole index arena eagerly; a request the
     // heap cannot satisfy throws std::bad_alloc. Catch it and hand back the
     // sentinel so one oversized create fails cleanly instead of aborting the
-    // WASM instance under every other live handle (mirrors pancake_import).
+    // WASM instance under every other live handle (mirrors pikelet_import).
     try {
         if (quantized) {
             Uint8FloatHNSWConfig u8cfg;
@@ -225,17 +225,17 @@ uint32_t pancake_init(int dim, int max_elem, int quantized, int metric,
     return h;
 }
 
-uint32_t pancake_add(uint32_t h, const float* vec) {
+uint32_t pikelet_add(uint32_t h, const float* vec) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return 0xFFFFFFFF;
     return g_handles[h].index->insert(vec);
 }
 
-int pancake_bulk_insert(uint32_t h, const float* vecs, int n) {
+int pikelet_bulk_insert(uint32_t h, const float* vecs, int n) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return 0;
     return g_handles[h].index->bulk_insert(vecs, n);
 }
 
-int pancake_query(uint32_t h, const float* qv, int k, int ef_search, uint64_t* ids, float* dists) {
+int pikelet_query(uint32_t h, const float* qv, int k, int ef_search, uint64_t* ids, float* dists) {
     if (h >= MAX_HANDLES || !g_handles[h].index || !qv || !ids || !dists ||
         k <= 0 || ef_search <= 0 || ef_search > 4096) return 0;
     const size_t bounded_k = std::min(static_cast<size_t>(k), g_handles[h].index->count());
@@ -247,7 +247,7 @@ int pancake_query(uint32_t h, const float* qv, int k, int ef_search, uint64_t* i
     return static_cast<int>(res.size());
 }
 
-int pancake_query_filtered(uint32_t h, const float* qv, int k, int ef_search,
+int pikelet_query_filtered(uint32_t h, const float* qv, int k, int ef_search,
                            uint64_t* ids, float* dists,
                            const uint8_t* bitset, size_t bitset_len) {
     if (h >= MAX_HANDLES || !g_handles[h].index || !qv || !ids || !dists ||
@@ -262,12 +262,12 @@ int pancake_query_filtered(uint32_t h, const float* qv, int k, int ef_search,
     return static_cast<int>(res.size());
 }
 
-void pancake_delete(uint32_t h, uint32_t id) {
+void pikelet_delete(uint32_t h, uint32_t id) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return;
     g_handles[h].index->mark_delete(id);
 }
 
-void pancake_compact(uint32_t h) {
+void pikelet_compact(uint32_t h) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return;
     g_handles[h].index->compact();
 }
@@ -275,7 +275,7 @@ void pancake_compact(uint32_t h) {
 // Compact and write the old→new ID remap into caller-allocated buffer.
 // out_buf[old_id] = new_id, or 0xFFFFFFFF for deleted vectors.
 // Returns the number of entries written (= pre-compaction count).
-size_t pancake_compact_remap(uint32_t h, uint32_t* out_buf, size_t out_capacity) {
+size_t pikelet_compact_remap(uint32_t h, uint32_t* out_buf, size_t out_capacity) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return 0;
     if (!out_buf || out_capacity == 0) return 0;
     std::vector<uint32_t> map;
@@ -285,31 +285,31 @@ size_t pancake_compact_remap(uint32_t h, uint32_t* out_buf, size_t out_capacity)
     return n;
 }
 
-size_t pancake_count(uint32_t h) {
+size_t pikelet_count(uint32_t h) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return 0;
     return g_handles[h].index->count();
 }
 
-size_t pancake_memory(uint32_t h) {
+size_t pikelet_memory(uint32_t h) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return 0;
     return g_handles[h].index->memory_bytes();
 }
 
-size_t pancake_ghost_count(uint32_t h) {
+size_t pikelet_ghost_count(uint32_t h) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return 0;
     return g_handles[h].index->ghost_count();
 }
 
-float pancake_ghost_ratio(uint32_t h) {
+float pikelet_ghost_ratio(uint32_t h) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return 0.0f;
     return g_handles[h].index->ghost_ratio();
 }
 
-int pancake_bulk_insert_flat(uint32_t h, const float* vecs, int n) {
-    return pancake_bulk_insert(h, vecs, n);
+int pikelet_bulk_insert_flat(uint32_t h, const float* vecs, int n) {
+    return pikelet_bulk_insert(h, vecs, n);
 }
 
-uint8_t* pancake_export(uint32_t h, size_t* out_size) {
+uint8_t* pikelet_export(uint32_t h, size_t* out_size) {
     if (h >= MAX_HANDLES || !g_handles[h].index) {
         if (out_size) *out_size = 0;
         return nullptr;
@@ -319,7 +319,7 @@ uint8_t* pancake_export(uint32_t h, size_t* out_size) {
     return g_export_bufs[h].data();
 }
 
-int pancake_import(uint32_t h, const uint8_t* data, size_t size) {
+int pikelet_import(uint32_t h, const uint8_t* data, size_t size) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return -1;
     // deserialize() parses an untrusted buffer. Bounds and level/scale caps make
     // a hostile snapshot fail closed, but a remaining oversized resize() could
@@ -332,11 +332,11 @@ int pancake_import(uint32_t h, const uint8_t* data, size_t size) {
     }
 }
 
-void pancake_dispose(uint32_t h) {
+void pikelet_dispose(uint32_t h) {
     free_handle(h);
 }
 
-int pancake_dimension(uint32_t h) {
+int pikelet_dimension(uint32_t h) {
     if (h >= MAX_HANDLES || !g_handles[h].index) return 0;
     return static_cast<int>(g_handles[h].index->dimension());
 }
@@ -349,7 +349,7 @@ int pancake_dimension(uint32_t h) {
 void* emsc_malloc(size_t size) { return malloc(size); }
 void emsc_free(void* ptr) { free(ptr); }
 
-void pancake_profile_print(uint32_t range_start, uint32_t range_end) {
+void pikelet_profile_print(uint32_t range_start, uint32_t range_end) {
 #if defined(PIKELET_UINT8_HNSW_BUILD_PROFILE)
     pikelet::wasm::g_build_profile.print(range_start, range_end);
 #else
@@ -358,7 +358,7 @@ void pancake_profile_print(uint32_t range_start, uint32_t range_end) {
 #endif
 }
 
-void pancake_profile_reset() {
+void pikelet_profile_reset() {
 #if defined(PIKELET_UINT8_HNSW_BUILD_PROFILE)
     pikelet::wasm::g_build_profile.reset();
 #endif
@@ -386,7 +386,7 @@ void pancake_profile_reset() {
 // score). dims must be a multiple of 16 for the SIMD path; any dims works
 // on the scalar tail.
 
-int pancake_sketch_scan(const uint8_t* sketches,
+int pikelet_sketch_scan(const uint8_t* sketches,
                         const float* scales,
                         const float* offsets,
                         uint32_t count,
@@ -554,7 +554,7 @@ int pancake_sketch_scan(const uint8_t* sketches,
 // Global cleanup
 // =============================================================================
 
-void pancake_shutdown_all() {
+void pikelet_shutdown_all() {
     // Free all handle-based indexes
     for (uint32_t i = 0; i < MAX_HANDLES; i++) {
         free_handle(i);
@@ -562,7 +562,7 @@ void pancake_shutdown_all() {
 }
 
 void shutdown_all() {
-    pancake_shutdown_all();
+    pikelet_shutdown_all();
 }
 
 } // extern "C"

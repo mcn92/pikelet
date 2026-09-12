@@ -1375,7 +1375,7 @@ def main() -> None:
             encoding="utf-8",
         )
     manifest = {
-        "format": "pancake-distilled-student",
+        "format": "pikelet-distilled-student",
         "version": VERSION,
         "teacher": args.teacher,
         "teacherRevision": args.teacher_revision,

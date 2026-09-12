@@ -3,7 +3,7 @@
 // version, resultType, CacheableResult hints, UnsupportedProtocolVersion)
 // and legacy handshake (2025-11-25 and earlier — initialize/initialized).
 // Runs against a stubbed pack (runMcpServer takes an injected
-// openPancakeFile), so it is protocol-only and fast enough for every CI
+// openPikeletFile), so it is protocol-only and fast enough for every CI
 // run — no compile, no encoder, no network.
 
 import { PassThrough } from 'node:stream';
@@ -59,7 +59,7 @@ async function withServer(fn) {
     });
     const done = runMcpServer({
         packPaths: ['stub.pikelet'],
-        openPancakeFile: async () => stubPack(),
+        openPikeletFile: async () => stubPack(),
         httpRangeSource: () => { throw new Error('no network in conformance'); },
         serverVersion: '0.0.0-test',
         stdin,

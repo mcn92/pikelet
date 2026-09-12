@@ -25,9 +25,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import {
     buildCorpusSegment, buildCorpusSegmentFromBuffers, buildQueryInterpSegment,
-    assemblePancakeFile, buildLexicalSegment, PROFILE_V1, PROFILE_V2, sha256, canonicalJson,
+    assemblePikeletFile, buildLexicalSegment, PROFILE_V1, PROFILE_V2, sha256, canonicalJson,
 } from '../complete/builder.mjs';
-import { openPancakeFile, verifyHostEncoder } from '../complete/index.mjs';
+import { openPikeletFile, verifyHostEncoder } from '../complete/index.mjs';
 import { openLexicalIndex } from '../complete/lexical.mjs';
 
 const require = createRequire(import.meta.url);
@@ -109,7 +109,7 @@ function buildSyntheticSketch() {
             qdata[i * DIM + d] = b < 0 ? 0 : b > 255 ? 255 : b;
         }
     }
-    const sketchPath = path.join(tmp, 'synthetic.pancake-sketch');
+    const sketchPath = path.join(tmp, 'synthetic.pikelet-sketch');
     exportSketchArtifact({ dim: DIM, count: COUNT, metric: 1, qdata, scales, offsets }, sketchPath,
         { sketchDims: DIM, sketchBits: 8, recommendedRerank: 40 });
     return fs.readFileSync(sketchPath);
@@ -162,7 +162,7 @@ function buildSynthetic({ profile = PROFILE_V2, declaration = kind2Declaration()
     };
     if (manifestPatch) manifestPatch(manifest);
     const outPath = path.join(tmp, `${name}.pikelet`);
-    const built = assemblePancakeFile(manifest, segments, outPath);
+    const built = assemblePikeletFile(manifest, segments, outPath);
     return { bytes: fs.readFileSync(outPath), path: outPath, built };
 }
 
@@ -192,9 +192,9 @@ console.log('A. synthetic kind-2 artifact, format 2');
 const A = buildSynthetic();
 {
     const src = memorySource(A.bytes);
-    const search = await openPancakeFile(src, { encodeQuery: hostEncode });
+    const search = await openPikeletFile(src, { encodeQuery: hostEncode });
     const info = search.info();
-    check('opens: format 2 / pancake-complete-v2', info.formatVersion === 2 && info.profile === PROFILE_V2);
+    check('opens: format 2 / pikelet-complete-v2', info.formatVersion === 2 && info.profile === PROFILE_V2);
     check('host encoder verified against the declaration vectors', info.encoderVerified === true);
     check('corpus integrity reported per-record', info.corpusIntegrity === 'per-record-sha256');
     check('record count and dim', info.records === COUNT && info.dim === DIM);
@@ -229,7 +229,7 @@ const A = buildSynthetic();
 
 // Source without a size (browser-style HTTP source before init()).
 {
-    const search = await openPancakeFile(memorySource(A.bytes, { withSize: false }), { encodeQuery: hostEncode });
+    const search = await openPikeletFile(memorySource(A.bytes, { withSize: false }), { encodeQuery: hostEncode });
     const q = await search.query('rec 42', { k: 1 });
     check('opens and queries through a source that reports no size', q.results[0].id === 42);
     await search.close();
@@ -239,22 +239,22 @@ const A = buildSynthetic();
 {
     const perturbed = (text) => { const v = hostEncode(text); v[0] += 0.01; return v; };
     await rejects('a host encoder that disagrees with the verification vectors is refused at open',
-        () => openPancakeFile(memorySource(A.bytes), { encodeQuery: perturbed }), /failed the artifact's verification vector/);
+        () => openPikeletFile(memorySource(A.bytes), { encodeQuery: perturbed }), /failed the artifact's verification vector/);
     await rejects('a host encoder of the wrong dimension is refused at open',
-        () => openPancakeFile(memorySource(A.bytes), { encodeQuery: () => new Float32Array(DIM + 1) }), /must return a 16-dimensional vector/);
+        () => openPikeletFile(memorySource(A.bytes), { encodeQuery: () => new Float32Array(DIM + 1) }), /must return a 16-dimensional vector/);
     await rejects('a host encoder returning non-finite components is refused',
-        () => openPancakeFile(memorySource(A.bytes), { encodeQuery: () => { const v = hostEncode('x'); v[3] = NaN; return v; } }), /non-finite/);
+        () => openPikeletFile(memorySource(A.bytes), { encodeQuery: () => { const v = hostEncode('x'); v[3] = NaN; return v; } }), /non-finite/);
     await rejects('encodeQuery must be a function',
-        () => openPancakeFile(memorySource(A.bytes), { encodeQuery: 42 }), /must be a function/);
-    const noHost = await openPancakeFile(memorySource(A.bytes));
+        () => openPikeletFile(memorySource(A.bytes), { encodeQuery: 42 }), /must be a function/);
+    const noHost = await openPikeletFile(memorySource(A.bytes));
     check('without a host encoder the artifact opens and surfaces the requirement', noHost.info().encoderVerified === null);
     await rejects('...but refuses queries until one is supplied', () => noHost.query('rec 1'), /pass options.encodeQuery/);
     await noHost.close();
-    const unverified = await openPancakeFile(memorySource(A.bytes), { encodeQuery: perturbed, verifyEncoder: false });
+    const unverified = await openPikeletFile(memorySource(A.bytes), { encodeQuery: perturbed, verifyEncoder: false });
     check('verifyEncoder:false serves a wrong encoder, marked unverified', unverified.info().encoderVerified === false);
     await unverified.close();
     // Host encoders that return plain arrays are accepted and converted.
-    const arrays = await openPancakeFile(memorySource(A.bytes), { encodeQuery: (t) => Array.from(hostEncode(t)) });
+    const arrays = await openPikeletFile(memorySource(A.bytes), { encodeQuery: (t) => Array.from(hostEncode(t)) });
     check('host encoder may return a plain number[]', (await arrays.query('rec 9', { k: 1 })).results[0].id === 9);
     await arrays.close();
     // verifyHostEncoder is exported for hosts that want to check before opening.
@@ -266,8 +266,8 @@ const A = buildSynthetic();
 {
     const noVec = buildSynthetic({ declaration: kind2Declaration({ withVectors: false }), name: 'novectors' });
     await rejects('kind-2 declaration without vectors is refused with a host encoder by default',
-        () => openPancakeFile(memorySource(noVec.bytes), { encodeQuery: hostEncode }), /without verification vectors/);
-    const allowed = await openPancakeFile(memorySource(noVec.bytes), { encodeQuery: hostEncode, allowUnverifiedEncoder: true });
+        () => openPikeletFile(memorySource(noVec.bytes), { encodeQuery: hostEncode }), /without verification vectors/);
+    const allowed = await openPikeletFile(memorySource(noVec.bytes), { encodeQuery: hostEncode, allowUnverifiedEncoder: true });
     check('allowUnverifiedEncoder serves it, marked unverified', allowed.info().encoderVerified === false
         && (await allowed.query('rec 5', { k: 1 })).results[0].id === 5);
     await allowed.close();
@@ -286,13 +286,13 @@ const A = buildSynthetic();
     const r17end = recStart(18);
     const textAt = tampered.subarray(r17, r17end).indexOf('carries') + r17 + 1; // the 'a' of "carries"
     tampered[textAt] ^= 0x01;
-    const t = await openPancakeFile(memorySource(tampered), { encodeQuery: hostEncode });
+    const t = await openPikeletFile(memorySource(tampered), { encodeQuery: hostEncode });
     check('open succeeds with a tampered record (records are lazy)', t.info().corpusIntegrity === 'per-record-sha256');
     await rejects('hydrating the tampered record fails its per-record digest', () => t.record(17), /record 17 failed integrity verification/);
     check('neighboring records in the same page still hydrate', (await t.record(16)).title === 'rec 16' && (await t.record(18)).title === 'rec 18');
     await rejects('a query that lands on the tampered record fails loudly', () => t.query('rec 17', { k: 1 }), /record 17 failed integrity/);
     await t.close();
-    const unverified = await openPancakeFile(memorySource(tampered), { encodeQuery: hostEncode, verifyRecords: false });
+    const unverified = await openPikeletFile(memorySource(tampered), { encodeQuery: hostEncode, verifyRecords: false });
     const loose = await unverified.record(17);
     check('verifyRecords:false returns the tampered record and says so in info()',
         loose.text.includes('c`rries') && /unverified by option/.test(unverified.info().corpusIntegrity));
@@ -304,7 +304,7 @@ const A = buildSynthetic();
     const recordDigestsAt = pageTableAt + 32 * pages;
     const digestTampered = Buffer.from(A.bytes);
     digestTampered[recordDigestsAt + 32 * 100 + 5] ^= 0xff; // record 100's digest, page 1
-    const dt = await openPancakeFile(memorySource(digestTampered), { encodeQuery: hostEncode });
+    const dt = await openPikeletFile(memorySource(digestTampered), { encodeQuery: hostEncode });
     await rejects('a tampered record digest fails its digest page against the page table', () => dt.record(100), /digest page 1 failed hash verification/);
     check('records in other pages are unaffected', (await dt.record(3)).title === 'rec 3');
     await dt.close();
@@ -313,85 +313,85 @@ const A = buildSynthetic();
     // the identity-bound manifest).
     const pageTampered = Buffer.from(A.bytes);
     pageTampered[pageTableAt + 7] ^= 0xff;
-    await rejects('a tampered page table is refused at open', () => openPancakeFile(memorySource(pageTampered), { encodeQuery: hostEncode }), /page table failed hash verification/);
+    await rejects('a tampered page table is refused at open', () => openPikeletFile(memorySource(pageTampered), { encodeQuery: hostEncode }), /page table failed hash verification/);
 
     // Re-point record 17's offsets at record 18's bytes (still monotonic):
     // structure passes, the record digest does not.
     const swapped = Buffer.from(A.bytes);
     swapped.writeBigUInt64LE(BigInt(recStart(18) - corpus.offset), offsetsAt + 8 * 17);
-    const sw = await openPancakeFile(memorySource(swapped), { encodeQuery: hostEncode });
+    const sw = await openPikeletFile(memorySource(swapped), { encodeQuery: hostEncode });
     await rejects('an offsets table that maps a record to other bytes fails the per-record digest', () => sw.record(17), /record 17 failed integrity/);
     await sw.close();
 
     // Non-monotonic offsets: structural rejection before any digest work.
     const nonMono = Buffer.from(A.bytes);
     nonMono.writeBigUInt64LE(BigInt(recStart(30) - corpus.offset), offsetsAt + 8 * 5);
-    await rejects('non-monotonic corpus offsets are rejected at open', () => openPancakeFile(memorySource(nonMono), { encodeQuery: hostEncode }), /offsets are inconsistent/);
+    await rejects('non-monotonic corpus offsets are rejected at open', () => openPikeletFile(memorySource(nonMono), { encodeQuery: hostEncode }), /offsets are inconsistent/);
     const badFirst = Buffer.from(A.bytes);
     badFirst.writeBigUInt64LE(BigInt(recStart(0) - corpus.offset + 1), offsetsAt);
-    await rejects('offsets[0] must start exactly where the tables end', () => openPancakeFile(memorySource(badFirst), { encodeQuery: hostEncode }), /offsets are inconsistent/);
+    await rejects('offsets[0] must start exactly where the tables end', () => openPikeletFile(memorySource(badFirst), { encodeQuery: hostEncode }), /offsets are inconsistent/);
     const pastEnd = Buffer.from(A.bytes);
     pastEnd.writeBigUInt64LE(BigInt(corpus.length + 1), offsetsAt + 8 * COUNT);
-    await rejects('an offset past the segment is rejected at open', () => openPancakeFile(memorySource(pastEnd), { encodeQuery: hostEncode }), /offsets are inconsistent/);
+    await rejects('an offset past the segment is rejected at open', () => openPikeletFile(memorySource(pastEnd), { encodeQuery: hostEncode }), /offsets are inconsistent/);
     const huge = Buffer.from(A.bytes);
     huge.writeBigUInt64LE(BigInt('9007199254740993'), offsetsAt + 8 * COUNT); // 2^53 + 1
-    await rejects('an offset beyond the safe-integer range is rejected', () => openPancakeFile(memorySource(huge), { encodeQuery: hostEncode }), /safe integer range/);
+    await rejects('an offset beyond the safe-integer range is rejected', () => openPikeletFile(memorySource(huge), { encodeQuery: hostEncode }), /safe integer range/);
 }
 
 // Manifest / header / segment-table hostility.
 {
     const { manifestBytes, segments } = layoutOf(A.bytes);
     const m = Buffer.from(A.bytes); m[64 + 10] ^= 0x01;
-    await rejects('a tampered manifest fails identity verification', () => openPancakeFile(memorySource(m), { encodeQuery: hostEncode }), /identity verification/);
+    await rejects('a tampered manifest fails identity verification', () => openPikeletFile(memorySource(m), { encodeQuery: hostEncode }), /identity verification/);
     const id = Buffer.from(A.bytes); id[24 + 3] ^= 0x01;
-    await rejects('a tampered identity fails identity verification', () => openPancakeFile(memorySource(id), { encodeQuery: hostEncode }), /identity verification/);
+    await rejects('a tampered identity fails identity verification', () => openPikeletFile(memorySource(id), { encodeQuery: hostEncode }), /identity verification/);
     const ver = Buffer.from(A.bytes); ver.writeUInt32LE(3, 4);
-    await rejects('format version 3 is rejected explicitly', () => openPancakeFile(memorySource(ver), { encodeQuery: hostEncode }), /unsupported .pikelet format version 3/);
+    await rejects('format version 3 is rejected explicitly', () => openPikeletFile(memorySource(ver), { encodeQuery: hostEncode }), /unsupported .pikelet format version 3/);
     const magic = Buffer.from(A.bytes); magic[0] ^= 0x01;
-    await rejects('bad magic is rejected', () => openPancakeFile(memorySource(magic), { encodeQuery: hostEncode }), /bad magic/);
+    await rejects('bad magic is rejected', () => openPikeletFile(memorySource(magic), { encodeQuery: hostEncode }), /bad magic/);
     const v1Header = Buffer.from(A.bytes); v1Header.writeUInt32LE(1, 4);
-    await rejects('a format-1 header over a v2 manifest is rejected', () => openPancakeFile(memorySource(v1Header), { encodeQuery: hostEncode }), /unsupported profile/);
+    await rejects('a format-1 header over a v2 manifest is rejected', () => openPikeletFile(memorySource(v1Header), { encodeQuery: hostEncode }), /unsupported profile/);
     const bigManifest = Buffer.from(A.bytes); bigManifest.writeUInt32LE(17 * 1024 * 1024, 8);
-    await rejects('an implausible manifest length is rejected before reading', () => openPancakeFile(memorySource(bigManifest), { encodeQuery: hostEncode }), /implausible/);
+    await rejects('an implausible manifest length is rejected before reading', () => openPikeletFile(memorySource(bigManifest), { encodeQuery: hostEncode }), /implausible/);
     const manySegs = Buffer.from(A.bytes); manySegs.writeUInt32LE(65, 12);
-    await rejects('an implausible segment count is rejected before reading', () => openPancakeFile(memorySource(manySegs), { encodeQuery: hostEncode }), /implausible/);
+    await rejects('an implausible segment count is rejected before reading', () => openPikeletFile(memorySource(manySegs), { encodeQuery: hostEncode }), /implausible/);
     const fileBytesUp = Buffer.from(A.bytes); fileBytesUp.writeBigUInt64LE(BigInt(A.bytes.length + 16), 16);
-    await rejects('fileBytes disagreeing with the source size is rejected', () => openPancakeFile(memorySource(fileBytesUp), { encodeQuery: hostEncode }), /truncated or padded/);
+    await rejects('fileBytes disagreeing with the source size is rejected', () => openPikeletFile(memorySource(fileBytesUp), { encodeQuery: hostEncode }), /truncated or padded/);
     const fileBytesHuge = Buffer.from(A.bytes); fileBytesHuge.writeBigUInt64LE(BigInt('18446744073709551615'), 16);
-    await rejects('fileBytes beyond the safe-integer range is rejected', () => openPancakeFile(memorySource(fileBytesHuge, { withSize: false }), { encodeQuery: hostEncode }), /safe integer range/);
+    await rejects('fileBytes beyond the safe-integer range is rejected', () => openPikeletFile(memorySource(fileBytesHuge, { withSize: false }), { encodeQuery: hostEncode }), /safe integer range/);
     // Segment table: push the corpus segment's length past the file.
     const tableAt = 64 + manifestBytes;
     const segLen = Buffer.from(A.bytes); segLen.writeBigUInt64LE(BigInt(segments.corpus.length + 64), tableAt + 48 * 1 + 16);
-    await rejects('a segment-table length disagreeing with the manifest is rejected', () => openPancakeFile(memorySource(segLen), { encodeQuery: hostEncode }), /segment table disagrees/);
+    await rejects('a segment-table length disagreeing with the manifest is rejected', () => openPikeletFile(memorySource(segLen), { encodeQuery: hostEncode }), /segment table disagrees/);
     const segOff = Buffer.from(A.bytes); segOff.writeBigUInt64LE(BigInt(segments.corpus.offset + 16), tableAt + 48 * 1 + 8);
-    await rejects('a segment-table offset breaking the packed layout is rejected', () => openPancakeFile(memorySource(segOff), { encodeQuery: hostEncode }), /segment table disagrees/);
+    await rejects('a segment-table offset breaking the packed layout is rejected', () => openPikeletFile(memorySource(segOff), { encodeQuery: hostEncode }), /segment table disagrees/);
     // Truncation with an unsized source: the eager reads succeed, the lazy
     // evaluation read comes back short and is refused as such.
     const truncated = A.bytes.subarray(0, A.bytes.length - 10);
-    const tr = await openPancakeFile(memorySource(truncated, { withSize: false }), { encodeQuery: hostEncode });
+    const tr = await openPikeletFile(memorySource(truncated, { withSize: false }), { encodeQuery: hostEncode });
     await rejects('a short read from a truncated source is refused (exact-length reads)', () => tr.evaluation(), /read returned .* of .* bytes/);
     await tr.close();
-    await rejects('a truncated sized source is refused at open', () => openPancakeFile(memorySource(truncated), { encodeQuery: hostEncode }), /truncated or padded/);
+    await rejects('a truncated sized source is refused at open', () => openPikeletFile(memorySource(truncated), { encodeQuery: hostEncode }), /truncated or padded/);
     // Evaluation tamper.
     const ev = Buffer.from(A.bytes); ev[ev.length - 3] ^= 0xff;
-    const evr = await openPancakeFile(memorySource(ev), { encodeQuery: hostEncode });
+    const evr = await openPikeletFile(memorySource(ev), { encodeQuery: hostEncode });
     await rejects('a tampered evaluation segment fails its digest', () => evr.evaluation(), /evaluation segment failed hash/);
     await evr.close();
     // Query-interp tamper: eager, refused at open.
     const qi = Buffer.from(A.bytes); qi[segments['query-interp'].offset + 20] ^= 0x01;
-    await rejects('a tampered query-interp segment is refused at open', () => openPancakeFile(memorySource(qi), { encodeQuery: hostEncode }), /query-interp segment failed hash/);
+    await rejects('a tampered query-interp segment is refused at open', () => openPikeletFile(memorySource(qi), { encodeQuery: hostEncode }), /query-interp segment failed hash/);
 }
 
 // Read budgets.
 {
     await rejects('maxReadBytes below the manifest size refuses the open with the budget named',
-        () => openPancakeFile(memorySource(A.bytes), { encodeQuery: hostEncode, maxReadBytes: 64 }), /exceeds the 64-byte read budget/);
-    await rejects('maxReadBytes must be positive', () => openPancakeFile(memorySource(A.bytes), { maxReadBytes: -1 }), /must be a positive number or Infinity/);
-    await rejects('maxReadBytes must be a number', () => openPancakeFile(memorySource(A.bytes), { maxReadBytes: '1mb' }), /must be a positive number or Infinity/);
-    const inf = await openPancakeFile(memorySource(A.bytes), { encodeQuery: hostEncode, maxReadBytes: Infinity });
+        () => openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode, maxReadBytes: 64 }), /exceeds the 64-byte read budget/);
+    await rejects('maxReadBytes must be positive', () => openPikeletFile(memorySource(A.bytes), { maxReadBytes: -1 }), /must be a positive number or Infinity/);
+    await rejects('maxReadBytes must be a number', () => openPikeletFile(memorySource(A.bytes), { maxReadBytes: '1mb' }), /must be a positive number or Infinity/);
+    const inf = await openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode, maxReadBytes: Infinity });
     check('maxReadBytes: Infinity defers to the absolute backstop', (await inf.query('rec 2', { k: 1 })).results[0].id === 2);
     await inf.close();
-    const tinyRecords = await openPancakeFile(memorySource(A.bytes), { encodeQuery: hostEncode, maxRecordBytes: 8 });
+    const tinyRecords = await openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode, maxRecordBytes: 8 });
     await rejects('maxRecordBytes bounds each hydration read', () => tinyRecords.record(1), /corpus record 1 read of .* exceeds the 8-byte read budget/);
     await tinyRecords.close();
 }
@@ -405,7 +405,7 @@ const A = buildSynthetic();
         : b));
     const spoofCorpus = buildCorpusSegment(spoofRecords, { pageRecords: PAGE_RECORDS });
     const spoofPath = path.join(tmp, 'spoof.pikelet');
-    assemblePancakeFile({
+    assemblePikeletFile({
         profile: PROFILE_V2, corpus: { ...spoofCorpus.corpus, provenance: null }, dim: DIM, metric: 'cosine',
         encoder: { kind: 'external-transformers-v1' }, recommendedRerank: 40, sampleQueries: [],
     }, [
@@ -414,7 +414,7 @@ const A = buildSynthetic();
         { kind: 'query-interp', bytes: buildQueryInterpSegment(2, Buffer.from(JSON.stringify(kind2Declaration()), 'utf8'), CALIBRATION) },
         { kind: 'evaluation', bytes: EVALUATION },
     ], spoofPath);
-    const spoof = await openPancakeFile(spoofPath, { encodeQuery: hostEncode });
+    const spoof = await openPikeletFile(spoofPath, { encodeQuery: hostEncode });
     const hit = (await spoof.query('rec 17', { k: 1 })).results[0];
     check('a record\'s own id/distance fields do not overwrite the search id/distance', hit.id === 17 && hit.distance >= 0 && hit.title === 'rec 17', JSON.stringify(hit).slice(0, 120));
     // 8. k: absent -> default; supplied must be a positive integer.
@@ -452,7 +452,7 @@ const A = buildSynthetic();
             },
             async close() {},
         };
-        const fl = await openPancakeFile(flaky, { encodeQuery: hostEncode });
+        const fl = await openPikeletFile(flaky, { encodeQuery: hostEncode });
         await rejects('first hydration fails with the transport error', () => fl.record(100), /simulated transport failure/);
         check('the failed digest page is not cached: the retry succeeds', (await fl.record(100)).title === 'rec 100');
         await fl.close();
@@ -516,14 +516,14 @@ const A = buildSynthetic();
     const metricFlip = Buffer.from(A.bytes);
     metricFlip.writeUInt32LE(0, segments.index.offset + 12); // metric: cosine -> l2
     await rejects('format 2: a flipped index metric fails the manifest header commitment',
-        () => openPancakeFile(memorySource(metricFlip), { encodeQuery: hostEncode }), /index header failed hash verification/);
+        () => openPikeletFile(memorySource(metricFlip), { encodeQuery: hostEncode }), /index header failed hash verification/);
     // A header field the sketch never self-verifies (recommendedRerank at
     // offset 120) is caught ONLY by the manifest commitment — this is the
     // deterministic proof of the anchor.
     const rerankFlip = Buffer.from(A.bytes);
     rerankFlip.writeUInt32LE(7, segments.index.offset + 120);
     await rejects('format 2: a tampered sketch header field the sketch never self-checks fails the manifest commitment',
-        () => openPancakeFile(memorySource(rerankFlip), { encodeQuery: hostEncode }), /index header failed hash verification/);
+        () => openPikeletFile(memorySource(rerankFlip), { encodeQuery: hostEncode }), /index header failed hash verification/);
     // Rewriting the sketch's own residentSha256 fails both the manifest
     // commitment and the sketch's resident self-check; they run in the same
     // open wave, so whichever rejects first surfaces — either way the open
@@ -531,7 +531,7 @@ const A = buildSynthetic();
     const selfHash = Buffer.from(A.bytes);
     selfHash[segments.index.offset + 60] ^= 0xff;
     await rejects('format 2: a rewritten sketch self-hash fails the open (manifest commitment or resident self-check)',
-        () => openPancakeFile(memorySource(selfHash), { encodeQuery: hostEncode }),
+        () => openPikeletFile(memorySource(selfHash), { encodeQuery: hostEncode }),
         /index header failed hash verification|resident prefix failed hash verification/);
     // Format 1 has no header commitment; the metric cross-check against the
     // identity-verified manifest is the binding there.
@@ -540,7 +540,7 @@ const A = buildSynthetic();
     const v1flip = Buffer.from(v1.bytes);
     v1flip.writeUInt32LE(0, v1layout.segments.index.offset + 12);
     await rejects('format 1: a flipped index metric fails the manifest cross-check',
-        () => openPancakeFile(memorySource(v1flip), { encodeQuery: hostEncode }), /index metric l2 != manifest metric cosine/);
+        () => openPikeletFile(memorySource(v1flip), { encodeQuery: hostEncode }), /index metric l2 != manifest metric cosine/);
 }
 
 // Lazy vector rows: with a format-2 embedded sketch (the default build),
@@ -551,7 +551,7 @@ const A = buildSynthetic();
     // block's rows, far past the resident prefix.
     const rowTamper = Buffer.from(A.bytes);
     rowTamper[segments.index.offset + segments.index.length - 8] ^= 0xff;
-    const lazy = await openPancakeFile(memorySource(rowTamper), { encodeQuery: hostEncode });
+    const lazy = await openPikeletFile(memorySource(rowTamper), { encodeQuery: hostEncode });
     check('the reader reports per-row index integrity for the format-2 sketch',
         lazy.info().indexRowIntegrity === 'per-row-sha256' && lazy.info().vectorsVerified === false);
     await rejects('a query whose rerank touches the tampered row fails its per-row digest',
@@ -559,8 +559,8 @@ const A = buildSynthetic();
     await rejects('...and verifyVectors() detects it too', () => lazy.verifyVectors(), /vector|hash/i);
     await lazy.close();
     await rejects('verifyIndexVectors: true refuses the tamper at open',
-        () => openPancakeFile(memorySource(rowTamper), { encodeQuery: hostEncode, verifyIndexVectors: true }), /vector|hash/i);
-    const clean = await openPancakeFile(memorySource(A.bytes), { encodeQuery: hostEncode, verifyIndexVectors: true });
+        () => openPikeletFile(memorySource(rowTamper), { encodeQuery: hostEncode, verifyIndexVectors: true }), /vector|hash/i);
+    const clean = await openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode, verifyIndexVectors: true });
     check('verifyIndexVectors: true on a clean artifact opens with vectorsVerified true',
         clean.info().vectorsVerified === true && (await clean.query('rec 17', { k: 1 })).results[0].id === 17);
     await clean.close();
@@ -580,7 +580,7 @@ const A = buildSynthetic();
     for (const [label, testVectors] of cases) {
         const bad = buildSynthetic({ declaration: { ...kind2Declaration({ withVectors: false }), testVectors }, name: `badvec-${label.replace(/[^a-z]/g, '')}` });
         await rejects(`a declaration with ${label} fails encoder verification instead of passing vacuously`,
-            () => openPancakeFile(memorySource(bad.bytes), { encodeQuery: wrongEncoder }), /expected embedding/);
+            () => openPikeletFile(memorySource(bad.bytes), { encodeQuery: wrongEncoder }), /expected embedding/);
     }
     // NaN / Infinity cannot ride in JSON, but the exported API can receive
     // them programmatically.
@@ -591,7 +591,7 @@ const A = buildSynthetic();
     // And the validated path still catches a genuinely wrong encoder.
     const good = buildSynthetic({ name: 'goodvec' });
     await rejects('a wrong encoder still fails against well-formed vectors',
-        () => openPancakeFile(memorySource(good.bytes), { encodeQuery: wrongEncoder }), /failed the artifact's verification vector/);
+        () => openPikeletFile(memorySource(good.bytes), { encodeQuery: wrongEncoder }), /failed the artifact's verification vector/);
 }
 
 // Builders accept plain Uint8Arrays wherever the typings say Uint8Array.
@@ -602,7 +602,7 @@ const A = buildSynthetic();
         new Uint8Array(Buffer.from(JSON.stringify(kind2Declaration()), 'utf8')),
         new Uint8Array(CALIBRATION));
     const u8path = path.join(tmp, 'u8.pikelet');
-    assemblePancakeFile({
+    assemblePikeletFile({
         profile: PROFILE_V2, corpus: { ...u8corpus.corpus, provenance: null }, dim: DIM, metric: 'cosine',
         encoder: { kind: 'external-transformers-v1' }, recommendedRerank: 40, sampleQueries: [],
     }, [
@@ -611,7 +611,7 @@ const A = buildSynthetic();
         { kind: 'query-interp', bytes: u8qi },
         { kind: 'evaluation', bytes: new Uint8Array(EVALUATION) },
     ], u8path);
-    const u8 = await openPancakeFile(u8path, { encodeQuery: hostEncode });
+    const u8 = await openPikeletFile(u8path, { encodeQuery: hostEncode });
     check('an artifact built entirely from plain Uint8Arrays opens and queries',
         (await u8.query('rec 17', { k: 1 })).results[0].id === 17);
     // set() must write the same bytes copy() did: the segments (index,
@@ -637,7 +637,7 @@ const A = buildSynthetic();
     const noEval = (() => {
         const corpus = buildCorpusSegment(RECORDS, { pageRecords: PAGE_RECORDS });
         const outPath = path.join(tmp, 'noeval.pikelet');
-        assemblePancakeFile({
+        assemblePikeletFile({
             profile: PROFILE_V2, corpus: { ...corpus.corpus, provenance: null }, dim: DIM, metric: 'cosine',
             encoder: { kind: 'external-transformers-v1' }, recommendedRerank: 40, sampleQueries: [],
         }, [
@@ -647,7 +647,7 @@ const A = buildSynthetic();
         ], outPath);
         return fs.readFileSync(outPath);
     })();
-    const ne = await openPancakeFile(memorySource(noEval), { encodeQuery: hostEncode });
+    const ne = await openPikeletFile(memorySource(noEval), { encodeQuery: hostEncode });
     check('evaluation() is null when the artifact carries no evaluation segment', (await ne.evaluation()) === null);
     await ne.close();
     const arrayEval = buildSynthetic({ name: 'arrayeval' });
@@ -655,7 +655,7 @@ const A = buildSynthetic();
     // Rebuild with an array evaluation segment.
     const corpus = buildCorpusSegment(RECORDS, { pageRecords: PAGE_RECORDS });
     const outPath = path.join(tmp, 'arrayeval2.pikelet');
-    assemblePancakeFile({
+    assemblePikeletFile({
         profile: PROFILE_V2, corpus: { ...corpus.corpus, provenance: null }, dim: DIM, metric: 'cosine',
         encoder: { kind: 'external-transformers-v1' }, recommendedRerank: 40, sampleQueries: [],
     }, [
@@ -664,7 +664,7 @@ const A = buildSynthetic();
         { kind: 'query-interp', bytes: buildQueryInterpSegment(2, Buffer.from(JSON.stringify(kind2Declaration()), 'utf8'), CALIBRATION) },
         { kind: 'evaluation', bytes: Buffer.from('[1,2]', 'utf8') },
     ], outPath);
-    const av = await openPancakeFile(outPath, { encodeQuery: hostEncode });
+    const av = await openPikeletFile(outPath, { encodeQuery: hostEncode });
     await rejects('a non-object evaluation segment is refused', () => av.evaluation(), /must be a JSON object/);
     await av.close();
     void ae;
@@ -722,11 +722,11 @@ const A = buildSynthetic();
 // Unknown and duplicate segments; manifest integrity-block consistency.
 {
     const extra = buildSynthetic({ extraSegments: [{ kind: 'vendor-extra', kindNumber: 9, bytes: Buffer.from('opaque future segment') }], name: 'extra' });
-    const ex = await openPancakeFile(memorySource(extra.bytes), { encodeQuery: hostEncode });
+    const ex = await openPikeletFile(memorySource(extra.bytes), { encodeQuery: hostEncode });
     check('an unknown segment kind is skipped and the file still serves', (await ex.query('rec 7', { k: 1 })).results[0].id === 7);
     await ex.close();
     const dup = buildSynthetic({ extraSegments: [{ kind: 'corpus', bytes: buildCorpusSegment(RECORDS.slice(0, 2)).bytes }], name: 'dup' });
-    await rejects('a duplicate corpus segment is rejected', () => openPancakeFile(memorySource(dup.bytes), { encodeQuery: hostEncode }), /more than one corpus segment/);
+    await rejects('a duplicate corpus segment is rejected', () => openPikeletFile(memorySource(dup.bytes), { encodeQuery: hostEncode }), /more than one corpus segment/);
     const inflated = buildSynthetic({
         name: 'inflated',
         manifestPatch: (m) => {
@@ -738,25 +738,25 @@ const A = buildSynthetic();
         },
     });
     await rejects('a manifest record count the segment cannot hold is rejected before allocation',
-        () => openPancakeFile(memorySource(inflated.bytes), { encodeQuery: hostEncode }), /implausible for the corpus segment/);
+        () => openPikeletFile(memorySource(inflated.bytes), { encodeQuery: hostEncode }), /implausible for the corpus segment/);
     const badPages = buildSynthetic({ name: 'badpages', manifestPatch: (m) => { m.corpus.pages += 1; } });
-    await rejects('an inconsistent integrity block is rejected', () => openPancakeFile(memorySource(badPages.bytes), { encodeQuery: hostEncode }), /integrity block is inconsistent/);
+    await rejects('an inconsistent integrity block is rejected', () => openPikeletFile(memorySource(badPages.bytes), { encodeQuery: hostEncode }), /integrity block is inconsistent/);
     const badDim = buildSynthetic({ name: 'baddim', manifestPatch: (m) => { m.dim = DIM + 1; } });
     await rejects('a kind-2 declaration dim disagreeing with the manifest is rejected',
-        () => openPancakeFile(memorySource(badDim.bytes), { encodeQuery: () => new Float32Array(DIM + 1) }), /disagrees with manifest dim/);
+        () => openPikeletFile(memorySource(badDim.bytes), { encodeQuery: () => new Float32Array(DIM + 1) }), /disagrees with manifest dim/);
 }
 
 // ---------------------------------------------------------------------------
 // B. format 1 compatibility (whole-segment integrity only)
 // ---------------------------------------------------------------------------
-console.log('\nB. format-1 file (pancake-complete-v1) compatibility');
+console.log('\nB. format-1 file (pikelet-complete-v1) compatibility');
 {
     const B = buildSynthetic({ profile: PROFILE_V1, name: 'v1' });
     const view = new DataView(B.bytes.buffer, B.bytes.byteOffset, B.bytes.byteLength);
     check('builder writes header formatVersion 1 for the v1 profile', view.getUint32(4, true) === 1);
-    const search = await openPancakeFile(memorySource(B.bytes), { encodeQuery: hostEncode });
+    const search = await openPikeletFile(memorySource(B.bytes), { encodeQuery: hostEncode });
     const info = search.info();
-    check('opens: format 1 / pancake-complete-v1', info.formatVersion === 1 && info.profile === PROFILE_V1);
+    check('opens: format 1 / pikelet-complete-v1', info.formatVersion === 1 && info.profile === PROFILE_V1);
     check('reports the transitional whole-segment integrity', info.corpusIntegrity === 'segment-sha256');
     check('queries and hydrates', (await search.query('rec 17', { k: 1 })).results[0].title === 'rec 17');
     await search.close();
@@ -768,13 +768,13 @@ console.log('\nB. format-1 file (pancake-complete-v1) compatibility');
     const tampered = Buffer.from(B.bytes);
     const textAt = tampered.indexOf('carries', r17) + 1;
     tampered[textAt] ^= 0x01;
-    const t = await openPancakeFile(memorySource(tampered), { encodeQuery: hostEncode });
+    const t = await openPikeletFile(memorySource(tampered), { encodeQuery: hostEncode });
     const rec = await t.record(17);
     check('format 1: a record tamper is NOT detected on hydration (transitional stance, spec 6)', rec.text.includes('c`rries'));
     await t.close();
     await rejects('a v2 manifest under a format-1 header is rejected', () => {
         const bad = buildSynthetic({ profile: PROFILE_V1, name: 'v1bad', manifestPatch: (m) => { m.corpus.layout = 'records-v2'; } });
-        return openPancakeFile(memorySource(bad.bytes));
+        return openPikeletFile(memorySource(bad.bytes));
     }, /carries corpus layout v1|records-v2/);
 }
 
@@ -797,7 +797,7 @@ console.log('\nC. kind-1 student-inline artifact compiled from examples/03 asset
     const compileDocs = (name) => {
         const { bytes: sketchBytes } = Pikelet.buildSketchArtifactBytes(snapshot, { recommendedRerank: 120 });
         const corpus = buildCorpusSegment(records);
-        return assemblePancakeFile({
+        return assemblePikeletFile({
             profile: PROFILE_V2,
             corpus: { ...corpus.corpus, provenance: null },
             dim: sourceManifest.dim,
@@ -816,7 +816,7 @@ console.log('\nC. kind-1 student-inline artifact compiled from examples/03 asset
     const second = compileDocs('docs-b');
     check('compile is byte-deterministic (same identity twice)', first.identity === second.identity
         && sha256(fs.readFileSync(first.outPath)).equals(sha256(fs.readFileSync(second.outPath))));
-    const search = await openPancakeFile(first.outPath);
+    const search = await openPikeletFile(first.outPath);
     const info = search.info();
     check('kind-1 opens as format 2 with per-record integrity', info.formatVersion === 2 && info.corpusIntegrity === 'per-record-sha256' && info.records === count);
     check('inline student encoder needs no host verification (encoderVerified null)', info.encoderVerified === null);
@@ -877,7 +877,7 @@ console.log('\nD. lexical segment and hybrid retrieval');
         extraSegments: [{ kind: 'lexical', bytes: lexical.bytes }],
         manifestPatch: (m) => { m.lexical = lexical.meta; },
     });
-    const search = await openPancakeFile(memorySource(H.bytes), { encodeQuery: hostEncode });
+    const search = await openPikeletFile(memorySource(H.bytes), { encodeQuery: hostEncode });
     check('info reports the lexical segment', search.info().lexical?.terms === lexical.meta.terms
         && search.info().lexical?.docCount === COUNT);
     // hostEncode('record number 17') is deterministic noise unrelated to
@@ -891,7 +891,7 @@ console.log('\nD. lexical segment and hybrid retrieval');
         hybrid.results.length === 3 && hybrid.results.every((r) => Number.isFinite(r.distance)));
     await search.close();
 
-    const vectorOnly = await openPancakeFile(memorySource(A.bytes), { encodeQuery: hostEncode });
+    const vectorOnly = await openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode });
     const control = await vectorOnly.query('record number 17', { k: 3 });
     check('vector-only artifact misses the same known-item lookup (control)',
         !control.results.some((r) => r.id === 17), JSON.stringify(control.results.map((r) => r.id)));
@@ -902,7 +902,7 @@ console.log('\nD. lexical segment and hybrid retrieval');
     const seg = layoutOf(tampered).segments.lexical;
     tampered[seg.offset + Math.floor(seg.length / 2)] ^= 0xff;
     await rejects('tampered lexical segment fails hash verification at open',
-        () => openPancakeFile(memorySource(tampered), { encodeQuery: hostEncode }),
+        () => openPikeletFile(memorySource(tampered), { encodeQuery: hostEncode }),
         /lexical segment failed hash/);
 
     // The lazy opener (wiki-scale path: interpolation search over remote
@@ -936,14 +936,14 @@ console.log('\nD. lexical segment and hybrid retrieval');
         async close() {},
     };
     await rejects('a mismatched identity pin refuses the open',
-        () => openPancakeFile(counting, { expectedIdentity: 'f'.repeat(64) }), /identity mismatch/);
+        () => openPikeletFile(counting, { expectedIdentity: 'f'.repeat(64) }), /identity mismatch/);
     check('the mismatch is decided on the header read alone', reads === 1, `${reads} reads`);
     await rejects('a malformed identity pin is rejected as such',
-        () => openPancakeFile(memorySource(A.bytes), { expectedIdentity: 'not-a-hash' }), /sha256 hex/);
-    const unpinned = await openPancakeFile(memorySource(A.bytes), { encodeQuery: hostEncode });
+        () => openPikeletFile(memorySource(A.bytes), { expectedIdentity: 'not-a-hash' }), /sha256 hex/);
+    const unpinned = await openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode });
     const trueIdentity = unpinned.info().identity;
     await unpinned.close();
-    const pinned = await openPancakeFile(memorySource(A.bytes), {
+    const pinned = await openPikeletFile(memorySource(A.bytes), {
         encodeQuery: hostEncode,
         expectedIdentity: trueIdentity.toUpperCase(), // case-insensitive pin
     });
@@ -1015,9 +1015,9 @@ console.log('\nD. lexical segment and hybrid retrieval');
     // The engine's SIMD scan kernel must select the same candidates the JS
     // scan does — the exact rerank then scores both sets identically, so
     // any divergence shows up as differing [id, distance] pairs.
-    const js = await openPancakeFile(memorySource(A.bytes), { encodeQuery: hostEncode, sketchScanner: false });
+    const js = await openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode, sketchScanner: false });
     check('sketchScanner:false reports residentScan js', js.info().residentScan === 'js');
-    const wasm = await openPancakeFile(memorySource(A.bytes), {
+    const wasm = await openPikeletFile(memorySource(A.bytes), {
         encodeQuery: hostEncode,
         sketchScanner: (sk) => Pikelet.createSketchScanner(sk, { maxRerank: 64 }),
     });
@@ -1047,7 +1047,7 @@ console.log('\nD. lexical segment and hybrid retrieval');
 
     // A factory that fails must leave the reader serving the JS scan, not
     // poison queries.
-    const broken = await openPancakeFile(memorySource(A.bytes), {
+    const broken = await openPikeletFile(memorySource(A.bytes), {
         encodeQuery: hostEncode,
         sketchScanner: () => { throw new Error('no engine here'); },
     });
@@ -1058,7 +1058,7 @@ console.log('\nD. lexical segment and hybrid retrieval');
     await broken.close();
 
     await rejects('a non-scanner sketchScanner option is rejected',
-        () => openPancakeFile(memorySource(A.bytes), { encodeQuery: hostEncode, sketchScanner: 42 }),
+        () => openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode, sketchScanner: 42 }),
         /sketchScanner must be false/);
 }
 

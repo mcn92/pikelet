@@ -10,7 +10,7 @@
 // pikelet-wasm/artifact. This file used to be a second implementation of
 // the PSF1 reader; keeping it as an adapter preserves the widget's API
 // while the format logic lives in one place.
-import { openPancakeFile, httpRangeSource } from 'pikelet-wasm/complete';
+import { openPikeletFile, httpRangeSource } from 'pikelet-wasm/complete';
 
 export async function openCompletePikeletUrl(url, options = {}) {
   const source = httpRangeSource(url, {
@@ -19,7 +19,7 @@ export async function openCompletePikeletUrl(url, options = {}) {
     maxFullFallbackBytes: options.maxFullFallbackBytes ?? 96 * 1024 * 1024,
   });
   await source.init();
-  const search = await openPancakeFile(source, {
+  const search = await openPikeletFile(source, {
     rerankParallelism: options.rerankParallelism,
     rerankGap: options.rerankGap,
     prefetchEncoder: options.prefetchEncoder,
@@ -48,7 +48,7 @@ function memorySource(bytes) {
 
 export async function openCompletePikelet(bytes, options = {}) {
   const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  const search = await openPancakeFile(memorySource(u8), {
+  const search = await openPikeletFile(memorySource(u8), {
     rerankParallelism: options.rerankParallelism,
     rerankGap: options.rerankGap,
   });

@@ -1,4 +1,4 @@
-import Pikelet, { PancakeError, PANCAKE_ERROR_CODES } from 'pikelet-wasm';
+import Pikelet, { PikeletError, PIKELET_ERROR_CODES } from 'pikelet-wasm';
 import * as encoder from './encoder.js';
 import SNAPSHOT_ASSET from './assets/snapshot.pnck';
 import CORPUS_ASSET from './assets/corpus.json';
@@ -10,12 +10,12 @@ const MAX_RESULTS = 8;
 const MAX_EF_SEARCH = 400;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const CLIENT_ERROR_CODES = new Set([
-  PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
-  PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
-  PANCAKE_ERROR_CODES.INVALID_VECTOR,
-  PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
-  PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
-  PANCAKE_ERROR_CODES.SNAPSHOT_CAPACITY_EXCEEDED,
+  PIKELET_ERROR_CODES.INVALID_ARGUMENT,
+  PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
+  PIKELET_ERROR_CODES.INVALID_VECTOR,
+  PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
+  PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+  PIKELET_ERROR_CODES.SNAPSHOT_CAPACITY_EXCEEDED,
 ]);
 
 let index = null;
@@ -323,7 +323,7 @@ export default {
         ? 503
         : error?.code === 'MANIFEST_MISMATCH'
           ? 500
-          : error instanceof PancakeError && CLIENT_ERROR_CODES.has(error.code)
+          : error instanceof PikeletError && CLIENT_ERROR_CODES.has(error.code)
             ? 400
             : 500;
       return withCors(jsonResponse({ error: error.message || String(error), code: error.code }, status), env);

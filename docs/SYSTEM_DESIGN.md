@@ -90,7 +90,7 @@ the caller's responsibility.
 
 One sibling of `pikelet-core.js` is deliberately absent from the diagram
 above: `pikelet-artifact.js`, the Search Artifact layer. It implements the
-sketch (`.pancake-sketch`) and deprecated range-readable (`.pancake-range`)
+sketch (`.pikelet-sketch`) and deprecated range-readable (`.pikelet-range`)
 readers and builders in pure JS on top of a `read(offset, length)` source
 abstraction —
 it uses the WASM engine only optionally (the sketch scan kernel). Its

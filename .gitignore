@@ -149,3 +149,7 @@ examples/legacy/range-artifact-demo/static/dist/
 bench/beir/cache/
 bench/beir/work/
 bench/beir/results/
+# Exported Arctic-XS weight blob + vocab (export_encoder_blob.py) — same
+# convention as examples/05-one-file-search/encoder-spike/real/: a locally
+# regenerable export, not source.
+bench/beir/arctic-xs/

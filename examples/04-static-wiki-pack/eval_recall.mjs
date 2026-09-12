@@ -18,7 +18,7 @@ const queries = JSON.parse(fs.readFileSync(path.join(dataDir, 'eval-queries.json
 const gt = JSON.parse(fs.readFileSync(path.join(dataDir, 'eval-gt.json'), 'utf8'));
 const EVAL_K = gt[0]?.length || K;
 
-const artifact = await Pikelet.openSketchArtifactFile(path.join(dataDir, 'wiki.pancake-sketch'));
+const artifact = await Pikelet.openSketchArtifactFile(path.join(dataDir, 'wiki.pikelet-sketch'));
 const scanner = await Pikelet.createSketchScanner(artifact);
 
 async function evalDtype(dtype) {

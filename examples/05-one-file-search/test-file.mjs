@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openPancakeFile } from './pikelet-file-reader.mjs';
+import { openPikeletFile } from './pikelet-file-reader.mjs';
 import { openDocsSearch, docsAssetPaths } from './search-reader.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -27,7 +27,7 @@ const check = (name, ok, detail) => {
     else { failed++; console.log(`  FAIL: ${name}${detail ? ` — ${detail}` : ''}`); }
 };
 
-const search = await openPancakeFile(pikeletPath);
+const search = await openPikeletFile(pikeletPath);
 const info = search.info();
 console.log(`opened ${path.basename(pikeletPath)}: identity ${info.identity.slice(0, 16)}..., `
     + `${info.records} records, resident ${(info.residentBytes / 1024).toFixed(1)} KiB, `
@@ -80,7 +80,7 @@ const tampered = Buffer.from(fs.readFileSync(pikeletPath));
 tampered[tampered.length - 3] ^= 0xff; // inside the evaluation segment (last)
 const tamperedPath = pikeletPath + '.tampered';
 fs.writeFileSync(tamperedPath, tampered);
-const tamperedReader = await openPancakeFile(tamperedPath);
+const tamperedReader = await openPikeletFile(tamperedPath);
 let rejected = false;
 try { await tamperedReader.evaluation(); }
 catch (err) { rejected = /hash verification/.test(String(err.message)); }

@@ -21,7 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { openPancakeFile } = await import(path.join(ROOT, 'complete', 'index.mjs'));
+const { openPikeletFile } = await import(path.join(ROOT, 'complete', 'index.mjs'));
 
 const [artifactPath, queriesPath] = process.argv.slice(2);
 if (!artifactPath || !queriesPath) {
@@ -42,7 +42,7 @@ function matches(record, expect) {
   return true;
 }
 
-const search = await openPancakeFile(artifactPath);
+const search = await openPikeletFile(artifactPath);
 console.log(`artifact: ${path.basename(artifactPath)} — ${search.info().records} records, `
   + `lexical: ${search.info().lexical ? `${search.info().lexical.terms} terms` : 'absent'}`);
 console.log(`queries: ${queries.length} (${queries.filter((q) => q.kind === 'exact').length} exact, `

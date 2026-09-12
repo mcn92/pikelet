@@ -14,13 +14,13 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openPancakeFile } from '../../../../complete/index.mjs';
+import { openPikeletFile } from '../../../../complete/index.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const QUESTION = 'What chamber is the Tovash project housed in?';
 
 async function run(label, file) {
-    const search = await openPancakeFile(path.join(HERE, file));
+    const search = await openPikeletFile(path.join(HERE, file));
     const out = await search.query(QUESTION, { k: 5 });
     const answer = out.results[0]?.preview || out.results[0]?.text || 'unsupported';
     console.log(`${label}: matchQuality: ${out.matchQuality}    confidence: ${out.confidence?.toFixed(3)}    -> ${out.results.length ? answer.split('\n')[0] : 'unsupported'}`);

@@ -1,26 +1,26 @@
 /**
- * pancake_napi.cpp — Node.js N-API binding for the Pikelet HNSW engine.
+ * pikelet_napi.cpp — Node.js N-API binding for the Pikelet HNSW engine.
  *
  * Wraps the same C++ engine (engine.cpp) that the WASM build uses, but
  * compiled natively with SSE2 SIMD. Provides an identical API surface so
  * the JS benchmark harness can swap between WASM and native transparently.
  *
  * Exposed JS API:
- *   pancake_init(dim, maxElem, quantized, metric, M, efC, efS, seed?) -> handle
- *   pancake_add(handle, Float32Array) -> internalId
- *   pancake_bulk_insert(handle, Float32Array, n) -> count
- *   pancake_query(handle, Float32Array, k) -> { ids: Uint32Array, distances: Float32Array, count }
- *   pancake_set_ef(handle, ef)
- *   pancake_delete(handle, id)
- *   pancake_compact(handle)
- *   pancake_count(handle) -> number
- *   pancake_ghost_count(handle) -> number
- *   pancake_ghost_ratio(handle) -> number
- *   pancake_memory(handle) -> number
- *   pancake_dimension(handle) -> number
- *   pancake_export(handle) -> Buffer
- *   pancake_import(handle, Buffer) -> 0 on success
- *   pancake_dispose(handle)
+ *   pikelet_init(dim, maxElem, quantized, metric, M, efC, efS, seed?) -> handle
+ *   pikelet_add(handle, Float32Array) -> internalId
+ *   pikelet_bulk_insert(handle, Float32Array, n) -> count
+ *   pikelet_query(handle, Float32Array, k) -> { ids: Uint32Array, distances: Float32Array, count }
+ *   pikelet_set_ef(handle, ef)
+ *   pikelet_delete(handle, id)
+ *   pikelet_compact(handle)
+ *   pikelet_count(handle) -> number
+ *   pikelet_ghost_count(handle) -> number
+ *   pikelet_ghost_ratio(handle) -> number
+ *   pikelet_memory(handle) -> number
+ *   pikelet_dimension(handle) -> number
+ *   pikelet_export(handle) -> Buffer
+ *   pikelet_import(handle, Buffer) -> 0 on success
+ *   pikelet_dispose(handle)
  */
 
 #include <napi.h>
@@ -273,19 +273,19 @@ Napi::Value Add(const Napi::CallbackInfo& info) {
     if (h >= MAX_HANDLES || !g_handles[h])
         return Napi::Number::New(env, INVALID_HANDLE);
     if (!info[1].IsTypedArray()) {
-        Napi::TypeError::New(env, "pancake_add: vector must be a Float32Array")
+        Napi::TypeError::New(env, "pikelet_add: vector must be a Float32Array")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     Napi::TypedArray typed = info[1].As<Napi::TypedArray>();
     if (typed.TypedArrayType() != napi_float32_array) {
-        Napi::TypeError::New(env, "pancake_add: vector must be a Float32Array")
+        Napi::TypeError::New(env, "pikelet_add: vector must be a Float32Array")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     Napi::Float32Array vec = typed.As<Napi::Float32Array>();
     if (vec.ElementLength() < g_handles[h]->dimension()) {
-        Napi::RangeError::New(env, "pancake_add: vector is shorter than the index dimension")
+        Napi::RangeError::New(env, "pikelet_add: vector is shorter than the index dimension")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
@@ -300,18 +300,18 @@ Napi::Value BulkInsert(const Napi::CallbackInfo& info) {
     if (h >= MAX_HANDLES || !g_handles[h])
         return Napi::Number::New(env, 0);
     if (n < 0) {
-        Napi::RangeError::New(env, "pancake_bulk_insert: n must be non-negative")
+        Napi::RangeError::New(env, "pikelet_bulk_insert: n must be non-negative")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     if (!info[1].IsTypedArray()) {
-        Napi::TypeError::New(env, "pancake_bulk_insert: vectors must be a Float32Array")
+        Napi::TypeError::New(env, "pikelet_bulk_insert: vectors must be a Float32Array")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     Napi::TypedArray typed = info[1].As<Napi::TypedArray>();
     if (typed.TypedArrayType() != napi_float32_array) {
-        Napi::TypeError::New(env, "pancake_bulk_insert: vectors must be a Float32Array")
+        Napi::TypeError::New(env, "pikelet_bulk_insert: vectors must be a Float32Array")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
@@ -319,7 +319,7 @@ Napi::Value BulkInsert(const Napi::CallbackInfo& info) {
     const size_t dims = g_handles[h]->dimension();
     const size_t requested = static_cast<size_t>(n);
     if (dims != 0 && requested > vecs.ElementLength() / dims) {
-        Napi::RangeError::New(env, "pancake_bulk_insert: vectors are shorter than n * dimension")
+        Napi::RangeError::New(env, "pikelet_bulk_insert: vectors are shorter than n * dimension")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
@@ -338,24 +338,24 @@ Napi::Value Query(const Napi::CallbackInfo& info) {
         return result;
     }
     if (k < 0) {
-        Napi::RangeError::New(env, "pancake_query: k must be non-negative")
+        Napi::RangeError::New(env, "pikelet_query: k must be non-negative")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     if (!info[1].IsTypedArray()) {
-        Napi::TypeError::New(env, "pancake_query: query must be a Float32Array")
+        Napi::TypeError::New(env, "pikelet_query: query must be a Float32Array")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     Napi::TypedArray typed = info[1].As<Napi::TypedArray>();
     if (typed.TypedArrayType() != napi_float32_array) {
-        Napi::TypeError::New(env, "pancake_query: query must be a Float32Array")
+        Napi::TypeError::New(env, "pikelet_query: query must be a Float32Array")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     Napi::Float32Array qv = typed.As<Napi::Float32Array>();
     if (qv.ElementLength() < g_handles[h]->dimension()) {
-        Napi::RangeError::New(env, "pancake_query: query is shorter than the index dimension")
+        Napi::RangeError::New(env, "pikelet_query: query is shorter than the index dimension")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
@@ -455,7 +455,7 @@ Napi::Value Import(const Napi::CallbackInfo& info) {
     // The snapshot header's count field is untrusted and sizes the rebuilt
     // index; reject counts the buffer cannot possibly hold before allocating.
     if (!g_handles[h]->snapshot_plausible(buf.Data(), buf.Length())) {
-        Napi::TypeError::New(env, "pancake_import: snapshot count field exceeds buffer capacity")
+        Napi::TypeError::New(env, "pikelet_import: snapshot count field exceeds buffer capacity")
             .ThrowAsJavaScriptException();
         return Napi::Number::New(env, -1);
     }
@@ -467,11 +467,11 @@ Napi::Value Import(const Napi::CallbackInfo& info) {
     try {
         ok = g_handles[h]->deserialize(buf.Data(), buf.Length());
     } catch (const std::exception& e) {
-        Napi::Error::New(env, std::string("pancake_import: ") + e.what())
+        Napi::Error::New(env, std::string("pikelet_import: ") + e.what())
             .ThrowAsJavaScriptException();
         return Napi::Number::New(env, -1);
     } catch (...) {
-        Napi::Error::New(env, "pancake_import: snapshot rejected (C++ exception)")
+        Napi::Error::New(env, "pikelet_import: snapshot rejected (C++ exception)")
             .ThrowAsJavaScriptException();
         return Napi::Number::New(env, -1);
     }
@@ -489,21 +489,21 @@ Napi::Value Dispose(const Napi::CallbackInfo& info) {
 // ============================================================================
 
 Napi::Object InitModule(Napi::Env env, Napi::Object exports) {
-    exports.Set("pancake_init",         Napi::Function::New(env, Init));
-    exports.Set("pancake_add",          Napi::Function::New(env, Add));
-    exports.Set("pancake_bulk_insert",  Napi::Function::New(env, BulkInsert));
-    exports.Set("pancake_query",        Napi::Function::New(env, Query));
-    exports.Set("pancake_set_ef",       Napi::Function::New(env, SetEf));
-    exports.Set("pancake_delete",       Napi::Function::New(env, Delete));
-    exports.Set("pancake_compact",      Napi::Function::New(env, Compact));
-    exports.Set("pancake_count",        Napi::Function::New(env, Count));
-    exports.Set("pancake_ghost_count",  Napi::Function::New(env, GhostCount));
-    exports.Set("pancake_ghost_ratio",  Napi::Function::New(env, GhostRatio));
-    exports.Set("pancake_memory",       Napi::Function::New(env, Memory));
-    exports.Set("pancake_dimension",    Napi::Function::New(env, Dimension));
-    exports.Set("pancake_export",       Napi::Function::New(env, Export));
-    exports.Set("pancake_import",       Napi::Function::New(env, Import));
-    exports.Set("pancake_dispose",      Napi::Function::New(env, Dispose));
+    exports.Set("pikelet_init",         Napi::Function::New(env, Init));
+    exports.Set("pikelet_add",          Napi::Function::New(env, Add));
+    exports.Set("pikelet_bulk_insert",  Napi::Function::New(env, BulkInsert));
+    exports.Set("pikelet_query",        Napi::Function::New(env, Query));
+    exports.Set("pikelet_set_ef",       Napi::Function::New(env, SetEf));
+    exports.Set("pikelet_delete",       Napi::Function::New(env, Delete));
+    exports.Set("pikelet_compact",      Napi::Function::New(env, Compact));
+    exports.Set("pikelet_count",        Napi::Function::New(env, Count));
+    exports.Set("pikelet_ghost_count",  Napi::Function::New(env, GhostCount));
+    exports.Set("pikelet_ghost_ratio",  Napi::Function::New(env, GhostRatio));
+    exports.Set("pikelet_memory",       Napi::Function::New(env, Memory));
+    exports.Set("pikelet_dimension",    Napi::Function::New(env, Dimension));
+    exports.Set("pikelet_export",       Napi::Function::New(env, Export));
+    exports.Set("pikelet_import",       Napi::Function::New(env, Import));
+    exports.Set("pikelet_dispose",      Napi::Function::New(env, Dispose));
     return exports;
 }
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const PANCAKE_ERROR_CODES = Object.freeze({
+const PIKELET_ERROR_CODES = Object.freeze({
     INVALID_ARGUMENT: 'INVALID_ARGUMENT',
     DIMENSION_MISMATCH: 'DIMENSION_MISMATCH',
     INVALID_VECTOR: 'INVALID_VECTOR',
@@ -19,10 +19,10 @@ const PANCAKE_ERROR_CODES = Object.freeze({
     INDEX_LIMIT: 'INDEX_LIMIT',
 });
 
-class PancakeError extends Error {
+class PikeletError extends Error {
     constructor(code, message, details, cause) {
         super(message);
-        this.name = 'PancakeError';
+        this.name = 'PikeletError';
         this.code = code;
         if (details !== undefined) this.details = details;
         if (cause !== undefined) this.cause = cause;
@@ -30,11 +30,11 @@ class PancakeError extends Error {
 }
 
 function pikeletError(code, message, details, cause) {
-    return new PancakeError(code, message, details, cause);
+    return new PikeletError(code, message, details, cause);
 }
 
 module.exports = {
-    PancakeError,
-    PANCAKE_ERROR_CODES,
+    PikeletError,
+    PIKELET_ERROR_CODES,
     pikeletError,
 };

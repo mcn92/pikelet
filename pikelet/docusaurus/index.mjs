@@ -30,7 +30,7 @@ function normalizeOptions(options = {}) {
   // Default output is the complete kind-3 .pikelet (sketch-backed, hybrid
   // lexical, range-readable, no Python in the toolchain). Student mode is
   // the small-footprint opt-in (mode: 'student', or any student option);
-  // the deprecated .pancake-range output needs mode: 'artifact' or an
+  // the deprecated .pikelet-range output needs mode: 'artifact' or an
   // explicit completeProfile.enabled: false.
   if (options.mode !== undefined && !['complete', 'student', 'artifact'].includes(options.mode)) {
     throw new Error(`pikelet-search mode must be complete, student, or artifact, got ${options.mode}`);
@@ -188,7 +188,7 @@ async function copyRuntimeManifest(assetDir, context, options, studentModelInfo)
   const assetUrlBase = joinSitePath(context.siteConfig?.baseUrl || '/', options.assetBase);
   manifest.docusaurus = {
     assetBase: options.assetBase,
-    artifactUrl: options.completeProfile.enabled ? `${assetUrlBase}/search.pikelet` : `${assetUrlBase}/index.pancake-range`,
+    artifactUrl: options.completeProfile.enabled ? `${assetUrlBase}/search.pikelet` : `${assetUrlBase}/index.pikelet-range`,
     completeArtifactUrl: options.completeProfile.enabled ? `${assetUrlBase}/search.pikelet` : null,
     corpusUrl: `${assetUrlBase}/corpus.json`,
     manifestUrl: `${assetUrlBase}/manifest.json`,
@@ -404,7 +404,7 @@ export default function pikeletDocusaurusPlugin(context, rawOptions = {}) {
     async postBuild({ outDir }) {
       if (!options.enabled) return;
       if (!options.completeProfile.enabled) {
-        console.warn('[pikelet-search] building the deprecated .pancake-range output (student/artifact mode); '
+        console.warn('[pikelet-search] building the deprecated .pikelet-range output (student/artifact mode); '
           + 'the default complete .pikelet profile serves hybrid retrieval over range reads — '
           + 'remove the student/artifact options to adopt it');
       }

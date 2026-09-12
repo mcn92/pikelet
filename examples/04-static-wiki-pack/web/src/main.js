@@ -142,7 +142,7 @@ async function boot() {
     });
 
     const packReady = stage('packOpen', () =>
-        Pikelet.SketchArtifact.open(createHttpRangeSource(`${state.packBase}/wiki.pancake-sketch`, 'pack'), {})
+        Pikelet.SketchArtifact.open(createHttpRangeSource(`${state.packBase}/wiki.pikelet-sketch`, 'pack'), {})
     ).then(async (artifact) => {
         state.artifact = artifact;
         state.scanner = await stage('scannerBuild', () => Pikelet.createSketchScanner(artifact));

@@ -7,9 +7,9 @@ import createPikeletApi from './pikelet-core.js';
 import errorContract from './pikelet-errors.js';
 import loaderContract from './pikelet-loader.js';
 import artifactContract from './pikelet-artifact.js';
-const { PancakeError, PANCAKE_ERROR_CODES, pikeletError } = errorContract;
+const { PikeletError, PIKELET_ERROR_CODES, pikeletError } = errorContract;
 const { createCachedModuleLoader } = loaderContract;
-const { PancakeRangeArtifact, PancakeSketchArtifact, createSketchScanner, NodeFileRangeSource, buildRangeArtifact, buildRangeArtifactFile, buildSketchArtifact, buildSketchArtifactBytes, buildSketchArtifactFile } = artifactContract;
+const { PikeletRangeArtifact, PikeletSketchArtifact, createSketchScanner, NodeFileRangeSource, buildRangeArtifact, buildRangeArtifactFile, buildSketchArtifact, buildSketchArtifactBytes, buildSketchArtifactFile } = artifactContract;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,13 +34,13 @@ function readWasmBinary(fileName) {
     );
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
-    throw pikeletError(PANCAKE_ERROR_CODES.WASM_LOAD_FAILED, `Failed to load Pikelet WASM binary (${fileName}): ${message}`, { fileName }, error);
+    throw pikeletError(PIKELET_ERROR_CODES.WASM_LOAD_FAILED, `Failed to load Pikelet WASM binary (${fileName}): ${message}`, { fileName }, error);
   }
 }
 
 function makeLoadError(message, error) {
   const detail = error && error.message ? error.message : String(error);
-  return pikeletError(PANCAKE_ERROR_CODES.WASM_LOAD_FAILED, `${message}: ${detail}`, undefined, error);
+  return pikeletError(PIKELET_ERROR_CODES.WASM_LOAD_FAILED, `${message}: ${detail}`, undefined, error);
 }
 
 const moduleLoader = createCachedModuleLoader((variant) =>
@@ -63,7 +63,7 @@ function parseJsonLines(text, filePath) {
       rows.push(JSON.parse(line));
     } catch (error) {
       const message = error && error.message ? error.message : String(error);
-      throw pikeletError(PANCAKE_ERROR_CODES.PARSE_FAILED, `Failed to parse JSONL in ${filePath} at line ${i + 1}: ${message}`, { filePath, line: i + 1 }, error);
+      throw pikeletError(PIKELET_ERROR_CODES.PARSE_FAILED, `Failed to parse JSONL in ${filePath} at line ${i + 1}: ${message}`, { filePath, line: i + 1 }, error);
     }
   }
   return rows;
@@ -72,22 +72,22 @@ function parseJsonLines(text, filePath) {
 function inferJsonFormat(filePath) {
   if (/\.json$/i.test(filePath)) return 'json';
   if (/\.(jsonl|ndjson)$/i.test(filePath)) return 'jsonl';
-  throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `loadJsonFile() could not infer format from '${filePath}'. Use a .json/.jsonl/.ndjson extension or pass opts.format.`, { filePath });
+  throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `loadJsonFile() could not infer format from '${filePath}'. Use a .json/.jsonl/.ndjson extension or pass opts.format.`, { filePath });
 }
 
 function remapJsonRows(rows, vectorKey, idKey) {
   if (!Array.isArray(rows)) {
-    throw pikeletError(PANCAKE_ERROR_CODES.PARSE_FAILED, 'loadJsonFile() expects a JSON array or JSONL sequence of vectors/records');
+    throw pikeletError(PIKELET_ERROR_CODES.PARSE_FAILED, 'loadJsonFile() expects a JSON array or JSONL sequence of vectors/records');
   }
   return rows.map((row, i) => {
     if (row instanceof Float32Array || Array.isArray(row)) {
       return row;
     }
     if (!row || typeof row !== 'object') {
-      throw pikeletError(PANCAKE_ERROR_CODES.PARSE_FAILED, `loadJsonFile() expected an object or vector at index ${i}`, { index: i });
+      throw pikeletError(PIKELET_ERROR_CODES.PARSE_FAILED, `loadJsonFile() expected an object or vector at index ${i}`, { index: i });
     }
     if (!(vectorKey in row)) {
-      throw pikeletError(PANCAKE_ERROR_CODES.PARSE_FAILED, `loadJsonFile() missing vectorKey '${vectorKey}' at index ${i}`, { index: i, vectorKey });
+      throw pikeletError(PIKELET_ERROR_CODES.PARSE_FAILED, `loadJsonFile() missing vectorKey '${vectorKey}' at index ${i}`, { index: i, vectorKey });
     }
     const mapped = { vector: row[vectorKey] };
     if (Object.prototype.hasOwnProperty.call(row, idKey)) {
@@ -99,13 +99,13 @@ function remapJsonRows(rows, vectorKey, idKey) {
 
 function validateFilePath(filePath, helperName) {
   if (typeof filePath !== 'string' || filePath.length === 0) {
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `${helperName}() requires a non-empty file path`);
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `${helperName}() requires a non-empty file path`);
   }
 }
 
 function validateMaxFileBytes(maxFileBytes, helperName) {
   if (!Number.isInteger(maxFileBytes) || maxFileBytes <= 0) {
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `${helperName}() maxFileBytes must be a positive integer`, { maxFileBytes });
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `${helperName}() maxFileBytes must be a positive integer`, { maxFileBytes });
   }
 }
 
@@ -115,17 +115,17 @@ function statRegularFile(filePath, helperName) {
     stat = statSync(filePath);
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
-    throw pikeletError(PANCAKE_ERROR_CODES.FILE_IO_FAILED, `${helperName}() could not stat ${filePath}: ${message}`, { filePath }, error);
+    throw pikeletError(PIKELET_ERROR_CODES.FILE_IO_FAILED, `${helperName}() could not stat ${filePath}: ${message}`, { filePath }, error);
   }
   if (!stat.isFile()) {
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `${helperName}() expected a regular file: ${filePath}`, { filePath });
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `${helperName}() expected a regular file: ${filePath}`, { filePath });
   }
   return stat;
 }
 
 function enforceFileSize(stat, maxFileBytes, helperName, filePath) {
   if (stat.size > maxFileBytes) {
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `${helperName}() file exceeds maxFileBytes (${stat.size} > ${maxFileBytes}): ${filePath}`, { filePath, fileBytes: stat.size, maxFileBytes });
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `${helperName}() file exceeds maxFileBytes (${stat.size} > ${maxFileBytes}): ${filePath}`, { filePath, fileBytes: stat.size, maxFileBytes });
   }
 }
 
@@ -138,7 +138,7 @@ function readUtf8FileWithLimit(filePath, helperName, maxFileBytes) {
     return readFileSync(filePath, 'utf8');
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
-    throw pikeletError(PANCAKE_ERROR_CODES.FILE_IO_FAILED, `${helperName}() could not read ${filePath}: ${message}`, { filePath }, error);
+    throw pikeletError(PIKELET_ERROR_CODES.FILE_IO_FAILED, `${helperName}() could not read ${filePath}: ${message}`, { filePath }, error);
   }
 }
 
@@ -151,18 +151,18 @@ function readBinaryFileWithLimit(filePath, helperName, maxFileBytes) {
     return readFileSync(filePath);
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
-    throw pikeletError(PANCAKE_ERROR_CODES.FILE_IO_FAILED, `${helperName}() could not read ${filePath}: ${message}`, { filePath }, error);
+    throw pikeletError(PIKELET_ERROR_CODES.FILE_IO_FAILED, `${helperName}() could not read ${filePath}: ${message}`, { filePath }, error);
   }
 }
 
 function validateSnapshotBytes(snapshot, filePath) {
   if (!snapshot || snapshot.byteLength < 4) {
-    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, `loadSnapshotFile() snapshot is too small to be valid: ${filePath}`, { filePath });
+    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, `loadSnapshotFile() snapshot is too small to be valid: ${filePath}`, { filePath });
   }
   const view = new DataView(snapshot.buffer, snapshot.byteOffset, snapshot.byteLength);
   const magic = view.getUint32(0, true);
   if (!SUPPORTED_SNAPSHOT_MAGICS.has(magic)) {
-    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, `loadSnapshotFile() unsupported snapshot file type: ${filePath}`, { filePath, magic });
+    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, `loadSnapshotFile() unsupported snapshot file type: ${filePath}`, { filePath, magic });
   }
 }
 
@@ -194,19 +194,19 @@ async function loadNodeEngine() {
 }
 
 const Pikelet = createPikeletApi(loadNodeEngine);
-export { PancakeError, PANCAKE_ERROR_CODES };
+export { PikeletError, PIKELET_ERROR_CODES };
 
-Pikelet.RangeArtifact = PancakeRangeArtifact;
+Pikelet.RangeArtifact = PikeletRangeArtifact;
 Pikelet.NodeFileRangeSource = NodeFileRangeSource;
 Pikelet.buildRangeArtifact = buildRangeArtifact;
 Pikelet.buildRangeArtifactFile = buildRangeArtifactFile;
 
 Pikelet.openRangeArtifactFile = async function openRangeArtifactFile(filePath, opts) {
   validateFilePath(filePath, 'openRangeArtifactFile');
-  return PancakeRangeArtifact.openFile(filePath, opts);
+  return PikeletRangeArtifact.openFile(filePath, opts);
 };
 
-Pikelet.SketchArtifact = PancakeSketchArtifact;
+Pikelet.SketchArtifact = PikeletSketchArtifact;
 Pikelet.createSketchScanner = (artifact, options) => createSketchScanner(loadNodeEngine, artifact, options);
 Pikelet.buildSketchArtifact = buildSketchArtifact;
 Pikelet.buildSketchArtifactBytes = buildSketchArtifactBytes;
@@ -214,7 +214,7 @@ Pikelet.buildSketchArtifactFile = buildSketchArtifactFile;
 
 Pikelet.openSketchArtifactFile = async function openSketchArtifactFile(filePath, opts) {
   validateFilePath(filePath, 'openSketchArtifactFile');
-  return PancakeSketchArtifact.openFile(filePath, opts);
+  return PikeletSketchArtifact.openFile(filePath, opts);
 };
 
 Pikelet.loadSnapshotFile = async function loadSnapshotFile(filePath, opts) {
@@ -238,7 +238,7 @@ Pikelet.loadJsonFile = async function loadJsonFile(filePath, opts = {}) {
   } = opts;
 
   if (format !== 'json' && format !== 'jsonl') {
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `loadJsonFile() format must be 'json' or 'jsonl', got '${format}'`, { format });
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `loadJsonFile() format must be 'json' or 'jsonl', got '${format}'`, { format });
   }
 
   const text = readUtf8FileWithLimit(filePath, 'loadJsonFile', maxFileBytes);
@@ -250,7 +250,7 @@ Pikelet.loadJsonFile = async function loadJsonFile(filePath, opts = {}) {
       rows = JSON.parse(text);
     } catch (error) {
       const message = error && error.message ? error.message : String(error);
-      throw pikeletError(PANCAKE_ERROR_CODES.PARSE_FAILED, `Failed to parse JSON in ${filePath}: ${message}`, { filePath }, error);
+      throw pikeletError(PIKELET_ERROR_CODES.PARSE_FAILED, `Failed to parse JSON in ${filePath}: ${message}`, { filePath }, error);
     }
   }
   return Pikelet.fromVectors(remapJsonRows(rows, vectorKey, idKey), createOpts);

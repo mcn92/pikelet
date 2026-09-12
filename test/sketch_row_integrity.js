@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const Pikelet = require('../pikelet.js');
-const { PancakeSketchArtifact, exportSketchArtifact } = require('../pikelet-artifact.js');
+const { PikeletSketchArtifact, exportSketchArtifact } = require('../pikelet-artifact.js');
 
 let passed = 0, failed = 0;
 function check(label, cond, detail) {
@@ -66,8 +66,8 @@ async function main() {
     const dim = 32, count = 500; // 500 rows -> partial last 16-row block
     const index = makeIndex(dim, count, 42);
     const opts = { sketchDims: 16, sketchBits: 8, recommendedRerank: 40 };
-    const v1Path = path.join(tmp, 'v1.pancake-sketch');
-    const v2Path = path.join(tmp, 'v2.pancake-sketch');
+    const v1Path = path.join(tmp, 'v1.pikelet-sketch');
+    const v2Path = path.join(tmp, 'v2.pikelet-sketch');
     const v1m = exportSketchArtifact(index, v1Path, { ...opts, rowIntegrity: false });
     const v2m = exportSketchArtifact(index, v2Path, opts);
 
@@ -81,8 +81,8 @@ async function main() {
         overhead > 0 && overhead <= v2m.rowIntegrity.blocks * (16 * 16 + 32) + 32);
 
     console.log('2. parity and per-read verification (full open)');
-    const v1 = await PancakeSketchArtifact.openFile(v1Path);
-    const v2 = await PancakeSketchArtifact.openFile(v2Path);
+    const v1 = await PikeletSketchArtifact.openFile(v1Path);
+    const v2 = await PikeletSketchArtifact.openFile(v2Path);
     check('v2 opens with residentVerified and per-row geometry', v2.stats().residentVerified
         && v2.formatVersion === 2 && v2.rowsPerBlock === 16 && v2.rowDigestBytes === 16);
     let same = true;
@@ -116,17 +116,17 @@ async function main() {
     const tamper = async (label, mutate, pattern, { search } = {}) => {
         const bytes = Buffer.from(raw);
         mutate(bytes);
-        const p = path.join(tmp, 'tampered.pancake-sketch');
+        const p = path.join(tmp, 'tampered.pikelet-sketch');
         fs.writeFileSync(p, bytes);
         if (pattern === null) {
-            const art = await PancakeSketchArtifact.openFile(p);
+            const art = await PikeletSketchArtifact.openFile(p);
             const out = await art.search(queryFor(index, 3), 5);
             check(label, out.results.length === 5);
             await art.close();
             return;
         }
         await rejects(label, async () => {
-            const art = await PancakeSketchArtifact.openFile(p, search ? {} : undefined);
+            const art = await PikeletSketchArtifact.openFile(p, search ? {} : undefined);
             try {
                 await art.search(queryFor(index, 3), 5, { rerank: count });
             } finally {
@@ -152,18 +152,18 @@ async function main() {
     {
         const bytes = Buffer.from(raw);
         bytes[vectorsOffset + 2 * blockBytes + pageBytes + 5] ^= 0xff;
-        const p = path.join(tmp, 'skipverify.pancake-sketch');
+        const p = path.join(tmp, 'skipverify.pikelet-sketch');
         fs.writeFileSync(p, bytes);
-        const art = await PancakeSketchArtifact.openFile(p, { verify: false });
+        const art = await PikeletSketchArtifact.openFile(p, { verify: false });
         const out = await art.search(queryFor(index, 3), 5, { rerank: count });
         check('verify:false serves tampered rows (explicit opt-out)', out.results.length === 5);
         await art.close();
     }
 
     console.log('4. staged micro tier (v2)');
-    const stagedPath = path.join(tmp, 'staged.pancake-sketch');
+    const stagedPath = path.join(tmp, 'staged.pikelet-sketch');
     exportSketchArtifact(index, stagedPath, { ...opts, microDims: 8, microBits: 8 });
-    const staged = await PancakeSketchArtifact.openFile(stagedPath, { staged: true });
+    const staged = await PikeletSketchArtifact.openFile(stagedPath, { staged: true });
     check('staged v2 opens in the micro tier with the page table resident', staged.tier === 'micro' && !!staged.pageTable);
     const microOut = await staged.search(queryFor(index, 7), 5);
     check('micro-tier search verifies rows through the stage-1 page table', microOut.tier === 'micro' && microOut.results.length === 5);
@@ -177,10 +177,10 @@ async function main() {
     const sVectors = sview.getUint32(44, true);
     const tamperedStaged = Buffer.from(stagedRaw);
     tamperedStaged[sVectors + pageBytes + 1] ^= 0xff; // row in block 0
-    const tsPath = path.join(tmp, 'staged-tampered.pancake-sketch');
+    const tsPath = path.join(tmp, 'staged-tampered.pikelet-sketch');
     fs.writeFileSync(tsPath, tamperedStaged);
     await rejects('a tampered row fails during the staged micro window', async () => {
-        const art = await PancakeSketchArtifact.openFile(tsPath, { staged: true });
+        const art = await PikeletSketchArtifact.openFile(tsPath, { staged: true });
         try {
             await art.search(queryFor(index, 0), 5, { rerank: count });
         } finally {
@@ -189,7 +189,7 @@ async function main() {
     }, /row failed digest verification|digest page failed/);
 
     console.log('5. verifyVectors covers the interleaved region');
-    const vv = await PancakeSketchArtifact.openFile(v2Path);
+    const vv = await PikeletSketchArtifact.openFile(v2Path);
     check('verifyVectors passes on a clean v2 artifact', await vv.verifyVectors() === true && vv.stats().vectorsVerified);
     await vv.close();
 

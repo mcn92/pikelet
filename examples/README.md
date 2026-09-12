@@ -67,7 +67,7 @@ direction.
   snapshot restore, auth, rate limiting, admin routes. Covered by
   `test/test_worker_features.js`.
 - [`legacy/range-artifact-demo/`](legacy/range-artifact-demo/) — earlier
-  `.pancake-range` artifact demo and SIFT-shaped smoke harness. Wired into
+  `.pikelet-range` artifact demo and SIFT-shaped smoke harness. Wired into
   `npm run demo:artifact`/`demo:sketch` and the 15-second hook above.
 
 There is also a raw, no-bundler browser page at

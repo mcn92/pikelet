@@ -1,21 +1,21 @@
-// pancake_py.cpp — pybind11 wrapper around the header-only Pancake HNSW engine.
+// pikelet_py.cpp — pybind11 wrapper around the header-only Pikelet HNSW engine.
 //
 // This exposes the SAME C++ engine used by the WASM and N-API builds
 // (src/uint8_float_hnsw.hpp / src/float_hnsw.hpp) to Python, so neutral runners
 // such as ANN-Benchmarks and VIBE can benchmark the native engine without
 // passing through Node or WebAssembly.
 //
-// Build (out of the pancake repo root, with the headers on the include path):
+// Build (out of the pikelet repo root, with the headers on the include path):
 //   c++ -O3 -std=c++17 -shared -fPIC -DPIKELET_ENABLE_AVX2_SIMD -mavx2 \
 //       $(python3 -m pybind11 --includes) \
-//       -Isrc pancake_py.cpp -o pancake_py$(python3-config --extension-suffix)
+//       -Isrc pikelet_py.cpp -o pikelet_py$(python3-config --extension-suffix)
 //
 // Notes:
 //  * We accept float32 vectors and let the engine do its OWN asymmetric
 //    uint8 quantization internally (quantized=true). This is the whole point
-//    of pancake — see the uint8 header's "WHY ASYMMETRIC" comment — so we do
+//    of pikelet — see the uint8 header's "WHY ASYMMETRIC" comment — so we do
 //    NOT consume VIBE's pre-quantized uint8 datasets. The Python wrapper only
-//    handles the float32 path; the VIBE config declares pancake under `float:`.
+//    handles the float32 path; the VIBE config declares pikelet under `float:`.
 //  * Single-threaded build/query to match VIBE's measurement convention
 //    (OMP_NUM_THREADS=1 etc. are set in the base image).
 
@@ -37,9 +37,9 @@ using pikelet::wasm::Uint8FloatHNSWConfig;
 using pikelet::wasm::FloatHNSW;
 using pikelet::wasm::FloatHNSWConfig;
 
-class PancakeIndex {
+class PikeletIndex {
 public:
-    PancakeIndex(size_t dim, size_t max_elements, bool quantized,
+    PikeletIndex(size_t dim, size_t max_elements, bool quantized,
                  const std::string& metric, size_t M, size_t ef_construction)
         : dim_(dim), quantized_(quantized)
     {
@@ -66,7 +66,7 @@ public:
         }
     }
 
-    ~PancakeIndex() { delete i8_; delete f32_; }
+    ~PikeletIndex() { delete i8_; delete f32_; }
 
     // X: (n, dim) float32, C-contiguous.
     void fit(py::array_t<float, py::array::c_style | py::array::forcecast> X) {
@@ -78,12 +78,12 @@ public:
             uint32_t id = quantized_ ? i8_->insert(vec) : f32_->insert(vec);
             if (id == UINT32_MAX) {
                 throw std::runtime_error(
-                    "Pancake rejected benchmark vector " + std::to_string(i)
+                    "Pikelet rejected benchmark vector " + std::to_string(i)
                 );
             }
             if (id != i) {
                 throw std::runtime_error(
-                    "Pancake internal ID diverged from benchmark row ID at " +
+                    "Pikelet internal ID diverged from benchmark row ID at " +
                     std::to_string(i)
                 );
             }
@@ -121,14 +121,14 @@ private:
     FloatHNSW*     f32_ = nullptr;
 };
 
-PYBIND11_MODULE(pancake_py, m) {
-    m.doc() = "Native Python binding for the Pancake HNSW engine (VIBE).";
-    py::class_<PancakeIndex>(m, "PancakeIndex")
+PYBIND11_MODULE(pikelet_py, m) {
+    m.doc() = "Native Python binding for the Pikelet HNSW engine (VIBE).";
+    py::class_<PikeletIndex>(m, "PikeletIndex")
         .def(py::init<size_t, size_t, bool, const std::string&, size_t, size_t>(),
              py::arg("dim"), py::arg("max_elements"), py::arg("quantized"),
              py::arg("metric"), py::arg("M"), py::arg("ef_construction"))
-        .def("fit", &PancakeIndex::fit)
-        .def("set_ef", &PancakeIndex::set_ef)
-        .def("query", &PancakeIndex::query)
-        .def("memory_bytes", &PancakeIndex::memory_bytes);
+        .def("fit", &PikeletIndex::fit)
+        .def("set_ef", &PikeletIndex::set_ef)
+        .def("query", &PikeletIndex::query)
+        .def("memory_bytes", &PikeletIndex::memory_bytes);
 }

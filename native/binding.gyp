@@ -2,7 +2,7 @@
   "targets": [
     {
       "target_name": "pikelet_native",
-      "sources": ["pancake_napi.cpp"],
+      "sources": ["pikelet_napi.cpp"],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
         "../src"

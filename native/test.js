@@ -3,40 +3,40 @@
 const assert = require('node:assert/strict');
 const native = require('./index.js');
 
-const handle = native.pancake_init(4, 8, 0, 0, 4, 16, 16);
+const handle = native.pikelet_init(4, 8, 0, 0, 4, 16, 16);
 assert.notEqual(handle, 0xFFFFFFFF);
 
 try {
   assert.throws(
-    () => native.pancake_add(handle, new Float32Array(3)),
+    () => native.pikelet_add(handle, new Float32Array(3)),
     /shorter than the index dimension/
   );
   assert.throws(
-    () => native.pancake_add(handle, new Uint8Array(4)),
+    () => native.pikelet_add(handle, new Uint8Array(4)),
     /must be a Float32Array/
   );
   assert.throws(
-    () => native.pancake_bulk_insert(handle, new Float32Array(7), 2),
+    () => native.pikelet_bulk_insert(handle, new Float32Array(7), 2),
     /shorter than n \* dimension/
   );
   assert.throws(
-    () => native.pancake_bulk_insert(handle, new Float32Array(8), -1),
+    () => native.pikelet_bulk_insert(handle, new Float32Array(8), -1),
     /n must be non-negative/
   );
   assert.throws(
-    () => native.pancake_query(handle, new Float32Array(3), 1),
+    () => native.pikelet_query(handle, new Float32Array(3), 1),
     /shorter than the index dimension/
   );
   assert.throws(
-    () => native.pancake_query(handle, new Uint8Array(4), 1),
+    () => native.pikelet_query(handle, new Uint8Array(4), 1),
     /must be a Float32Array/
   );
 
-  assert.equal(native.pancake_add(handle, new Float32Array([0, 0, 0, 0])), 0);
-  const result = native.pancake_query(handle, new Float32Array([0, 0, 0, 0]), 99);
+  assert.equal(native.pikelet_add(handle, new Float32Array([0, 0, 0, 0])), 0);
+  const result = native.pikelet_query(handle, new Float32Array([0, 0, 0, 0]), 99);
   assert.equal(result.count, 1);
 } finally {
-  native.pancake_dispose(handle);
+  native.pikelet_dispose(handle);
 }
 
 // The symmetric u8 kernel (uint8_dot) runs only during graph maintenance —
@@ -63,13 +63,13 @@ try {
     for (let d = 0; d < DIM; d++) v[d] /= norm;
     vectors.push(v);
   }
-  const qh = native.pancake_init(DIM, N, 1, 1, 16, 100, 60);
+  const qh = native.pikelet_init(DIM, N, 1, 1, 16, 100, 60);
   assert.notEqual(qh, 0xFFFFFFFF);
   try {
-    for (const v of vectors) native.pancake_add(qh, v);
+    for (const v of vectors) native.pikelet_add(qh, v);
     let selfHits = 0;
     for (let i = 0; i < N; i++) {
-      const res = native.pancake_query(qh, vectors[i], 1);
+      const res = native.pikelet_query(qh, vectors[i], 1);
       if (res.count === 1 && res.ids[0] === i) {
         selfHits++;
         assert.ok(res.distances[0] < 0.05, `self-distance ${res.distances[0]} at id ${i}`);
@@ -93,11 +93,11 @@ try {
         for (let d = 0; d < DIM; d++) dot += q[d] * vectors[i][d];
         if (dot > bestDot) { bestDot = dot; best = i; }
       }
-      const res = native.pancake_query(qh, q, 1);
+      const res = native.pikelet_query(qh, q, 1);
       assert.equal(res.ids[0], best, `probe ${p}: graph ${res.ids[0]} vs brute force ${best}`);
     }
   } finally {
-    native.pancake_dispose(qh);
+    native.pikelet_dispose(qh);
   }
 }
 

@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildQueryInterpSegment, buildCorpusSegment, buildLexicalSegment, assemblePancakeFile, PROFILE_V2 } from '../../complete/builder.mjs';
+import { buildQueryInterpSegment, buildCorpusSegment, buildLexicalSegment, assemblePikeletFile, PROFILE_V2 } from '../../complete/builder.mjs';
 import { inspect } from './compile.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -23,7 +23,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // instead of ~200 at the recommended gap).
 const PERM = path.join(here, '..', '04-static-wiki-pack', 'data-perm');
 const FULL = path.join(here, '..', '04-static-wiki-pack', 'data-full');
-const DATA = fs.existsSync(path.join(PERM, 'wiki.pancake-sketch')) ? PERM : FULL;
+const DATA = fs.existsSync(path.join(PERM, 'wiki.pikelet-sketch')) ? PERM : FULL;
 if (DATA === FULL) {
     console.warn('WARNING: building from data-full (unpermuted layout) — rerank candidates will be physically scattered; build the pack in data-perm first (pack README steps 3-4)');
 } else {
@@ -177,7 +177,7 @@ const lexical = buildLexicalSegment(lexicalTexts);
 console.log(`  ${lexical.meta.terms.toLocaleString()} terms over ${lexical.meta.docCount.toLocaleString()} records (${(lexical.bytes.length / 1048576).toFixed(1)} MiB)`);
 
 const segments = [
-    { kind: 'index', bytes: fs.readFileSync(path.join(DATA, 'wiki.pancake-sketch')) },
+    { kind: 'index', bytes: fs.readFileSync(path.join(DATA, 'wiki.pikelet-sketch')) },
     { kind: 'corpus', bytes: corpusSegment },
     { kind: 'lexical', bytes: lexical.bytes },
     {
@@ -188,7 +188,7 @@ const segments = [
 ];
 
 const outPath = args[0] || path.join(here, inline ? 'pancake-wiki-inline.pancake' : 'pancake-wiki.pancake');
-const result = assemblePancakeFile({
+const result = assemblePikeletFile({
     profile: PROFILE_V2,
     corpus: {
         ...corpusFields,

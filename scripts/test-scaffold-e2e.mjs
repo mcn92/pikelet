@@ -122,8 +122,8 @@ console.log('\n--- compile ---');
   run(process.execPath, [CPS_BIN, 'compile', '--source', fixtureDir, '--out', outFile], { cwd: CPS_DIR });
   ok(fs.existsSync(outFile), 'compile wrote the .pikelet artifact');
 
-  const { openPancakeFile } = await import(path.join(ROOT, 'complete', 'index.mjs'));
-  const search = await openPancakeFile(outFile);
+  const { openPikeletFile } = await import(path.join(ROOT, 'complete', 'index.mjs'));
+  const search = await openPikeletFile(outFile);
   try {
     const info = search.info();
     ok(info.corpusIntegrity === 'per-record-sha256' && info.indexRowIntegrity === 'per-row-sha256',
@@ -253,7 +253,7 @@ console.log('\n--- compile ---');
     });
     await new Promise((resolve) => rangeSrv.listen(0, '127.0.0.1', resolve));
     const packUrl = `http://127.0.0.1:${rangeSrv.address().port}/search.pikelet`;
-    const { openPancakeFile: openForIdentity } = await import(path.join(ROOT, 'complete', 'index.mjs'));
+    const { openPikeletFile: openForIdentity } = await import(path.join(ROOT, 'complete', 'index.mjs'));
     const identityReader = await openForIdentity(outFile);
     const packIdentity = identityReader.info().identity;
     await identityReader.close();

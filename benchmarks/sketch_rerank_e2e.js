@@ -141,7 +141,7 @@ async function createWasmScanner(sidecar, maxC) {
   return {
     scan(qSketch, C) {
       Module.HEAPF32.set(qSketch, queryPtr >> 2);
-      const n = Module._pancake_sketch_scan(
+      const n = Module._pikelet_sketch_scan(
         sketchesPtr, scalesPtr, offsetsPtr, count, sketchDims, queryPtr, 0 /* l2 */, C, outIdsPtr, outDistsPtr
       );
       return Array.from(Module.HEAPU32.subarray(outIdsPtr >> 2, (outIdsPtr >> 2) + n));
@@ -306,7 +306,7 @@ function summarize(label, walls, recalls, statsDelta, queries) {
 }
 
 async function main() {
-  const artifactPath = path.resolve(arg('artifact', 'benchmark_results/layout/pancake-sift1m-u8-metis-split.pancake-range'));
+  const artifactPath = path.resolve(arg('artifact', 'benchmark_results/layout/pancake-sift1m-u8-metis-split.pikelet-range'));
   const dataDir = arg('data-dir', 'sift');
   const nQueries = Number(arg('queries', 1000));
   const K = Number(arg('k', 10));

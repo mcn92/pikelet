@@ -23,7 +23,7 @@
 // as egress, before transport overhead.
 
 import fs from 'node:fs';
-import { openPancakeFile } from '../../../examples/05-one-file-search/pikelet-file-reader.mjs';
+import { openPikeletFile } from '../../../examples/05-one-file-search/pikelet-file-reader.mjs';
 import { httpRangeSource } from '../../../examples/05-one-file-search/sources.mjs';
 
 function parseArgs(argv) {
@@ -107,7 +107,7 @@ if (isHttp) await source.init();
 
 const openBefore = { ...source.stats };
 const openStart = performance.now();
-const search = await openPancakeFile(source);
+const search = await openPikeletFile(source);
 const openMs = performance.now() - openStart;
 const info = search.info();
 const open = {

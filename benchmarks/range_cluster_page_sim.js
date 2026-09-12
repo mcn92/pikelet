@@ -19,7 +19,7 @@
  *
  * Usage:
  *   node benchmarks/range_cluster_page_sim.js \
- *     --artifact benchmark_results/layout/pancake-sift1m-u8-metis-split.pancake-range \
+ *     --artifact benchmark_results/layout/pancake-sift1m-u8-metis-split.pikelet-range \
  *     --partition benchmark_results/layout/pancake-sift1m-base.metis.part.5036 \
  *     --data-dir sift --queries 1000 --k 10 --pages 1,2,4,8,16 \
  *     --fixed-ms 1,10,30 --bandwidth-mibps 100 --parallelism 6
@@ -88,7 +88,7 @@ function percentile(sorted, p) {
 }
 
 async function main() {
-  const artifactPath = arg('artifact', 'benchmark_results/layout/pancake-sift1m-u8-metis-split.pancake-range');
+  const artifactPath = arg('artifact', 'benchmark_results/layout/pancake-sift1m-u8-metis-split.pikelet-range');
   const partitionPath = arg('partition', 'benchmark_results/layout/pancake-sift1m-base.metis.part.5036');
   const dataDir = arg('data-dir', 'sift');
   const nQueries = Number(arg('queries', 1000));

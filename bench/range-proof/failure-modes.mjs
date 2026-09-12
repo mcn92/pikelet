@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openPancakeFile, httpRangeSource } from '../../complete/index.mjs';
+import { openPikeletFile, httpRangeSource } from '../../complete/index.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const packPath = path.resolve(process.argv[2] || path.join(ROOT, 'local-packs/pride-prejudice.pikelet'));
@@ -124,7 +124,7 @@ async function run(name, setup) {
   const { server, url, expectedIdentity } = await setup();
   try {
     const source = httpRangeSource(url, { maxRetries: 0 });
-    const remote = await openPancakeFile(source, expectedIdentity ? { expectedIdentity } : {});
+    const remote = await openPikeletFile(source, expectedIdentity ? { expectedIdentity } : {});
     const result = await remote.query('Why did Elizabeth Bennet change her mind about Darcy?', { k: 1 });
     console.log(`OUTCOME: mounted and queried successfully (${result.results.length} result(s))`);
     console.log(`  fullFallback (server ignored Range): ${source.stats.fullFallback}`);
@@ -142,7 +142,7 @@ async function run(name, setup) {
 }
 
 async function main() {
-  const { openPancakeFile: local } = await import('../../complete/index.mjs');
+  const { openPikeletFile: local } = await import('../../complete/index.mjs');
   const localSearch = await local(packPath);
   const realIdentity = localSearch.info().identity;
   await localSearch.close();

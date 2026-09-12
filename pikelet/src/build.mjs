@@ -69,7 +69,7 @@ async function buildAssets(projectDir, config, options = {}) {
   let artifact = null;
   let artifactInfo = null;
   if (config.runtime?.mode === 'artifact') {
-    log('Warning: the artifact runtime builds the deprecated .pancake-range profile. Prefer the snapshot runtime, or `pikelet compile` for a complete .pikelet file.');
+    log('Warning: the artifact runtime builds the deprecated .pikelet-range profile. Prefer the snapshot runtime, or `pikelet compile` for a complete .pikelet file.');
     if (artifactPath && !fssync.existsSync(artifactPath)) {
       throw new CliError(`Configured Search Artifact not found: ${artifactPath}\nNext: update runtime.artifactPath in pikelet.config.json or rebuild with --artifact <file>.`, 2);
     }
@@ -100,7 +100,7 @@ async function buildAssets(projectDir, config, options = {}) {
     manifest.artifact = artifactInfo;
     manifest.runtime = { ...manifest.runtime, mode: 'complete', artifactUrl: 'search.pikelet' };
   } else if (config.runtime?.mode === 'artifact') {
-    const outPath = path.join(assetsDir, 'index.pancake-range');
+    const outPath = path.join(assetsDir, 'index.pikelet-range');
     if (artifact) {
       await fs.writeFile(outPath, artifact);
     } else {
@@ -237,7 +237,7 @@ function makeManifest(config, chunks, snapshot, vectors, artifact = null, artifa
     cliVersion: CLI_VERSION,
     name: config.name,
     model: config.embedding.mode === 'student'
-      ? 'pancake-distilled-student'
+      ? 'pikelet-distilled-student'
       : config.embedding.mode === 'inline-transformer'
         ? config.runtime?.inlineEncoder?.model || 'sentence-transformers/all-MiniLM-L6-v2'
         : config.embedding.buildModel,
@@ -294,10 +294,10 @@ async function projectedGzipBytes(projectDir) {
     'assets/manifest.json',
   ];
   const completePath = path.join(projectDir, 'assets', 'search.pikelet');
-  const artifactPath = path.join(projectDir, 'assets', 'index.pancake-range');
+  const artifactPath = path.join(projectDir, 'assets', 'index.pikelet-range');
   files.push(fssync.existsSync(completePath)
     ? 'assets/search.pikelet'
-    : fssync.existsSync(artifactPath) ? 'assets/index.pancake-range' : 'assets/snapshot.pnck');
+    : fssync.existsSync(artifactPath) ? 'assets/index.pikelet-range' : 'assets/snapshot.pnck');
   for (const studentFile of ['student-embedder.mjs', 'assets/student-model.bin', 'assets/student-abstention.json']) {
     if (fssync.existsSync(path.join(projectDir, studentFile))) files.push(studentFile);
   }

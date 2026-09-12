@@ -2,7 +2,7 @@
 // The reader, encoder, sketch scan, and calibration are the same modules
 // Node runs; kind-3 uses reader-owned WASM kernels, no server-side search.
 
-import { openPancakeFile } from '../pikelet-file-reader.mjs';
+import { openPikeletFile } from '../pikelet-file-reader.mjs';
 import { httpRangeSource } from '../sources.mjs';
 
 // Prefer the content-addressed URL from the pointer (immutable-cacheable,
@@ -26,7 +26,7 @@ const resultsEl = document.getElementById('results');
 const source = httpRangeSource(FILE_URL);
 await source.init();
 const openStart = performance.now();
-const search = await openPancakeFile(source, {
+const search = await openPikeletFile(source, {
     // Resident-scan acceleration: at wiki scale the pure-JS sketch scan is
     // ~500 ms of every warm query. The factory runs in the background after
     // open — the engine entrypoint (and its wasm, a lazy Vite asset) only

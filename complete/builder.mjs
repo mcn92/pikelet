@@ -228,7 +228,7 @@ export function buildLexicalSegment(texts) {
   };
 }
 
-// Corpus layout v1 (format 1, profile pancake-complete-v1): count + offsets +
+// Corpus layout v1 (format 1, profile pikelet-complete-v1): count + offsets +
 // records, integrity by whole-segment digest only. Kept for producing
 // format-1 files (compatibility fixtures, readers that predate format 2);
 // new artifacts use buildCorpusSegment() below.
@@ -248,7 +248,7 @@ export function buildCorpusSegmentFromBuffers(records) {
   return out;
 }
 
-// Corpus layout v2 (format 2, profile pancake-complete-v2): per-record
+// Corpus layout v2 (format 2, profile pikelet-complete-v2): per-record
 // integrity that a reader can check on the single range read that hydrates
 // a record, without fetching the rest of the segment (contract 4.1 / 7):
 //
@@ -352,7 +352,7 @@ export async function measureRecommendedRerank({
     async read(offset, length) { return bytes.subarray(offset, offset + length); },
     async close() {},
   };
-  const sketch = await artifactModule.PancakeSketchArtifact.open(source);
+  const sketch = await artifactModule.PikeletSketchArtifact.open(source);
   try {
     const count = sketch.count;
     if (count === 0) throw new Error('cannot measure rerank on an empty sketch');
@@ -432,16 +432,16 @@ function selfQueriesFromSnapshot(graph, maxQueries) {
   return queries;
 }
 
-// Container format version follows the profile string: pancake-complete-v1
-// files carry corpus layout v1 and header version 1; pancake-complete-v2
+// Container format version follows the profile string: pikelet-complete-v1
+// files carry corpus layout v1 and header version 1; pikelet-complete-v2
 // files carry corpus layout records-v2 (buildCorpusSegment) and header
 // version 2, so readers that predate per-record integrity reject them
 // explicitly instead of misreading the corpus tables.
-export const PROFILE_V1 = 'pancake-complete-v1';
-export const PROFILE_V2 = 'pancake-complete-v2';
+export const PROFILE_V1 = 'pikelet-complete-v1';
+export const PROFILE_V2 = 'pikelet-complete-v2';
 export const FORMAT_VERSIONS = { [PROFILE_V1]: 1, [PROFILE_V2]: 2 };
 
-export function assemblePancakeFile(manifestFields, segments, outPath) {
+export function assemblePikeletFile(manifestFields, segments, outPath) {
   const formatVersion = FORMAT_VERSIONS[manifestFields.profile];
   if (!formatVersion) {
     throw new Error(`manifest.profile must be ${PROFILE_V1} or ${PROFILE_V2}, got ${manifestFields.profile}`);

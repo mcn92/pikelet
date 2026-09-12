@@ -58,10 +58,10 @@ different bytes without bumping `packVersion`.
 ```bash
 BASE=https://pancake-wiki-pack-demo.pages.dev
 VER=$(curl -s $BASE/pack/pack-manifest.json | grep -o '"packVersion": "[^"]*"' | cut -d'"' -f4)
-curl -s -H "Range: bytes=0-127" -o /dev/null -w "artifact: %{http_code}\n" $BASE/pack/$VER/wiki.pancake-sketch
+curl -s -H "Range: bytes=0-127" -o /dev/null -w "artifact: %{http_code}\n" $BASE/pack/$VER/wiki.pikelet-sketch
 # boundary read across the corpus split (expects the full 201 bytes)
 curl -s -H "Range: bytes=209715100-209715300" -o /dev/null -w "boundary: %{http_code} %{size_download}B\n" $BASE/pack/$VER/corpus.bin
-curl -s -H "Range: bytes=0-127" -o /dev/null -w "shard1: %{http_code}\n" https://shard1.pancake-wiki-pack-demo.pages.dev/pack/$VER/wiki.pancake-sketch
+curl -s -H "Range: bytes=0-127" -o /dev/null -w "shard1: %{http_code}\n" https://shard1.pancake-wiki-pack-demo.pages.dev/pack/$VER/wiki.pikelet-sketch
 ```
 
 Then load the site and run the golden probes in the console:

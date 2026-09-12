@@ -3,7 +3,7 @@
 //
 // Same encoder output as B/C (cached Pikelet-encoder vectors), same
 // quantized u8 corpus representation, but searched through the REAL
-// PancakeIndex (Pikelet.create({quantized:true}) + addBatch + search) —
+// PikeletIndex (Pikelet.create({quantized:true}) + addBatch + search) —
 // the actual HNSW graph, not the hand-rolled exhaustive scan query-C.mjs
 // uses. C -> D isolates approximate-nearest-neighbor loss on top of
 // quantization, holding the encoder and corpus representation fixed.
@@ -70,7 +70,7 @@ const testIds = testQueryIds();
 
 const dim = corpus.dim;
 
-console.error(`building PancakeIndex: ${corpus.count} vectors, dim ${dim}, quantized u8, efSearch ${config.efSearch}`);
+console.error(`building PikeletIndex: ${corpus.count} vectors, dim ${dim}, quantized u8, efSearch ${config.efSearch}`);
 const buildT0 = performance.now();
 const index = await Pikelet.create({
   dim,
@@ -107,7 +107,7 @@ for (let qi = 0; qi < queries.count; qi++) {
   const hits = index.search(qvec, K, { efSearch: config.efSearch });
   latencies.push(performance.now() - t0);
 
-  // PancakeIndex uses distance (lower = closer) for cosine internally per
+  // PikeletIndex uses distance (lower = closer) for cosine internally per
   // pikelet.d.ts SearchResult; convert to a score where higher = better for
   // consistency with run-{A,B,C}.json's score field. Cosine distance here is
   // 1 - cosine_similarity (standard HNSW convention), so similarity = 1 - distance.

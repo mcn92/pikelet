@@ -1,10 +1,10 @@
 'use strict';
-// Range artifact profile (.pancake-range) — spec/SEARCH_ARTIFACT_CONTRACT.md 9.2:
-// PancakeRangeArtifact reader and the range-artifact builder.
+// Range artifact profile (.pikelet-range) — spec/SEARCH_ARTIFACT_CONTRACT.md 9.2:
+// PikeletRangeArtifact reader and the range-artifact builder.
 // Split out of pikelet-artifact.js (the public entry, which re-exports the
 // three parts); see that file for the module map.
 
-const { pikeletError, PANCAKE_ERROR_CODES } = require('./pikelet-errors.js');
+const { pikeletError, PIKELET_ERROR_CODES } = require('./pikelet-errors.js');
 const {
     MAX_COALESCED_RANGE_BYTES,
     readChecked,
@@ -35,7 +35,7 @@ const RANGE_DIGESTS_OFFSET = 128;
 const RANGE_DIGEST_BYTES = 32;
 const ROUTER_LOCATION_MASK = 0x80000000;
 const LOCATION_ORDINAL_MASK = 0x7fffffff;
-class PancakeRangeArtifact {
+class PikeletRangeArtifact {
     constructor(source, header, idMap, options = {}) {
         this.source = source;
         this.version = header.version;
@@ -77,11 +77,11 @@ class PancakeRangeArtifact {
 
     static async open(source, options = {}) {
         if (!source || typeof source.read !== 'function') {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'PancakeRangeArtifact.open() requires a range source with read(offset, length)');
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'PikeletRangeArtifact.open() requires a range source with read(offset, length)');
         }
         const headerBytes = await readChecked(source, 0, HEADER_BYTES, 'header');
         if (headerBytes.byteLength < HEADER_BYTES) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact header is truncated');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact header is truncated');
         }
         const header = parseHeader(headerBytes);
         // Resolved before construction: the id-map read below is driven by an
@@ -91,7 +91,7 @@ class PancakeRangeArtifact {
         if (header.version >= 3) {
             const digestBytes = await readChecked(source, RANGE_DIGESTS_OFFSET, RANGE_DIGEST_BYTES * 3, 'header digests');
             if (digestBytes.byteLength !== RANGE_DIGEST_BYTES * 3) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact header digests are truncated');
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact header digests are truncated');
             }
             digests = {
                 idMap: new Uint8Array(digestBytes.subarray(0, RANGE_DIGEST_BYTES)),
@@ -101,12 +101,12 @@ class PancakeRangeArtifact {
         }
         const idMapBytes = await readChecked(source, header.idMapOffset, header.count * 4, 'id map', maxReadBytes);
         if (idMapBytes.byteLength !== header.count * 4) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact id map is truncated');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact id map is truncated');
         }
         const copied = new Uint8Array(idMapBytes.byteLength);
         copied.set(idMapBytes);
         const idMap = new Uint32Array(copied.buffer);
-        const artifact = new PancakeRangeArtifact(source, header, idMap, options);
+        const artifact = new PikeletRangeArtifact(source, header, idMap, options);
         artifact.digests = digests;
         if (digests && artifact.verify) {
             await verifySha256(copied, digests.idMap, 'Range artifact id map');
@@ -124,7 +124,7 @@ class PancakeRangeArtifact {
         // open must release it, or every corrupt artifact leaks an fd.
         const source = new NodeFileRangeSource(filePath);
         try {
-            return await PancakeRangeArtifact.open(source, options);
+            return await PikeletRangeArtifact.open(source, options);
         } catch (err) {
             await source.close().catch(() => {});
             throw err;
@@ -179,7 +179,7 @@ class PancakeRangeArtifact {
     // complete-profile manifest.
     async verifyBaseSegment(options = {}) {
         if (!this.digests) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT,
                 'Range artifact predates segment digests (format v3); nothing to verify against', { version: this.version });
         }
         const bytes = this.baseCount * this.recordBytes;
@@ -199,19 +199,19 @@ class PancakeRangeArtifact {
 
     recordAddressForId(id) {
         if (!Number.isInteger(id) || id < 0 || id >= this.count) {
-            throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `Node id ${id} is outside artifact bounds`, { id, count: this.count });
+            throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `Node id ${id} is outside artifact bounds`, { id, count: this.count });
         }
         const location = this.originalToLocation[id];
         if (this.version >= 2) {
             const ordinal = location & LOCATION_ORDINAL_MASK;
             if ((location & ROUTER_LOCATION_MASK) !== 0) {
-                if (ordinal >= this.routerCount) throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, `Router ordinal ${ordinal} is outside artifact`);
+                if (ordinal >= this.routerCount) throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, `Router ordinal ${ordinal} is outside artifact`);
                 return this.routerRecordsOffset + ordinal * this.recordBytes;
             }
-            if (ordinal >= this.baseCount) throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, `Base ordinal ${ordinal} is outside artifact`);
+            if (ordinal >= this.baseCount) throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, `Base ordinal ${ordinal} is outside artifact`);
             return this.baseRecordsOffset + ordinal * this.recordBytes;
         }
-        if (location >= this.count) throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, `Node id ${id} is not addressable in artifact`);
+        if (location >= this.count) throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, `Node id ${id} is not addressable in artifact`);
         return this.recordsOffset + location * this.recordBytes;
     }
 
@@ -245,7 +245,7 @@ class PancakeRangeArtifact {
         await this.prefetch([id]);
         const node = this.cachedNode(id);
         if (node === undefined) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                 'Range artifact record for id was not resolved by its address', { id });
         }
         return node;
@@ -281,7 +281,7 @@ class PancakeRangeArtifact {
             const bytes = end - start;
             const buffer = await readChecked(this.source, start, bytes, 'record');
             if (buffer.byteLength !== bytes) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record read returned a truncated range', { offset: start, bytes, actual: buffer.byteLength });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record read returned a truncated range', { offset: start, bytes, actual: buffer.byteLength });
             }
             return { start, end, bytes, buffer };
         };
@@ -297,7 +297,7 @@ class PancakeRangeArtifact {
                 // poison the cache under an attacker-chosen key and searches
                 // for the real id would die uncoded.
                 if (originalId >= this.count || this.recordAddressForId(originalId) !== start + off) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                         'Range artifact record id does not match its address',
                         { originalId, address: start + off });
                 }
@@ -331,7 +331,7 @@ class PancakeRangeArtifact {
         const bytes = this.routerCount * this.recordBytes;
         const buffer = await readChecked(this.source, this.routerRecordsOffset, bytes, 'router segment', this.maxReadBytes);
         if (buffer.byteLength !== bytes) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact router segment is truncated');
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact router segment is truncated');
         }
         if (this.digests && this.verify) {
             await verifySha256(buffer, this.digests.router, 'Range artifact router segment');
@@ -344,7 +344,7 @@ class PancakeRangeArtifact {
             // Same untrusted-id check as decodeRange: the embedded id must map
             // back to this router slot's address.
             if (originalId >= this.count || this.recordAddressForId(originalId) !== address) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
                     'Range artifact router record id does not match its address',
                     { originalId, address });
             }
@@ -362,13 +362,13 @@ class PancakeRangeArtifact {
         // Records are untrusted bytes. Counts beyond the header geometry would
         // read filler (or zeros) as edges; fail closed instead.
         if (level > this.maxLevel || baseCount > this.M0) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record structure is inconsistent', { id, level, baseCount });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record structure is inconsistent', { id, level, baseCount });
         }
         const upperCounts = new Uint16Array(this.maxLevel);
         for (let i = 0; i < this.maxLevel; i++) {
             upperCounts[i] = readU16(view, state);
             if (upperCounts[i] > this.M) {
-                throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record structure is inconsistent', { id, level: i + 1, edges: upperCounts[i] });
+                throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record structure is inconsistent', { id, level: i + 1, edges: upperCounts[i] });
             }
         }
         const qdata = new Uint8Array(this.dim);
@@ -381,7 +381,7 @@ class PancakeRangeArtifact {
             const neighbor = readU32(view, state);
             if (i < baseCount) {
                 if (neighbor >= this.count) {
-                    throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record has an out-of-bounds neighbor', { id, neighbor, count: this.count });
+                    throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record has an out-of-bounds neighbor', { id, neighbor, count: this.count });
                 }
                 base[i] = neighbor;
             }
@@ -393,7 +393,7 @@ class PancakeRangeArtifact {
                 const neighbor = readU32(view, state);
                 if (i < edges.length) {
                     if (neighbor >= this.count) {
-                        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record has an out-of-bounds neighbor', { id, neighbor, count: this.count });
+                        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact record has an out-of-bounds neighbor', { id, neighbor, count: this.count });
                     }
                     edges[i] = neighbor;
                 }
@@ -511,7 +511,7 @@ class PancakeRangeArtifact {
 
         const top = results.items.sort(compareDistancesAsc).slice(0, k);
         // Traversal orders by squared L2; the API contract (README "Distance
-        // values") reports Euclidean, matching PancakeIndex.search.
+        // values") reports Euclidean, matching PikeletIndex.search.
         if (this.metric !== 1) {
             for (const hit of top) hit.distance = Math.sqrt(hit.distance);
         }
@@ -528,12 +528,12 @@ function parseHeader(headerBytes) {
     const state = { offset: 0 };
     const magic = readU32(view, state);
     if (magic !== RANGE_MAGIC) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Not a Pikelet range artifact', { magic });
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Not a Pikelet range artifact', { magic });
     }
     const version = readU32(view, state);
     const kind = readU32(view, state);
     if (kind !== RANGE_KIND_U8) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported Pikelet range artifact kind', { kind });
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported Pikelet range artifact kind', { kind });
     }
     const header = {
         version,
@@ -556,7 +556,7 @@ function parseHeader(headerBytes) {
     };
     if (header.metric !== 0) {
         if (header.metric !== 1) {
-            throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported Pikelet range artifact metric', { metric: header.metric });
+            throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported Pikelet range artifact metric', { metric: header.metric });
         }
     }
     if (version >= 2) {
@@ -569,7 +569,7 @@ function parseHeader(headerBytes) {
         header.baseRecordsOffset = header.recordsOffset;
     }
     if (version < 1 || version > RANGE_VERSION) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported Pikelet range artifact version', { version });
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Unsupported Pikelet range artifact version', { version });
     }
     // recordBytes must agree with the layout the geometry implies, or
     // decodeNode would read past record boundaries on a corrupt header.
@@ -580,7 +580,7 @@ function parseHeader(headerBytes) {
         || header.entryPoint >= header.count
         || header.recordBytes !== expectedRecordBytes
         || (version >= 2 && header.routerCount + header.baseCount !== header.count)) {
-        throw pikeletError(PANCAKE_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact header geometry is inconsistent', {
+        throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Range artifact header geometry is inconsistent', {
             dim: header.dim, count: header.count, maxLevel: header.maxLevel,
             M: header.M, M0: header.M0, recordBytes: header.recordBytes, expectedRecordBytes,
         });
@@ -662,7 +662,7 @@ function identityPermutation(count) {
 function buildOrdinalToOriginal(index, layout) {
     if (layout === 'identity') return identityPermutation(index.count);
     if (layout === 'rcm') return reverseCuthillMckeePermutation(index);
-    throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, `Unsupported Search Artifact layout '${layout}'`, { layout });
+    throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, `Unsupported Search Artifact layout '${layout}'`, { layout });
 }
 
 function exportSplitArtifact(index, outPath, options = {}) {
@@ -778,7 +778,7 @@ function exportSplitArtifact(index, outPath, options = {}) {
 
 function buildRangeArtifact(snapshotBytes, outPath, options = {}) {
     if (typeof outPath !== 'string' || outPath.length === 0) {
-        throw pikeletError(PANCAKE_ERROR_CODES.INVALID_ARGUMENT, 'buildRangeArtifact() requires an output path');
+        throw pikeletError(PIKELET_ERROR_CODES.INVALID_ARGUMENT, 'buildRangeArtifact() requires an output path');
     }
     const index = parseUint8Snapshot(snapshotBytes);
     return exportSplitArtifact(index, outPath, options);
@@ -791,7 +791,7 @@ function buildRangeArtifactFile(snapshotPath, outPath, options = {}) {
 }
 
 module.exports = {
-    PancakeRangeArtifact,
+    PikeletRangeArtifact,
     buildRangeArtifact,
     buildRangeArtifactFile,
     exportSplitArtifact,

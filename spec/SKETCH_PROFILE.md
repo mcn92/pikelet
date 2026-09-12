@@ -5,7 +5,7 @@ project and is licensed under the Apache License 2.0 (see `LICENSE`).
 
 **Status:** Draft 1
 **Profile of:** the Search Artifact Contract (`SEARCH_ARTIFACT_CONTRACT.md`)
-**File extension:** `.pancake-sketch`
+**File extension:** `.pikelet-sketch`
 **Magic:** `PSA1` (`0x31415350`, little-endian u32)
 
 ## 1. Purpose
@@ -246,7 +246,7 @@ Mapping to the Search Artifact Contract's layers:
 Conformance fixtures (contract 5.4): committed in
 `test/fixtures/sketch_golden.js` and checked by `test/sketch_profile.js`
 (part of `npm test`). Each of the four cases (l2/cosine × 4-bit/8-bit)
-carries the base64 `.pancake-sketch` bytes, fixed queries, and the reference
+carries the base64 `.pikelet-sketch` bytes, fixed queries, and the reference
 reader's exact ids and distances at `(k, C)` of `(5, 32)` and `(10, 64)`. A
 conforming reader must reproduce those results from the committed bytes; the
 WASM-scanner path is held to the same ids. Regenerate with
@@ -256,7 +256,7 @@ float brute force.
 
 ## 6. Relationship to other profiles
 
-| | Snapshot (`.pnck`) | Range (`.pancake-range`, deprecated) | Sketch (`.pancake-sketch`) |
+| | Snapshot (`.pnck`) | Range (`.pikelet-range`, deprecated) | Sketch (`.pikelet-sketch`) |
 | --- | --- | --- | --- |
 | Execution | full restore, in-memory HNSW | resident router + lazy graph traversal | resident scan + one-round rerank |
 | Sequential fetch rounds | n/a | ~24 cold (measured) | 1 |

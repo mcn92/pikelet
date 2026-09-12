@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadStudentModel, embedTextWithStudent } from '../legacy/03-edge-docs-search/student-embedder.mjs';
-import { openPancakeFile } from './pikelet-file-reader.mjs';
+import { openPikeletFile } from './pikelet-file-reader.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const DATA = path.join(here, '..', '04-static-wiki-pack', 'data-full');
@@ -40,7 +40,7 @@ console.log(`student-vs-teacher cosine on owned queries: mean ${(cosSum / subset
 
 // Recall@10 through the container, both encoders, same subset.
 async function recallWith(encodeQuery, label) {
-    const search = await openPancakeFile(path.join(here, 'pancake-wiki.pancake'), { encodeQuery });
+    const search = await openPikeletFile(path.join(here, 'pancake-wiki.pancake'), { encodeQuery });
     let hits = 0;
     for (const q of subset) {
         const out = await search.query(evalQueries[q].text, { k: 10 });

@@ -30,10 +30,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { PancakeSketchArtifact } = require('../../../pikelet-artifact.js');
+const { PikeletSketchArtifact } = require('../../../pikelet-artifact.js');
 
 const DATA = path.join(here, '..', '..', '..', 'examples', '04-static-wiki-pack', 'data-full');
-const SKETCH_PATH = path.join(DATA, 'wiki.pancake-sketch');
+const SKETCH_PATH = path.join(DATA, 'wiki.pikelet-sketch');
 const QUERIES_PATH = path.join(DATA, 'eval-queries.f32');
 const DIM = 384;
 const ROW_BYTES = DIM; // u8 rows
@@ -234,7 +234,7 @@ function makeRand(seedInit) {
 }
 
 async function main() {
-    const sketch = await PancakeSketchArtifact.openFile(SKETCH_PATH);
+    const sketch = await PikeletSketchArtifact.openFile(SKETCH_PATH);
     const N = sketch.count;
     console.log(`sketch: ${N} rows, dim ${sketch.dim}, recommendedRerank ${sketch.recommendedRerank}, resident ${(sketch.residentBytes / 1048576).toFixed(1)} MiB`);
     const queries = loadQueries();

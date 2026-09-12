@@ -58,9 +58,9 @@ try { usearch = require('usearch'); }
 catch (e) { console.warn('WARN: usearch not installed — skipping usearch configs.'); }
 
 const DEFAULT_USEARCH_WASM_PATHS = {
-  i8: path.join(__dirname, '..', 'external', 'usearch-wasm', 'USearch', 'build_wasm_pancake_1gb_growth', 'usearch_wasm.wasm'),
-  f16: path.join(__dirname, '..', 'external', 'usearch-wasm', 'USearch', 'build_wasm_pancake_1gb_growth', 'usearch_wasm.wasm'),
-  f32: path.join(__dirname, '..', 'external', 'usearch-wasm', 'USearch', 'build_wasm_pancake_2gb_growth', 'usearch_wasm.wasm'),
+  i8: path.join(__dirname, '..', 'external', 'usearch-wasm', 'USearch', 'build_wasm_pikelet_1gb_growth', 'usearch_wasm.wasm'),
+  f16: path.join(__dirname, '..', 'external', 'usearch-wasm', 'USearch', 'build_wasm_pikelet_1gb_growth', 'usearch_wasm.wasm'),
+  f32: path.join(__dirname, '..', 'external', 'usearch-wasm', 'USearch', 'build_wasm_pikelet_2gb_growth', 'usearch_wasm.wasm'),
 };
 
 let HierarchicalNSW;

@@ -6,7 +6,7 @@
  * actually call, not as a copy of the raw WASM ABI.
  */
 
-import Pikelet, { PancakeError, PANCAKE_ERROR_CODES } from '../../../pikelet.workerd.mjs';
+import Pikelet, { PikeletError, PIKELET_ERROR_CODES } from '../../../pikelet.workerd.mjs';
 
 let index = null;
 let indexConfig = null;
@@ -43,14 +43,14 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const CLIENT_ERROR_CODES = new Set([
-  PANCAKE_ERROR_CODES.INVALID_ARGUMENT,
-  PANCAKE_ERROR_CODES.DIMENSION_MISMATCH,
-  PANCAKE_ERROR_CODES.INVALID_VECTOR,
-  PANCAKE_ERROR_CODES.INDEX_FULL,
-  PANCAKE_ERROR_CODES.COMPACTION_REQUIRED,
-  PANCAKE_ERROR_CODES.SNAPSHOT_INVALID,
-  PANCAKE_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
-  PANCAKE_ERROR_CODES.SNAPSHOT_CAPACITY_EXCEEDED
+  PIKELET_ERROR_CODES.INVALID_ARGUMENT,
+  PIKELET_ERROR_CODES.DIMENSION_MISMATCH,
+  PIKELET_ERROR_CODES.INVALID_VECTOR,
+  PIKELET_ERROR_CODES.INDEX_FULL,
+  PIKELET_ERROR_CODES.COMPACTION_REQUIRED,
+  PIKELET_ERROR_CODES.SNAPSHOT_INVALID,
+  PIKELET_ERROR_CODES.SNAPSHOT_CONFIG_MISMATCH,
+  PIKELET_ERROR_CODES.SNAPSHOT_CAPACITY_EXCEEDED
 ]);
 const restoreState = {
   restoreCount: 0,
@@ -757,9 +757,9 @@ export default {
       const message = error && error.message ? error.message : String(error);
       const status = error instanceof RequestError
         ? error.status
-        : (error instanceof PancakeError && CLIENT_ERROR_CODES.has(error.code) ? 400 : 500);
+        : (error instanceof PikeletError && CLIENT_ERROR_CODES.has(error.code) ? 400 : 500);
       const body = { error: status >= 500 ? 'Internal server error' : message };
-      if (status < 500 && error instanceof PancakeError) body.code = error.code;
+      if (status < 500 && error instanceof PikeletError) body.code = error.code;
       return withCors(jsonResponse(body, status), env);
     }
   }

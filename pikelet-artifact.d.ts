@@ -4,9 +4,9 @@
 
 import type {
   NodeFileRangeSourceConstructor,
-  PancakeRangeArtifactConstructor,
-  PancakeSketchArtifact,
-  PancakeSketchArtifactConstructor,
+  PikeletRangeArtifactConstructor,
+  PikeletSketchArtifact,
+  PikeletSketchArtifactConstructor,
   RangeArtifactBuildManifest,
   RangeArtifactBuildOptions,
   SketchArtifactBuildManifest,
@@ -50,8 +50,8 @@ export interface SketchRowSource {
   readonly offsets: Float32Array;
 }
 
-export declare const PancakeRangeArtifact: PancakeRangeArtifactConstructor;
-export declare const PancakeSketchArtifact: PancakeSketchArtifactConstructor;
+export declare const PikeletRangeArtifact: PikeletRangeArtifactConstructor;
+export declare const PikeletSketchArtifact: PikeletSketchArtifactConstructor;
 export declare const NodeFileRangeSource: NodeFileRangeSourceConstructor;
 
 /**
@@ -60,13 +60,13 @@ export declare const NodeFileRangeSource: NodeFileRangeSourceConstructor;
  */
 export declare function createSketchScanner(
   loadEngine: () => Promise<unknown>,
-  artifact: PancakeSketchArtifact,
+  artifact: PikeletSketchArtifact,
   options?: SketchScannerOptions
 ): Promise<SketchScanner>;
 
 /**
- * @deprecated The `.pancake-range` profile is deprecated
- * (spec/SEARCH_ARTIFACT_CONTRACT.md 9.2); build a `.pancake-sketch`
+ * @deprecated The `.pikelet-range` profile is deprecated
+ * (spec/SEARCH_ARTIFACT_CONTRACT.md 9.2); build a `.pikelet-sketch`
  * artifact instead. Readers stay supported for existing artifacts.
  */
 export declare function buildRangeArtifact(
@@ -76,8 +76,8 @@ export declare function buildRangeArtifact(
 ): RangeArtifactBuildManifest;
 
 /**
- * @deprecated The `.pancake-range` profile is deprecated
- * (spec/SEARCH_ARTIFACT_CONTRACT.md 9.2); build a `.pancake-sketch`
+ * @deprecated The `.pikelet-range` profile is deprecated
+ * (spec/SEARCH_ARTIFACT_CONTRACT.md 9.2); build a `.pikelet-sketch`
  * artifact instead. Readers stay supported for existing artifacts.
  */
 export declare function buildRangeArtifactFile(

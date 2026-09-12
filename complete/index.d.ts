@@ -1,6 +1,6 @@
 /**
  * pikelet-wasm/complete — reader for complete .pikelet artifacts
- * (spec/COMPLETE_PROFILE.md, profile pancake-complete-v1). Opens any kind
+ * (spec/COMPLETE_PROFILE.md, profile pikelet-complete-v1). Opens any kind
  * (1 student-inline, 2 declared-external, 3 inline-transformer) from a file
  * path in Node or a range source anywhere.
  */
@@ -74,7 +74,7 @@ export interface CompleteSearch {
     identity: string;
     /** Container header formatVersion (1 or 2). */
     formatVersion: number;
-    /** Manifest profile: 'pancake-complete-v1' | 'pancake-complete-v2'. */
+    /** Manifest profile: 'pikelet-complete-v1' | 'pikelet-complete-v2'. */
     profile: string;
     /**
      * Human-readable pack name from the identity-verified manifest
@@ -173,7 +173,7 @@ export interface CompleteSearch {
   close(): Promise<void>;
 }
 
-export declare function openPancakeFile(
+export declare function openPikeletFile(
   input: string | CompleteRangeSource,
   options?: {
     /**
@@ -291,6 +291,3 @@ export declare function buildInlineTestVectors(embedder: unknown, texts?: string
   text: string; windows: number; embedding: number[]; tolerance: number;
 }>>;
 export declare function verifyInlineTestVectors(embedder: unknown): Promise<{ checked: number }>;
-
-/** Documented alias for openPancakeFile — the project renamed to Pikelet; the reader's original export stays for compatibility. */
-export declare const openPikeletFile: typeof openPancakeFile;

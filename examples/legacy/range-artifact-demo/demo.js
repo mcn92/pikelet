@@ -6,14 +6,14 @@ const path = require('path');
 const Pikelet = require('../../../pikelet.js');
 
 // Default to the docs artifact committed to the repo so the demo runs on a
-// fresh clone with no extra data. Point --artifact at a larger .pancake-range
+// fresh clone with no extra data. Point --artifact at a larger .pikelet-range
 // (e.g. a SIFT1M export) to exercise scale.
 const DEFAULT_ARTIFACT = path.join(
     __dirname,
     'static',
     'public',
     'artifacts',
-    'pancake-docs.pancake-range'
+    'pikelet-docs.pikelet-range'
 );
 // Optional real-query source; when absent the demo synthesizes queries at the
 // artifact's own dimension so it works standalone.
@@ -103,7 +103,7 @@ async function main() {
             `Artifact not found: ${artifactPath}`,
             '',
             'The default is the docs artifact committed to the repo. Pass',
-            '--artifact <file.pancake-range> to point at your own.',
+            '--artifact <file.pikelet-range> to point at your own.',
         ].join('\n'));
     }
 

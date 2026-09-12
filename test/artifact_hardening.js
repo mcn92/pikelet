@@ -19,7 +19,7 @@ const os = require('os');
 const path = require('path');
 const Pikelet = require('../pikelet.js');
 const {
-    PancakeRangeArtifact, PancakeSketchArtifact, buildRangeArtifact, buildSketchArtifact, parseUint8Snapshot,
+    PikeletRangeArtifact, PikeletSketchArtifact, buildRangeArtifact, buildSketchArtifact, parseUint8Snapshot,
 } = require('../pikelet-artifact.js');
 
 let passed = 0, failed = 0;
@@ -52,8 +52,8 @@ async function buildFixtures(tmp, metric) {
     }
     const snapshot = index.export();
     index.dispose();
-    const rangePath = path.join(tmp, `${metric}.pancake-range`);
-    const sketchPath = path.join(tmp, `${metric}.pancake-sketch`);
+    const rangePath = path.join(tmp, `${metric}.pikelet-range`);
+    const sketchPath = path.join(tmp, `${metric}.pikelet-sketch`);
     buildRangeArtifact(snapshot, rangePath, { layout: 'rcm' });
     buildSketchArtifact(snapshot, sketchPath, { recommendedRerank: 20 });
     return { dim, count, snapshot, vectors, rangePath, sketchPath };
@@ -69,22 +69,22 @@ async function main() {
     const before = openFds();
     let rangeRejected = 0, sketchRejected = 0;
     for (let i = 0; i < 50; i++) {
-        try { await PancakeRangeArtifact.openFile(garbage); } catch { rangeRejected++; }
-        try { await PancakeSketchArtifact.openFile(garbage); } catch { sketchRejected++; }
+        try { await PikeletRangeArtifact.openFile(garbage); } catch { rangeRejected++; }
+        try { await PikeletSketchArtifact.openFile(garbage); } catch { sketchRejected++; }
     }
     const after = openFds();
     check('50 garbage range opens and 50 garbage sketch opens are all rejected', rangeRejected === 50 && sketchRejected === 50);
     if (before === null) console.log('  (skip: /proc/self/fd unavailable on this platform; descriptor count not measured)');
     else check('open descriptor count is unchanged after 100 rejected opens', after - before <= 0, `before ${before}, after ${after}`);
     await rejects('openFile() on a missing path rejects with ENOENT and leaves no descriptor',
-        () => PancakeRangeArtifact.openFile(path.join(tmp, 'missing.pancake-range')), undefined, /ENOENT/);
+        () => PikeletRangeArtifact.openFile(path.join(tmp, 'missing.pikelet-range')), undefined, /ENOENT/);
     if (before !== null) check('descriptor count still unchanged after the missing-file open', openFds() - before <= 0);
 
     for (const metric of ['l2', 'cosine']) {
         console.log(`\n2-3. query contract and bounded k on ${metric} artifacts`);
         const fx = await buildFixtures(tmp, metric);
-        const range = await PancakeRangeArtifact.openFile(fx.rangePath);
-        const sketch = await PancakeSketchArtifact.openFile(fx.sketchPath);
+        const range = await PikeletRangeArtifact.openFile(fx.rangePath);
+        const sketch = await PikeletSketchArtifact.openFile(fx.sketchPath);
         const q = fx.vectors[3];
         const strings = Array.from(q, (v) => String(v));
         const withNaN = Float32Array.from(q); withNaN[2] = NaN;
@@ -192,9 +192,9 @@ async function main() {
             index.add(v);
         }
         const big = index.export(); index.dispose();
-        const bigPath = path.join(tmp, 'big.pancake-sketch');
+        const bigPath = path.join(tmp, 'big.pikelet-sketch');
         buildSketchArtifact(big, bigPath, { recommendedRerank: 40 });
-        const sketch = await PancakeSketchArtifact.openFile(bigPath);
+        const sketch = await PikeletSketchArtifact.openFile(bigPath);
         const q = new Float32Array(dim); for (let d = 0; d < dim; d++) q[d] = Math.sin(17 * 0.37 + d);
         const t0 = Date.now();
         const all = (await sketch.search(q, count)).results;

@@ -68,7 +68,7 @@ MAX_QUERY_CHARS = "4096"
 ${student ? '' : `LOCAL_STUB_AI = "${localStubAi ? '1' : '0'}"\n`}
 [[rules]]
 type = "Data"
-globs = ["**/*.pnck", "**/*.pancake-range", "**/*.bin"]
+globs = ["**/*.pnck", "**/*.pikelet-range", "**/*.bin"]
 fallthrough = true
 
 [[rules]]

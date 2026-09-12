@@ -69,7 +69,7 @@ export async function openDocsSearch({ manifestPath, indexPath, encoderPath, cal
     // LESSON: buildSketchArtifact needs a bytes-in/bytes-out variant before
     // the compiler can assemble segments without touching disk.
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pancake-one-file-'));
-    const sketchPath = path.join(tmpDir, 'index.pancake-sketch');
+    const sketchPath = path.join(tmpDir, 'index.pikelet-sketch');
     buildSketchArtifact(snapshotBytes, sketchPath, {
         recommendedRerank: manifest.efSearch || 120,
     });

@@ -15,8 +15,8 @@ export declare function canonicalJson(value: unknown): string;
 export declare const align16: (n: number) => number;
 
 /** Manifest profile strings and the header formatVersion each one implies. */
-export declare const PROFILE_V1: 'pancake-complete-v1';
-export declare const PROFILE_V2: 'pancake-complete-v2';
+export declare const PROFILE_V1: 'pikelet-complete-v1';
+export declare const PROFILE_V2: 'pikelet-complete-v2';
 export declare const FORMAT_VERSIONS: Record<string, number>;
 /** Corpus layout name for format 2 (per-record digests behind a page table). */
 export declare const CORPUS_LAYOUT_V2: 'records-v2';
@@ -52,7 +52,7 @@ export declare function buildInlineTransformerEncoderSegment(input: {
  * buildCorpusSegment() corpus); mismatches throw. Segments with a kind this
  * spec does not name must carry an explicit kindNumber (readers skip them).
  */
-export declare function assemblePancakeFile(
+export declare function assemblePikeletFile(
   manifestFields: Record<string, unknown> & { profile: string; corpus: { records: number } & Record<string, unknown> },
   segments: Array<{ kind: string; bytes: Buffer | Uint8Array; kindNumber?: number }>,
   outPath: string

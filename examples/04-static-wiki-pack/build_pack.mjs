@@ -3,7 +3,7 @@
 //
 //   data/vectors.f32 + data/corpus.jsonl
 //     -> data/wiki.pnck            (engine snapshot, cosine, u8 quantized)
-//     -> data/wiki.pancake-sketch  (resident-sketch artifact, the pack's index)
+//     -> data/wiki.pikelet-sketch  (resident-sketch artifact, the pack's index)
 //     -> data/corpus.bin           (corpus chunks, one JSON row per line, as bytes)
 //     -> data/corpus-offsets.u32   (chunk id -> [byteStart, byteEnd) into corpus.bin)
 //
@@ -59,7 +59,7 @@ const snapshotPath = path.join(dataDir, 'wiki.pnck');
 fs.writeFileSync(snapshotPath, index.export());
 index.dispose();
 
-const sketchPath = path.join(dataDir, 'wiki.pancake-sketch');
+const sketchPath = path.join(dataDir, 'wiki.pikelet-sketch');
 const sketchManifest = Pikelet.buildSketchArtifactFile(snapshotPath, sketchPath, {
     sketchDims: 192,    // 2:1 pooling of 384-D (4:1 measured -11pt candidate capture)
     sketchBits: 4,
@@ -91,7 +91,7 @@ const packManifest = {
     ...manifest,
     metric: 'cosine',
     files: {
-        index: 'wiki.pancake-sketch',
+        index: 'wiki.pikelet-sketch',
         corpus: 'corpus.bin',
         corpusOffsets: 'corpus-offsets.u32',
     },

@@ -36,8 +36,8 @@ async function main() {
   }
   const idx = { dim, count, metric: 1, qdata, scales, offsets };
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pikelet-staged-'));
-  const plainPath = path.join(tmp, 'plain.pancake-sketch');
-  const microPath = path.join(tmp, 'micro.pancake-sketch');
+  const plainPath = path.join(tmp, 'plain.pikelet-sketch');
+  const microPath = path.join(tmp, 'micro.pikelet-sketch');
   const opts = { sketchDims: 32, sketchBits: 8, recommendedRerank: 60 };
   exportSketchArtifact(idx, plainPath, opts);
   const info = exportSketchArtifact(idx, microPath, { ...opts, microDims: 16, microBits: 8 });

@@ -50,7 +50,7 @@ export function scoreHits(hits, embedded) {
 
 export function encoderInfo(env, manifest) {
   return {
-    model: manifest?.model || 'pancake-distilled-student',
+    model: manifest?.model || 'pikelet-distilled-student',
     encoder_mode: 'student',
     abstention_calibrated: !!STUDENT_ABSTENTION,
   };

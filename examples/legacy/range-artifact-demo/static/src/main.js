@@ -3,7 +3,7 @@ import { loadStudentModel, embedTextWithStudent } from '../../../../03-edge-docs
 import { createAbstentionScorer } from './abstention.js';
 import './style.css';
 
-const ARTIFACT_URL = '/artifacts/pancake-docs.pancake-range';
+const ARTIFACT_URL = '/artifacts/pikelet-docs.pikelet-range';
 const MODEL_URL = '/models/docs-student.bin';
 const CORPUS_URL = '/corpus/docs-corpus.json';
 const ABSTENTION_URL = '/abstention/docs-abstention.json';
