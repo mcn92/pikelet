@@ -8,7 +8,16 @@ Through 0.6.0 these were published as `pancake-wasm` and
 packages are pre-1.0: a minor bump may carry breaking changes, and each entry lists them
 first.
 
-## Unreleased
+## pikelet-wasm 0.12.0 / pikelet 0.12.0 — 2026-10-30
+
+Query embedding is about 1.65x faster, because the inline encoder now
+computes in integers, and `pikelet` no longer installs
+`@xenova/transformers`, which took a plain install from 82 packages and a
+critical audit advisory down to two packages. Upgrade if you embed queries
+in the browser or Node, or build `workers-ai` projects with `create`.
+Embeddings shift slightly (see Compatibility); packs compiled before this
+release still verify and serve. Both packages move to 0.12.0 together, and
+`pikelet` requires `pikelet-wasm` ^0.12.0.
 
 ### Compatibility
 

@@ -1,6 +1,6 @@
 {
   "name": "pikelet-wasm",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Vector search engine and .pikelet artifact readers/builders, in WebAssembly. Compile a corpus into one self-contained, hash-verified search file, or use the underlying HNSW engine directly. Runs in Node.js, browsers, and Cloudflare Workers with no native dependencies.",
   "main": "src/pikelet.js",
   "types": "src/pikelet.d.ts",
