@@ -1,0 +1,1003 @@
+[
+ {
+  "id": "g1",
+  "cat": "grammar",
+  "prompt": "The two little cats were very hungry, so they",
+  "max": 40,
+  "out": {
+   "base": {
+    "text": " went to the kitchen to find something to eat. They saw a big bowl of spaghetti on the table. The cats were so excited and started to jump up and down. They wanted to eat the spaghetti",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, sensible clause about finding food."
+   },
+   "instruct": {
+    "text": " decided to go to the store to buy some food. When they got to the store, they saw a big sign that said \"No cats allowed\". The two cats were very sad and didn't know",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, sensible clause about buying food."
+   }
+  }
+ },
+ {
+  "id": "g2",
+  "cat": "grammar",
+  "prompt": "If it rains tomorrow, we",
+  "max": 40,
+  "out": {
+   "base": {
+    "text": " can go to the park. We can play on the swings and slide. It will be fun!\"\n\nLily was not sure. She did not like the rain. It made her wet and",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, sensible conditional plan."
+   },
+   "instruct": {
+    "text": " can go outside and play.\"\n\nLily thought about it and said, \"Okay, I will come inside and play with my toys.\"\n\nThe next day, Lily and her mom went",
+    "checks": {},
+    "judge": "PARTIAL",
+    "judge_reason": "Grammatical, but playing outside in rain then 'come inside' is incoherent."
+   }
+  }
+ },
+ {
+  "id": "g3",
+  "cat": "grammar",
+  "prompt": "Lily gave the red ball to her brother because he",
+  "max": 40,
+  "out": {
+   "base": {
+    "text": " was so happy. He played with the ball all day long and even took it to bed with him. Lily was happy that she could share her ball with her brother and make him happy too.\n",
+    "checks": {},
+    "judge": "PARTIAL",
+    "judge_reason": "Grammatical but 'because he was so happy' is not a sensible cause."
+   },
+   "instruct": {
+    "text": " wanted to play with it too. Her brother was happy and they played together. They had so much fun that they forgot about the time. When they finally looked at the clock, they saw that it",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, sensible reason clause."
+   }
+  }
+ },
+ {
+  "id": "g4",
+  "cat": "grammar",
+  "prompt": "The birds in the tall tree",
+  "max": 40,
+  "out": {
+   "base": {
+    "text": " were singing. They were happy and having fun. But one bird was not happy. He was sad because he could not sing like the other birds. He wanted to fly high and fast like them.",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Correct plural agreement, natural clause."
+   },
+   "instruct": {
+    "text": " were very happy. They sang a song to thank the little girl for her help. The little girl smiled and said, \"You're welcome!\"\nSummary: A little girl helps a bird stuck in",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Correct plural agreement, natural clause."
+   }
+  }
+ },
+ {
+  "id": "g5",
+  "cat": "grammar",
+  "prompt": "Yesterday, Ben and his dad went to the park and",
+  "max": 40,
+  "out": {
+   "base": {
+    "text": " saw a big, hairy dog. Ben was scared of the dog, but his dad said, \"Don't worry, Ben. The dog is friendly.\"\n\nBen's dad said, \"Let",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, natural compound predicate."
+   },
+   "instruct": {
+    "text": " Ben saw a big slide. He wanted to go on it, but he was scared. His dad said, \"Don't worry, Ben. I will be right here to catch you. You can",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, completes the sentence sensibly."
+   }
+  }
+ },
+ {
+  "id": "g6",
+  "cat": "grammar",
+  "prompt": "Mom said that the cookies",
+  "max": 40,
+  "out": {
+   "base": {
+    "text": " were ready to bake. She put them in the oven and set the timer. The oven was hot and the cookies were ready.\n\nMom took the cookies out of the oven and let them cool",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, sensible reported speech."
+   },
+   "instruct": {
+    "text": " were too hot. She said that the oven was too hot and that they needed to wait for the cookies to cool down. Lily was sad, but she understood that they needed to wait.\n\n",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, sensible reported speech."
+   }
+  }
+ },
+ {
+  "id": "g7",
+  "cat": "grammar",
+  "prompt": "Neither the dog nor the cat",
+  "max": 40,
+  "out": {
+   "base": {
+    "text": " would hear. The dog was very sad and wanted to find a way to get the cat to come out. The cat had an idea. She would try to reverse the dog's toy.\n\n",
+    "checks": {},
+    "judge": "PARTIAL",
+    "judge_reason": "Grammatical but 'would hear' is unnatural and incomplete in sense."
+   },
+   "instruct": {
+    "text": " wanted to eat the bird. The cat said, \"I will help you, bird.\" The cat climbed the tree and saved the bird. The bird was happy and said, \"Thank you, cat",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, natural neither/nor clause."
+   }
+  }
+ },
+ {
+  "id": "g8",
+  "cat": "grammar",
+  "prompt": "When the sun went down, the children",
+  "max": 40,
+  "out": {
+   "base": {
+    "text": " went home. They were tired but happy. They had a fun day playing with the big red ball.\n",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, sensible continuation."
+   },
+   "instruct": {
+    "text": " said goodbye and went home. The little girl was so happy that she had been able to help the elderly lady. She knew that she had done a good deed.\nSummary: A little girl helps",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Grammatical, sensible continuation."
+   }
+  }
+ },
+ {
+  "id": "n1",
+  "cat": "narrative",
+  "prompt": "Sam had a little boat. One day, the wind blew the boat far away into the lake. Sam was very sad.",
+  "max": 120,
+  "out": {
+   "base": {
+    "text": " He wanted to go back home.\n\nSam saw a big fish in the lake. The fish was very strong. Sam wanted to be strong like the fish. He tried to swim fast, but the wind was too strong. Sam was scared.\n\nSam tried to swim back to the boat. He tried to be strong, but the wind was too strong. Sam was very tired. He could not swim anymore. The wind took Sam away.\n",
+    "checks": {},
+    "judge": "FAIL",
+    "judge_reason": "Sam suddenly swimming, wind takes Sam; contradicts setup, ignores boat."
+   },
+   "instruct": {
+    "text": "\n\nSam's mom saw him crying and asked, \"Why are you sad, Sam?\" Sam said, \"My boat is gone, and I can't find it.\" His mom said, \"Don't worry, we will find it.\"\n\nThey looked and looked for the boat. Then, they saw a big fish in the water. The fish had Sam's boat in its mouth! The fish said, \"I found your boat, but it is not a toy. It is a real boat!\" Sam was so happy. He said, \"Thank you, fish!\"\n\nSam",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Same characters; addresses the lost boat and recovers it."
+   }
+  }
+ },
+ {
+  "id": "n2",
+  "cat": "narrative",
+  "prompt": "Mia wanted to bake a cake for her grandma's birthday. She got flour, eggs and sugar. But when she opened the fridge, there was no milk.",
+  "max": 120,
+  "out": {
+   "base": {
+    "text": " Mia was sad. She wanted to make a cake for her grandma.\n\nMia's mom saw her sad face and asked, \"What's wrong, Mia?\" Mia said, \"I want to bake a cake for grandma, but there is no milk in the fridge.\" Her mom smiled and said, \"Don't worry, we will find milk in the house.\"\n\nMia and her mom went to the kitchen. They found a big carton of milk. Mia's mom poured the milk into the carton. Mia was happy. She knew that soon, her grandma would be",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Directly addresses missing milk; minor odd detail."
+   },
+   "instruct": {
+    "text": " Mia was sad.\n\nMia's mom saw her sad face. She said, \"Mia, let's make a cake together!\" Mia smiled. They mixed the cake and put it in the oven. Soon, the cake was ready.\n\nMia and her mom took the cake out of the oven. It smelled so good! They let it cool down. Then, they put icing on the cake. Mia's grandma loved the cake. Mia was happy she could bake a cake with her mom.\nSummary: Mia wants to bake a cake for her grandma's birthday but there",
+    "checks": {},
+    "judge": "PARTIAL",
+    "judge_reason": "Bakes cake but never addresses the missing milk."
+   }
+  }
+ },
+ {
+  "id": "n3",
+  "cat": "narrative",
+  "prompt": "Tim and his dog Max were playing in the garden. Max found a big bone under the tree.",
+  "max": 120,
+  "out": {
+   "base": {
+    "text": " He was very happy and wanted to show Tim. Tim was excited to see the bone.\n\nTim said, \"Max, look at this bone! It's so big and yummy!\" Max barked and wagged his tail. Tim decided to bury the bone in the garden so he could find it later.\n\nThey dug a hole and put the bone inside. Tim and Max covered the hole with dirt. They were both very happy. They played in the garden all day, and Tim knew he had found a special treasure.\n",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Consistent; Max shows Tim, they bury the bone."
+   },
+   "instruct": {
+    "text": " Tim was very happy. He said, \"Max, look! A big bone!\" Max wagged his tail and barked.\n\nTim wanted to show his mom the big bone. He ran inside the house. Tim's mom saw the bone and said, \"Wow, that's a big bone!\" Tim was very proud. He said, \"Mom, can I keep it?\" His mom said, \"Yes, you can keep it.\"\n\nTim and Max played with the big bone all day. They had so much fun. When it was time to go inside, Tim said,",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Consistent characters and bone; coherent continuation."
+   }
+  }
+ },
+ {
+  "id": "n4",
+  "cat": "narrative",
+  "prompt": "Anna was scared of the dark. Every night she asked her dad to leave the light on. One night, the power went out.",
+  "max": 120,
+  "out": {
+   "base": {
+    "text": " Anna was so scared that she started to cry.\n\nHer dad hugged her and said, \"Don't worry, Anna. I will be here with you. Everything will be okay.\"\n\nAnna felt better and stopped crying. She hugged her dad and said, \"Thank you, Daddy. I love you.\"\n\nHer dad smiled and said, \"I love you too, Anna. Now, let's go to bed.\"\n\nAnna was happy and went to bed. She was no longer scared of the dark.\n",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Consistent with power outage; dad comforts her."
+   },
+   "instruct": {
+    "text": " Anna was scared and started to cry.\n\nHer dad came to her room and said, \"Don't worry, Anna. I will leave the light on for you.\" He turned on the light and the room was bright again. Anna felt better and hugged her dad.\n\nThe next day, Anna was still scared. She asked her dad to leave the light on. Her dad said, \"I will leave the light on for you, Anna. You will feel safe and happy.\" He left the room and closed the door.\n\nAnna was happy. She was not scared anymore.",
+    "checks": {},
+    "judge": "FAIL",
+    "judge_reason": "Dad turns on the light despite the power being out."
+   }
+  }
+ },
+ {
+  "id": "n5",
+  "cat": "narrative",
+  "prompt": "The little bunny lost his way in the big forest. He saw an owl sitting on a branch.",
+  "max": 120,
+  "out": {
+   "base": {
+    "text": " The owl said, \"Hello, little bunny. Why are you sad?\" The bunny said, \"I am lost. I can't find my way home.\" The owl said, \"I can help you. Follow me.\"\n\nThe owl flew away and the bunny followed him. They walked and walked until they found the bunny's home. The bunny was so happy! He said, \"Thank you, Mr. Owl. You are very kind.\" The owl said, \"You're welcome. I am happy to help.\"\n\nThe bunny and the owl became good friends. They played together",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Owl helps lost bunny home; consistent."
+   },
+   "instruct": {
+    "text": " The owl asked the bunny, \"What are you doing here?\" The bunny said, \"I am lost. Can you help me find my way home?\" The owl said, \"Of course, I can help you. I know this forest very well.\" The owl showed the bunny the way back to his home. The bunny was very happy and said, \"Thank you, Mr. Owl. You are very kind.\" The owl smiled and said, \"You are welcome, little bunny. Remember, if you ever need help, just ask me.\"\nSummary: A lost bunny meets an owl in",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Owl helps lost bunny home; consistent."
+   }
+  }
+ },
+ {
+  "id": "n6",
+  "cat": "narrative",
+  "prompt": "Jack broke his mom's favorite vase while playing ball inside. He hid the pieces under the bed.",
+  "max": 120,
+  "out": {
+   "base": {
+    "text": " His mom found the pieces and was very upset. She told Jack he was not allowed to play with the pieces again. Jack felt sad and cried. He wished he had listened to his mom and not played with the pieces.\n",
+    "checks": {},
+    "judge": "PARTIAL",
+    "judge_reason": "Mom finds pieces, but scolds about playing with pieces; misses the point."
+   },
+   "instruct": {
+    "text": " His mom was very angry and told him to clean it up. Jack felt bad and knew he had to tell the truth. He went to his room and found the broken pieces. He told his mom the truth and she forgave him. From that day on, Jack learned to be more careful and always tell the truth.\n",
+    "checks": {},
+    "judge": "PARTIAL",
+    "judge_reason": "Mom angry before discovering vase; hiding sequence muddled, though truth-telling addressed."
+   }
+  }
+ },
+ {
+  "id": "n7",
+  "cat": "narrative",
+  "prompt": "Lucy planted a seed in a small pot. Every day she gave it water.",
+  "max": 120,
+  "out": {
+   "base": {
+    "text": " She watched it grow and it grew bigger and bigger.\n\nOne day, Lucy saw a tiny green thing coming out of the pot. It was a tiny plant! She was so excited.\n\nLucy asked her mom, \"What is this?\"\n\nHer mom said, \"It's a plant. It's growing bigger and bigger every day.\"\n\nLucy was so happy. She said, \"I'm going to keep it safe and healthy.\"\n\nEvery day, Lucy watered the plant and watched it grow. She was so proud of her plant.\n\nThe",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Consistent; plant sprouts and grows."
+   },
+   "instruct": {
+    "text": " She was very patient.\n\nOne day, Lucy saw a tiny green plant. She was so excited! She put the plant in the pot and watered it.\n\nThe plant grew bigger and bigger. Lucy was so happy! She was very patient.\n\nFinally, the plant was ready. Lucy was so proud of her plant. She showed it to her mom and dad. They were so happy too!\n\nThe plant was so big and beautiful. Lucy was so happy that she had been patient and planted it. She knew that she would always remember the special plant.\n",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Seed grows into plant; minor redundancy only."
+   }
+  }
+ },
+ {
+  "id": "n8",
+  "cat": "narrative",
+  "prompt": "Ben and Sara both wanted to play with the same red truck. They started to pull it and shout.",
+  "max": 120,
+  "out": {
+   "base": {
+    "text": "\n\n\"Mine!\" Ben said.\n\n\"No, mine!\" Sara said.\n\nThey pulled harder and harder, until the truck broke in half. They both fell to the floor, holding a piece of the truck. They looked at the broken truck and felt sad.\n\n\"Look what you did!\" Ben said.\n\n\"It's your fault!\" Sara said.\n\nThey started to cry and yell at each other. They did not want to share or say sorry.\n\nMom heard the noise and came to see what was wrong. She saw the broken truck",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Consistent; conflict escalates, mom arrives."
+   },
+   "instruct": {
+    "text": " The truck broke in two. Ben and Sara were sad and angry. They blamed each other for breaking the truck. They did not want to play anymore.\n\nMom heard the noise and came to see what was wrong. She saw the broken truck and the twins. She was not happy. She said, \"Ben and Sara, you need to share and be kind. The truck was a gift from your grandma. She sent it to you because she loves you. You can each have a turn with the truck. But you have to take turns and say please and thank you.\"\n\nBen",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Consistent; truck breaks, mom addresses sharing."
+   }
+  }
+ },
+ {
+  "id": "i1",
+  "cat": "instruction",
+  "prompt": "\nWords: ball, rain, happy\nStory: \n",
+  "max": 200,
+  "words": [
+   "ball",
+   "rain",
+   "happy"
+  ],
+  "out": {
+   "base": {
+    "text": "The children loved to play with balls. They would bounce them around and laugh. One day, the children wanted to play a game. They decided to play a game of catch.\n\nThe game was to throw the ball into a big basket. The children took turns throwing the ball into the basket. Some of the children were very good at this game. Some of the children were very competitive.\n\nThe game went on for a long time. The children were having so much fun. They were laughing and cheering each other on.\n\nWhen the game was over, the children were very happy. They had so much fun playing the game. They hugged each other and said goodbye.\n",
+    "checks": {
+     "words": "2/3"
+    },
+    "judge": "PARTIAL",
+    "judge_reason": "Has ball and happy, but 'rain' missing."
+   },
+   "instruct": {
+    "text": "\nOnce upon a time, there was a happy little girl. She loved to play with her ball. Every day, she would take it outside and bounce it around.\n\nOne day, the sky was grey and it started to rain. The little girl was sad because she couldn't play with her ball. She looked out the window and watched the rain.\n\nSuddenly, the little girl had an idea. She grabbed her ball and ran outside. She bounced it up and down and down, and laughed with joy.\n\nThe little girl was so happy that she could play with her ball in the rain. She bounced it around and around, and laughed with glee.\n\nThe rain stopped and the sun came out. The little girl was so happy that she could play with her ball in the sunshine. She bounced it around and around, and laughed with joy.\n\nThe little girl was so happy that she had found a way to play with her ball in the rain",
+    "checks": {
+     "words": "3/3"
+    },
+    "judge": "PASS",
+    "judge_reason": "All three words present."
+   }
+  }
+ },
+ {
+  "id": "i2",
+  "cat": "instruction",
+  "prompt": "\nWords: dragon, cookie, friend\nStory: \n",
+  "max": 200,
+  "words": [
+   "dragon",
+   "cookie",
+   "friend"
+  ],
+  "out": {
+   "base": {
+    "text": "\nOne day, a little girl named Lily went to the park with her mom. She saw a big dragon sitting on a bench. The dragon looked sad and lonely. Lily wanted to make him happy, so she went up to him and said, \"Hi, dragon! Do you want to play with me?\"\n\nThe dragon looked at Lily and smiled. He said, \"Yes, I would love to play with you.\" They played together all day long. They played hide and seek, tag, and catch. The dragon was not sad anymore.\n\nAt the end of the day, Lily's mom said, \"It's time to go home, Lily. Say goodbye to the dragon.\" Lily hugged the dragon and said, \"Goodbye, dragon! I hope to see you again soon.\" The dragon smiled and said, \"Goodbye, Lily! I hope to see you again soon.\"\n",
+    "checks": {
+     "words": "1/3"
+    },
+    "judge": "FAIL",
+    "judge_reason": "Missing cookie and friend."
+   },
+   "instruct": {
+    "text": "\nOnce upon a time, there was a dragon. He was big and strong and he liked to play. One day, he was feeling very hungry. He looked around and saw a cookie on the ground. He was so happy! He picked up the cookie and ate it. It was delicious!\n\nThe dragon was so happy that he wanted to share the cookie with his friend. He flew to his friend's house and knocked on the door. When his friend opened the door, the dragon said, \"I have a surprise for you!\" His friend was so excited.\n\nThe dragon said, \"Let's go to the park and play!\" His friend said, \"Yes, let's go!\" They ran to the park and had so much fun. They played tag and hide and seek. They laughed and smiled the whole time.\n\nWhen it was time to go home, the dragon said, \"I'm so happy we are friends. I'm so glad we are friends",
+    "checks": {
+     "words": "3/3"
+    },
+    "judge": "PASS",
+    "judge_reason": "dragon, cookie, friend all present."
+   }
+  }
+ },
+ {
+  "id": "i3",
+  "cat": "instruction",
+  "prompt": "\nFeatures: Dialogue\nWords: boat, sing, sun\nStory: \n",
+  "max": 200,
+  "words": [
+   "boat",
+   "sing",
+   "sun"
+  ],
+  "dialogue": true,
+  "out": {
+   "base": {
+    "text": "\nOne day, he decided to take a ride into the boat. He thought it would be fun to fly in the wind and feel the boat go fast. He did not realize that the boat was not a good idea. The boat sailed far away from home and soon it got lost.\n\nThe moral of the story is that if you want to do something, you should use your gifts and talents to make it happen. Don't be lazy and think it's impossible to make it happen.\n",
+    "checks": {
+     "words": "1/3",
+     "dialogue": false
+    },
+    "judge": "FAIL",
+    "judge_reason": "No dialogue; missing sing and sun."
+   },
+   "instruct": {
+    "text": "\nPossible story:\n\nLily and Ben like to play with their toy boat. They take it to the pond and sail it on the water. They sing songs and pretend they are pirates.\n\n\"Look, Lily, I see a big boat!\" Ben says. \"It is so high and fast. I want to go on it!\"\n\n\"Me too, Ben!\" Lily says. \"Let's go and see it!\"\n\nThey run to the edge of the pond and watch the boat. It is getting closer and closer. They see some ducks swimming in the water. They wave at the boat and shout, \"Hello, boat! Hello, ducks!\"\n\nThe boat does not stop. It keeps going and going. Lily and Ben are sad. They want to go on the boat.\n\n\"Maybe we can ask the boat to stop,\" Ben says. \"Maybe it will let us go on it.\"\n\nThey run to the edge of",
+    "checks": {
+     "words": "2/3",
+     "dialogue": true
+    },
+    "judge": "PARTIAL",
+    "judge_reason": "Dialogue, boat, sing present; 'sun' missing."
+   }
+  }
+ },
+ {
+  "id": "i4",
+  "cat": "instruction",
+  "prompt": "\nSummary: A girl finds a lost puppy and brings it home to her family.\nStory: \n",
+  "max": 200,
+  "judge": "The story must be about a girl who finds a lost puppy and brings it home to her family.",
+  "out": {
+   "base": {
+    "text": "\"This puppy needs a home. We can help it find a place to stay.\"\nThe girl and her family decided to keep the puppy and named it Lucky.\nEvery day, they would take Lucky for a walk and play in the park. Lucky was so happy to have a family and a home.\n\nOne day, the girl and Lucky went for a walk in the woods. Suddenly, Lucky saw a big tree and ran to it. The girl was so excited to see Lucky and she hugged him.\n\nThe girl and Lucky were best friends and they had lots of fun together. They would go for walks in the woods and play games. Lucky was so happy to have a family and he was so lucky to have found his new family.\n",
+    "checks": {},
+    "judge": "PARTIAL",
+    "judge_reason": "Starts mid-story; finding a lost puppy never shown."
+   },
+   "instruct": {
+    "text": "\nOnce upon a time, there was a girl who wanted to find a puppy. She looked everywhere, but she couldn't find one. She was feeling sad.\n\nThen, she saw a puppy in the park. She was so happy! She ran over to the puppy and hugged it. The puppy was so happy to be with the girl.\n\nThe girl took the puppy home. She was so excited to show her family. She wanted to show them the puppy.\n\nThe girl's family was so happy to see the puppy. They all hugged the puppy and said it was the best puppy they had ever seen.\n\nThe girl was so happy that she had found the puppy. She was so proud of herself. She had found the perfect puppy!\n",
+    "checks": {},
+    "judge": "PARTIAL",
+    "judge_reason": "Girl finds puppy, brings home, but puppy isn't lost."
+   }
+  }
+ },
+ {
+  "id": "i5",
+  "cat": "instruction",
+  "prompt": "\nSummary: A boy is afraid of the water, but his friend helps him learn to swim.\nStory: \n",
+  "max": 200,
+  "judge": "The story must be about a boy afraid of water whose friend helps him learn to swim.",
+  "out": {
+   "base": {
+    "text": "\"Swimming is fun! It's like swimming in the ocean. You can do it!\"\nThe boy was still scared, but he wanted to try.\nHe put on his swimsuit and grabbed his float. He jumped into the water and started to swim.\nThe boy was so happy that he had learned to swim. He swam around the ocean, feeling brave and strong.\nWhen he was done, he thanked his friend for helping him learn to swim.\n",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Scared boy learns to swim, thanks friend for help."
+   },
+   "instruct": {
+    "text": "\nOnce upon a time, there was a boy who was very fearful. He was afraid of the water and he was afraid of the big waves. One day, his friend came to visit him. His friend said, \"Don't be scared, I will help you.\"\n\nThe friend took the boy's hand and they went to the beach. The boy was scared of the water, but his friend said, \"It's okay, I will help you.\"\n\nThe friend showed the boy how to swim. He showed him how to kick his legs and move his arms. The boy was so happy and he started to swim.\n\nThe boy was no longer fearful. He was having fun in the water with his friend. They laughed and played until it was time to go home.\n",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Fearful boy, friend teaches him to swim."
+   }
+  }
+ },
+ {
+  "id": "i6",
+  "cat": "instruction",
+  "prompt": "\nFeatures: BadEnding\nWords: kite, tree, wind\nStory: \n",
+  "max": 200,
+  "words": [
+   "kite",
+   "tree",
+   "wind"
+  ],
+  "judge": "The story must use the words kite, tree and wind, and end badly (sad or unresolved ending).",
+  "out": {
+   "base": {
+    "text": "You need a new battery to make the kite fly.\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit:\n\nRabbit: Oh, no! You need a new battery.\n\nRabbit: Oh, no!\n\nRabbit: Oh, no! How will I make the kite fly?\n\nRabbit: Oh, no! How will I make the kite",
+    "checks": {
+     "words": "1/3"
+    },
+    "judge": "FAIL",
+    "judge_reason": "Degenerate repetition; missing tree and wind; no story."
+   },
+   "instruct": {
+    "text": "\nOnce upon a time, there was a little boy. He was playing in the park with his kite. He was running around and having lots of fun. Suddenly, the wind started to blow. The little boy was scared. He looked up and saw a big tree. He wanted to go and play near the tree.\n\nThe wind was blowing harder and harder. The little boy was getting tired. He wanted to go home. But he was too far away. He started to cry.\n\nThe wind was so strong that it blew the little boy away. He flew and flew until he couldn't see the tree anymore. He was lost and scared. He was never seen again.\nSummary: A little boy gets lost in the park while playing with his kite and is never seen again.\n\n",
+    "checks": {
+     "words": "3/3"
+    },
+    "judge": "PASS",
+    "judge_reason": "All words present; ends badly."
+   }
+  }
+ },
+ {
+  "id": "i7",
+  "cat": "instruction",
+  "prompt": "\nRandom sentence: The cat jumped onto the table.\nStory: \n",
+  "max": 200,
+  "contains": "jumped onto the table",
+  "out": {
+   "base": {
+    "text": "\"Hello, cat! What are you doing?\"\nThe cat looked at the mouse and said:\n\"I'm trying to get some food. Can you help me?\"\nNibbit:\n\"Sure! I can help you!\"\nNibbit:\n\"I'm going to get some food for you. Wait here, I'll be back soon!\"\nNibbit:\n\"Thank you, cat! I'm coming!\"\nNibbit:\n\"I'm coming!\"\nNibbit:\n\"I'm coming!\"\nNibbit:\nI'm coming!\"\nNibbit:\nI'm coming!\nNibbit:\nI'm coming!\nNibbit:\nWhat are you doing?\nNibbit: I'm trying to get some food for my family.\nNibbit:\nI'm trying to get some food for my family, but it's not easy.\nNibbit:\nWhat",
+    "checks": {
+     "contains": false
+    },
+    "judge": "FAIL",
+    "judge_reason": "Random sentence absent; degenerate dialogue."
+   },
+   "instruct": {
+    "text": "\nOnce upon a time, there was a big table. It was very tall and it was made of wood. One day, a little girl came to the table. She was very excited to see it. She wanted to touch it.\n\nThe girl reached out her hand and touched the table. It felt cold and smooth. She smiled and said, \"It's so nice!\"\n\nThe girl wanted to play with the table. She touched it again and again. She touched it with her finger. She touched it with her finger. She touched it with her finger. She touched it with her finger.\n\nThe girl was so happy. She touched the table all around. She touched it with her finger and it felt so nice. She touched it with her finger and it felt so smooth.\n\nThe girl was so happy. She touched the table all around. She touched it with her finger and it felt so nice. She touched it with her finger and it felt so",
+    "checks": {
+     "contains": false
+    },
+    "judge": "FAIL",
+    "judge_reason": "Random sentence absent; no cat."
+   }
+  }
+ },
+ {
+  "id": "i8",
+  "cat": "instruction",
+  "prompt": "\nStory: \nTom had a red kite. He flew it at the park. The wind took the kite into a tree. His dad climbed the tree and got it back. Tom said thank you.\nSummary:",
+  "max": 60,
+  "stopNewline": true,
+  "judge": "A one-line summary that is faithful to the story (red kite, wind blew it into a tree, dad got it back); no invented events.",
+  "out": {
+   "base": {
+    "text": "\"That was fun!\"",
+    "checks": {},
+    "judge": "FAIL",
+    "judge_reason": "Not a summary."
+   },
+   "instruct": {
+    "text": "Tom's dad helped him retrieve his red kite from a tree in the park.",
+    "checks": {},
+    "judge": "PASS",
+    "judge_reason": "Faithful one-line summary."
+   }
+  }
+ },
+ {
+  "id": "f1",
+  "cat": "factual",
+  "prompt": "Lily looked up and asked her mom, \"What color is the sky?\"\nHer mom smiled and said, \"",
+  "max": 30,
+  "answer": [
+   "blue"
+  ],
+  "out": {
+   "base": {
+    "text": "The sky is blue, Lily. It's a beautiful day today.\"\n\nLily was excited and asked, \"Can we go to the park",
+    "checks": {
+     "answer": true
+    },
+    "reply": "The sky is blue, Lily. It's a beautiful day today.",
+    "judge": "PASS",
+    "judge_reason": "Says blue."
+   },
+   "instruct": {
+    "text": "It's blue, Lily. It's a beautiful shade of blue.\"\n\nLily looked up at the sky again and said, \"I want",
+    "checks": {
+     "answer": true
+    },
+    "reply": "It's blue, Lily. It's a beautiful shade of blue.",
+    "judge": "PASS",
+    "judge_reason": "Says blue."
+   }
+  }
+ },
+ {
+  "id": "f2",
+  "cat": "factual",
+  "prompt": "Tim pointed at his puppy and asked, \"How many legs does a dog have?\"\nHis dad said, \"",
+  "max": 30,
+  "answer": [
+   "four",
+   "4"
+  ],
+  "out": {
+   "base": {
+    "text": "Let's count them together.\"\n\nTim and his dad counted the legs of the puppy. Tim was happy to see that he had five legs.",
+    "checks": {
+     "answer": false
+    },
+    "reply": "Let's count them together.",
+    "judge": "FAIL",
+    "judge_reason": "No answer; counts five legs."
+   },
+   "instruct": {
+    "text": "I don't know, Tim. Let's count them together.\" They counted one, two, three, four, five, six, seven, eight",
+    "checks": {
+     "answer": false
+    },
+    "reply": "I don't know, Tim. Let's count them together.",
+    "judge": "FAIL",
+    "judge_reason": "Doesn't know; counts past four."
+   }
+  }
+ },
+ {
+  "id": "f3",
+  "cat": "factual",
+  "prompt": "At the farm, Sara asked the farmer, \"What do cows give us?\"\nThe farmer said, \"",
+  "max": 30,
+  "answer": [
+   "milk"
+  ],
+  "out": {
+   "base": {
+    "text": "Moo gives us milk, but cows give us meat.\"\n\nSara was excited and asked, \"Can I have meat for cows?\"\n",
+    "checks": {
+     "answer": true
+    },
+    "reply": "Moo gives us milk, but cows give us meat.",
+    "judge": "PARTIAL",
+    "judge_reason": "Milk attributed to 'Moo', says cows give meat; garbled."
+   },
+   "instruct": {
+    "text": "They give us milk and eggs and carrots.\"\n\nSara was excited. She wanted to see the cows. She asked the farmer, \"Can",
+    "checks": {
+     "answer": true
+    },
+    "reply": "They give us milk and eggs and carrots.",
+    "judge": "PARTIAL",
+    "judge_reason": "Milk correct but wrong extras eggs and carrots."
+   }
+  }
+ },
+ {
+  "id": "f4",
+  "cat": "factual",
+  "prompt": "Ben asked his teacher, \"Where do fish live?\"\nThe teacher said, \"",
+  "max": 30,
+  "answer": [
+   "water",
+   "sea",
+   "ocean",
+   "river",
+   "pond",
+   "lake"
+  ],
+  "out": {
+   "base": {
+    "text": "Fish live in the ocean. They live in the water and eat the plants.\"\n\nBen was excited. He wanted to see the fish. He",
+    "checks": {
+     "answer": true
+    },
+    "reply": "Fish live in the ocean. They live in the water and eat the plants.",
+    "judge": "PASS",
+    "judge_reason": "Ocean/water correct."
+   },
+   "instruct": {
+    "text": "Fish live in the pond. They swim and play in the water.\"\n\nBen was happy to learn about fish. He went home and told his",
+    "checks": {
+     "answer": true
+    },
+    "reply": "Fish live in the pond. They swim and play in the water.",
+    "judge": "PASS",
+    "judge_reason": "Pond/water correct."
+   }
+  }
+ },
+ {
+  "id": "f5",
+  "cat": "factual",
+  "prompt": "Mia asked her brother, \"What is the opposite of hot?\"\nHer brother said, \"",
+  "max": 30,
+  "answer": [
+   "cold"
+  ],
+  "out": {
+   "base": {
+    "text": "It's a hot air balloon!\"\nMia was so excited. She asked, \"Can we go in it?\"\nHer brother said, \"",
+    "checks": {
+     "answer": false
+    },
+    "reply": "It's a hot air balloon!",
+    "judge": "FAIL",
+    "judge_reason": "Hot air balloon; wrong."
+   },
+   "instruct": {
+    "text": "It's too hot for me to play with.\"\nMia thought for a moment and then said, \"Let's go to the park and play",
+    "checks": {
+     "answer": false
+    },
+    "reply": "It's too hot for me to play with.",
+    "judge": "FAIL",
+    "judge_reason": "Does not say cold."
+   }
+  }
+ },
+ {
+  "id": "f6",
+  "cat": "factual",
+  "prompt": "Jack sat on the lawn and asked his mom, \"What color is grass?\"\nHis mom said, \"",
+  "max": 30,
+  "answer": [
+   "green"
+  ],
+  "out": {
+   "base": {
+    "text": "It's green and soft.\"\nJack smiled and said, \"I like green!\"\n\nJack's mom said, \"Let's go for a",
+    "checks": {
+     "answer": true
+    },
+    "reply": "It's green and soft.",
+    "judge": "PASS",
+    "judge_reason": "Says green."
+   },
+   "instruct": {
+    "text": "It's brown, Jack. That's the color of grass.\"\nJack smiled and said, \"I like brown grass. It's so pretty.\"",
+    "checks": {
+     "answer": false
+    },
+    "reply": "It's brown, Jack. That's the color of grass.",
+    "judge": "FAIL",
+    "judge_reason": "Says brown."
+   }
+  }
+ },
+ {
+  "id": "f7",
+  "cat": "factual",
+  "prompt": "Anna watched the bees and asked her grandpa, \"What do bees make?\"\nHer grandpa said, \"",
+  "max": 30,
+  "answer": [
+   "honey"
+  ],
+  "out": {
+   "base": {
+    "text": "Bees make honey. Honey is sweet and yummy.\"\n\nAnna was excited and wanted to try some honey. She asked her grandpa,",
+    "checks": {
+     "answer": true
+    },
+    "reply": "Bees make honey. Honey is sweet and yummy.",
+    "judge": "PASS",
+    "judge_reason": "Bees make honey."
+   },
+   "instruct": {
+    "text": "They make honey, honey, and other things that make us happy.\"\n\nAnna was amazed and asked, \"Can I make honey too?\"\n",
+    "checks": {
+     "answer": true
+    },
+    "reply": "They make honey, honey, and other things that make us happy.",
+    "judge": "PASS",
+    "judge_reason": "Honey; vague extra harmless."
+   }
+  }
+ },
+ {
+  "id": "f8",
+  "cat": "factual",
+  "prompt": "Lucy asked her mom, \"What day comes after Monday?\"\nHer mom said, \"",
+  "max": 30,
+  "answer": [
+   "tuesday"
+  ],
+  "out": {
+   "base": {
+    "text": "It's Tuesday, Lucy. Today is a special day.\"\n\nLucy was excited. She asked, \"What do you mean?\"\n\n",
+    "checks": {
+     "answer": true
+    },
+    "reply": "It's Tuesday, Lucy. Today is a special day.",
+    "judge": "PASS",
+    "judge_reason": "Says Tuesday."
+   },
+   "instruct": {
+    "text": "That's Monday, Lucy. Monday is Monday, Monday is Monday, Monday is Monday, Monday is Monday, Monday is Monday, Monday is Monday,",
+    "checks": {
+     "answer": false
+    },
+    "reply": "That's Monday, Lucy. Monday is Monday, Monday is Monday, Monday is Monday, Monday is Monday, Monday is Monday, Monday is Monday,",
+    "judge": "FAIL",
+    "judge_reason": "Says Monday, repetitive."
+   }
+  }
+ },
+ {
+  "id": "q1",
+  "cat": "grounded",
+  "prompt": "Lily went to the store with her mom. She bought a yellow balloon and a box of crayons. On the way home, the balloon flew away.\nAt home, her dad asked, \"What color was the balloon that flew away?\"\nLily said, \"",
+  "max": 30,
+  "answer": [
+   "yellow"
+  ],
+  "out": {
+   "base": {
+    "text": "It was yellow, like the sun!\"\nHer dad smiled and said, \"That's right! You're so smart!\"\nLily was very",
+    "checks": {
+     "answer": true
+    },
+    "reply": "It was yellow, like the sun!",
+    "judge": "PASS",
+    "judge_reason": "Yellow."
+   },
+   "instruct": {
+    "text": "It was yellow!\"\nHer dad smiled and said, \"That's great! I'm glad you had fun.\"\n\nLily smiled and said",
+    "checks": {
+     "answer": true
+    },
+    "reply": "It was yellow!",
+    "judge": "PASS",
+    "judge_reason": "Yellow."
+   }
+  }
+ },
+ {
+  "id": "q2",
+  "cat": "grounded",
+  "prompt": "Tom has a dog named Spot. Spot likes to sleep under the big oak tree.\nTom's friend asked, \"Where does Spot like to sleep?\"\nTom said, \"",
+  "max": 30,
+  "answer": [
+   "oak",
+   "tree"
+  ],
+  "out": {
+   "base": {
+    "text": "Spot likes to sleep in the oak tree.\"\n\nTom and Spot played in the oak tree. They had fun. They ran and jumped. Spot",
+    "checks": {
+     "answer": true
+    },
+    "reply": "Spot likes to sleep in the oak tree.",
+    "judge": "PARTIAL",
+    "judge_reason": "Says 'in' the oak tree; story says under."
+   },
+   "instruct": {
+    "text": "Spot likes to sleep under the oak tree. He is very sleepy.\"\n\nTom and Spot played under the oak tree. They had a lot of",
+    "checks": {
+     "answer": true
+    },
+    "reply": "Spot likes to sleep under the oak tree. He is very sleepy.",
+    "judge": "PASS",
+    "judge_reason": "Under the oak tree, matches story."
+   }
+  }
+ },
+ {
+  "id": "q3",
+  "cat": "grounded",
+  "prompt": "Sara's favorite toy is a little green frog. She keeps it in a box under her bed.\nHer friend asked, \"Where do you keep your frog?\"\nSara said, \"",
+  "max": 30,
+  "answer": [
+   "box",
+   "bed"
+  ],
+  "out": {
+   "base": {
+    "text": "I keep it in my room. It is my best friend.\"\n\nSara's mom said, \"That's nice. But it's time",
+    "checks": {
+     "answer": false
+    },
+    "reply": "I keep it in my room. It is my best friend.",
+    "judge": "FAIL",
+    "judge_reason": "'In my room' unsupported; omits box/bed."
+   },
+   "instruct": {
+    "text": "I keep it in my box. It's my favorite toy.\"\n\nOne day, Sara's friend came over to play. She saw the box",
+    "checks": {
+     "answer": true
+    },
+    "reply": "I keep it in my box. It's my favorite toy.",
+    "judge": "PASS",
+    "judge_reason": "In my box, matches story."
+   }
+  }
+ },
+ {
+  "id": "q4",
+  "cat": "grounded",
+  "prompt": "Max and his grandpa went fishing on Saturday. Max caught a big fish, but grandpa caught nothing.\nWhen they got home, grandma asked, \"Who caught the fish?\"\nGrandpa said, \"",
+  "max": 30,
+  "answer": [
+   "max"
+  ],
+  "out": {
+   "base": {
+    "text": "I did, Max. It's a big fish.\"\n\nMax was sad. He wanted to show his grandpa the fish. He said,",
+    "checks": {
+     "answer": true
+    },
+    "reply": "I did, Max. It's a big fish.",
+    "judge": "FAIL",
+    "judge_reason": "'I did' asserts grandpa caught it; wrong."
+   },
+   "instruct": {
+    "text": "I did! I caught a big one!\"\n\nMax said, \"Wow, that's great! Can we cook it for dinner?\"\nGrand",
+    "checks": {
+     "answer": false
+    },
+    "reply": "I did! I caught a big one!",
+    "judge": "FAIL",
+    "judge_reason": "Grandpa claims he caught it; wrong."
+   }
+  }
+ },
+ {
+  "id": "q5",
+  "cat": "grounded",
+  "prompt": "Anna baked cookies with her aunt. The cookies were shaped like stars.\nAnna's mom asked, \"What shape were the cookies?\"\nAnna said, \"",
+  "max": 30,
+  "answer": [
+   "star"
+  ],
+  "out": {
+   "base": {
+    "text": "They were made with love.\"\nAnna's aunt smiled and said, \"That's right! They are made with love.\"\nAnna was so happy",
+    "checks": {
+     "answer": false
+    },
+    "reply": "They were made with love.",
+    "judge": "FAIL",
+    "judge_reason": "No shape given."
+   },
+   "instruct": {
+    "text": "They were round and brown and had a smiley face on them.\"\n\nAnna's aunt said, \"I love them! They look so y",
+    "checks": {
+     "answer": false
+    },
+    "reply": "They were round and brown and had a smiley face on them.",
+    "judge": "FAIL",
+    "judge_reason": "Round with smiley face; wrong."
+   }
+  }
+ },
+ {
+  "id": "q6",
+  "cat": "grounded",
+  "prompt": "The little bird built a nest in the old red barn. Every morning it sang to the farmer.\nThe farmer's son asked, \"Where is the bird's nest?\"\nThe farmer said, \"",
+  "max": 30,
+  "answer": [
+   "barn"
+  ],
+  "out": {
+   "base": {
+    "text": "It's in the tree over there.\"\nThe little bird flew over to the tree and saw a nest in the branches. It was a small red",
+    "checks": {
+     "answer": false
+    },
+    "reply": "It's in the tree over there.",
+    "judge": "FAIL",
+    "judge_reason": "In the tree; wrong."
+   },
+   "instruct": {
+    "text": "The bird is in the tree outside the barn.\"\nThe little boy said, \"I want to see the bird's nest!\"\nThe farmer said",
+    "checks": {
+     "answer": true
+    },
+    "reply": "The bird is in the tree outside the barn.",
+    "judge": "FAIL",
+    "judge_reason": "Tree outside barn; wrong."
+   }
+  }
+ },
+ {
+  "id": "q7",
+  "cat": "grounded",
+  "prompt": "Jack found a shiny coin in the sand at the beach. He gave it to his little brother, Leo.\nMom asked, \"Who has the coin now?\"\nJack said, \"",
+  "max": 30,
+  "answer": [
+   "leo"
+  ],
+  "out": {
+   "base": {
+    "text": "I don't know, but I want to find the owner.\"\nSo, Jack and Leo went to the beach to look for the owner. They",
+    "checks": {
+     "answer": false
+    },
+    "reply": "I don't know, but I want to find the owner.",
+    "judge": "FAIL",
+    "judge_reason": "Says he doesn't know."
+   },
+   "instruct": {
+    "text": "Leo, I found it in the sand. I think it's yours!\"\n\nLeo was so happy and said, \"Thank you Jack",
+    "checks": {
+     "answer": true
+    },
+    "reply": "Leo, I found it in the sand. I think it's yours!",
+    "judge": "FAIL",
+    "judge_reason": "Addresses Leo but doesn't state Leo has the coin."
+   }
+  }
+ },
+ {
+  "id": "q8",
+  "cat": "grounded",
+  "prompt": "Mia's cat is called Snow because it is all white.\nHer teacher asked, \"What is your cat's name?\"\nMia said, \"",
+  "max": 30,
+  "answer": [
+   "snow"
+  ],
+  "out": {
+   "base": {
+    "text": "Her name is Snowy.\"\n\nSnowy meows and Mia giggles. She loves her white cat.\n\nMia's teacher asked",
+    "checks": {
+     "answer": true
+    },
+    "reply": "Her name is Snowy.",
+    "judge": "PARTIAL",
+    "judge_reason": "Snowy, close but not Snow."
+   },
+   "instruct": {
+    "text": "I don't know. I don't know.\"\n\nThe teacher said, \"Let's ask the cat. Maybe it is lost.\"\n\n",
+    "checks": {
+     "answer": false
+    },
+    "reply": "I don't know. I don't know.",
+    "judge": "FAIL",
+    "judge_reason": "Says I don't know."
+   }
+  }
+ }
+]

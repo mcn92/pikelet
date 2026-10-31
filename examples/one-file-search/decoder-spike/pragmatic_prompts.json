@@ -1,0 +1,49 @@
+{
+  "note": "40 prompts, 8 per category, fixed with their answer keys and criteria before any output was seen. Questions are framed as story dialogue ending in `said, \"` (neither model saw bare Q/A in training); the answer is the reply up to its closing quote. Instruction prompts use TinyStories-Instruct's own header format.",
+  "prompts": [
+    { "id": "g1", "cat": "grammar", "prompt": "The two little cats were very hungry, so they", "max": 40 },
+    { "id": "g2", "cat": "grammar", "prompt": "If it rains tomorrow, we", "max": 40 },
+    { "id": "g3", "cat": "grammar", "prompt": "Lily gave the red ball to her brother because he", "max": 40 },
+    { "id": "g4", "cat": "grammar", "prompt": "The birds in the tall tree", "max": 40 },
+    { "id": "g5", "cat": "grammar", "prompt": "Yesterday, Ben and his dad went to the park and", "max": 40 },
+    { "id": "g6", "cat": "grammar", "prompt": "Mom said that the cookies", "max": 40 },
+    { "id": "g7", "cat": "grammar", "prompt": "Neither the dog nor the cat", "max": 40 },
+    { "id": "g8", "cat": "grammar", "prompt": "When the sun went down, the children", "max": 40 },
+
+    { "id": "n1", "cat": "narrative", "prompt": "Sam had a little boat. One day, the wind blew the boat far away into the lake. Sam was very sad.", "max": 120 },
+    { "id": "n2", "cat": "narrative", "prompt": "Mia wanted to bake a cake for her grandma's birthday. She got flour, eggs and sugar. But when she opened the fridge, there was no milk.", "max": 120 },
+    { "id": "n3", "cat": "narrative", "prompt": "Tim and his dog Max were playing in the garden. Max found a big bone under the tree.", "max": 120 },
+    { "id": "n4", "cat": "narrative", "prompt": "Anna was scared of the dark. Every night she asked her dad to leave the light on. One night, the power went out.", "max": 120 },
+    { "id": "n5", "cat": "narrative", "prompt": "The little bunny lost his way in the big forest. He saw an owl sitting on a branch.", "max": 120 },
+    { "id": "n6", "cat": "narrative", "prompt": "Jack broke his mom's favorite vase while playing ball inside. He hid the pieces under the bed.", "max": 120 },
+    { "id": "n7", "cat": "narrative", "prompt": "Lucy planted a seed in a small pot. Every day she gave it water.", "max": 120 },
+    { "id": "n8", "cat": "narrative", "prompt": "Ben and Sara both wanted to play with the same red truck. They started to pull it and shout.", "max": 120 },
+
+    { "id": "i1", "cat": "instruction", "prompt": "\nWords: ball, rain, happy\nStory: \n", "max": 200, "words": ["ball", "rain", "happy"] },
+    { "id": "i2", "cat": "instruction", "prompt": "\nWords: dragon, cookie, friend\nStory: \n", "max": 200, "words": ["dragon", "cookie", "friend"] },
+    { "id": "i3", "cat": "instruction", "prompt": "\nFeatures: Dialogue\nWords: boat, sing, sun\nStory: \n", "max": 200, "words": ["boat", "sing", "sun"], "dialogue": true },
+    { "id": "i4", "cat": "instruction", "prompt": "\nSummary: A girl finds a lost puppy and brings it home to her family.\nStory: \n", "max": 200, "judge": "The story must be about a girl who finds a lost puppy and brings it home to her family." },
+    { "id": "i5", "cat": "instruction", "prompt": "\nSummary: A boy is afraid of the water, but his friend helps him learn to swim.\nStory: \n", "max": 200, "judge": "The story must be about a boy afraid of water whose friend helps him learn to swim." },
+    { "id": "i6", "cat": "instruction", "prompt": "\nFeatures: BadEnding\nWords: kite, tree, wind\nStory: \n", "max": 200, "words": ["kite", "tree", "wind"], "judge": "The story must use the words kite, tree and wind, and end badly (sad or unresolved ending)." },
+    { "id": "i7", "cat": "instruction", "prompt": "\nRandom sentence: The cat jumped onto the table.\nStory: \n", "max": 200, "contains": "jumped onto the table" },
+    { "id": "i8", "cat": "instruction", "prompt": "\nStory: \nTom had a red kite. He flew it at the park. The wind took the kite into a tree. His dad climbed the tree and got it back. Tom said thank you.\nSummary:", "max": 60, "stopNewline": true, "judge": "A one-line summary that is faithful to the story (red kite, wind blew it into a tree, dad got it back); no invented events." },
+
+    { "id": "f1", "cat": "factual", "prompt": "Lily looked up and asked her mom, \"What color is the sky?\"\nHer mom smiled and said, \"", "max": 30, "answer": ["blue"] },
+    { "id": "f2", "cat": "factual", "prompt": "Tim pointed at his puppy and asked, \"How many legs does a dog have?\"\nHis dad said, \"", "max": 30, "answer": ["four", "4"] },
+    { "id": "f3", "cat": "factual", "prompt": "At the farm, Sara asked the farmer, \"What do cows give us?\"\nThe farmer said, \"", "max": 30, "answer": ["milk"] },
+    { "id": "f4", "cat": "factual", "prompt": "Ben asked his teacher, \"Where do fish live?\"\nThe teacher said, \"", "max": 30, "answer": ["water", "sea", "ocean", "river", "pond", "lake"] },
+    { "id": "f5", "cat": "factual", "prompt": "Mia asked her brother, \"What is the opposite of hot?\"\nHer brother said, \"", "max": 30, "answer": ["cold"] },
+    { "id": "f6", "cat": "factual", "prompt": "Jack sat on the lawn and asked his mom, \"What color is grass?\"\nHis mom said, \"", "max": 30, "answer": ["green"] },
+    { "id": "f7", "cat": "factual", "prompt": "Anna watched the bees and asked her grandpa, \"What do bees make?\"\nHer grandpa said, \"", "max": 30, "answer": ["honey"] },
+    { "id": "f8", "cat": "factual", "prompt": "Lucy asked her mom, \"What day comes after Monday?\"\nHer mom said, \"", "max": 30, "answer": ["tuesday"] },
+
+    { "id": "q1", "cat": "grounded", "prompt": "Lily went to the store with her mom. She bought a yellow balloon and a box of crayons. On the way home, the balloon flew away.\nAt home, her dad asked, \"What color was the balloon that flew away?\"\nLily said, \"", "max": 30, "answer": ["yellow"] },
+    { "id": "q2", "cat": "grounded", "prompt": "Tom has a dog named Spot. Spot likes to sleep under the big oak tree.\nTom's friend asked, \"Where does Spot like to sleep?\"\nTom said, \"", "max": 30, "answer": ["oak", "tree"] },
+    { "id": "q3", "cat": "grounded", "prompt": "Sara's favorite toy is a little green frog. She keeps it in a box under her bed.\nHer friend asked, \"Where do you keep your frog?\"\nSara said, \"", "max": 30, "answer": ["box", "bed"] },
+    { "id": "q4", "cat": "grounded", "prompt": "Max and his grandpa went fishing on Saturday. Max caught a big fish, but grandpa caught nothing.\nWhen they got home, grandma asked, \"Who caught the fish?\"\nGrandpa said, \"", "max": 30, "answer": ["max"] },
+    { "id": "q5", "cat": "grounded", "prompt": "Anna baked cookies with her aunt. The cookies were shaped like stars.\nAnna's mom asked, \"What shape were the cookies?\"\nAnna said, \"", "max": 30, "answer": ["star"] },
+    { "id": "q6", "cat": "grounded", "prompt": "The little bird built a nest in the old red barn. Every morning it sang to the farmer.\nThe farmer's son asked, \"Where is the bird's nest?\"\nThe farmer said, \"", "max": 30, "answer": ["barn"] },
+    { "id": "q7", "cat": "grounded", "prompt": "Jack found a shiny coin in the sand at the beach. He gave it to his little brother, Leo.\nMom asked, \"Who has the coin now?\"\nJack said, \"", "max": 30, "answer": ["leo"] },
+    { "id": "q8", "cat": "grounded", "prompt": "Mia's cat is called Snow because it is all white.\nHer teacher asked, \"What is your cat's name?\"\nMia said, \"", "max": 30, "answer": ["snow"] }
+  ]
+}

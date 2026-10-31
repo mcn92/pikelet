@@ -1,0 +1,945 @@
+[
+ {
+  "id": "a01",
+  "kind": "answerable",
+  "sourceId": 203738,
+  "title": "Wilhelm Friedemann Bach",
+  "question": "In what year did the composer Wilhelm Friedemann Bach leave his job in Halle?",
+  "answers": [
+   "1764"
+  ]
+ },
+ {
+  "id": "a02",
+  "kind": "answerable",
+  "sourceId": 134121,
+  "title": "Ariège (river)",
+  "question": "At which town does the Hers-Vif join the Ariège river?",
+  "answers": [
+   "Cintegabelle"
+  ]
+ },
+ {
+  "id": "a03",
+  "kind": "answerable",
+  "sourceId": 407693,
+  "title": "Memoir of Japanese Assassinations",
+  "question": "Which actor played Ōkuma Shigenobu in the film Memoir of Japanese Assassinations?",
+  "answers": [
+   "Kunijiro Yanagi"
+  ]
+ },
+ {
+  "id": "a04",
+  "kind": "answerable",
+  "sourceId": 205745,
+  "title": "Bohuslav Martinů",
+  "question": "How many steps did the young composer Bohuslav Martinů have to climb down from the church tower where he lived?",
+  "answers": [
+   "193"
+  ]
+ },
+ {
+  "id": "a05",
+  "kind": "answerable",
+  "sourceId": 53900,
+  "title": "K.G.F: Chapter 2",
+  "question": "Who composed the score for the Indian movie K.G.F: Chapter 2?",
+  "answers": [
+   "Ravi Basrur"
+  ]
+ },
+ {
+  "id": "a06",
+  "kind": "answerable",
+  "sourceId": 393281,
+  "title": "The Economist",
+  "question": "According to Simple English Wikipedia, why does The Economist magazine have a consistent voice?",
+  "answers": [
+   "its writers are anonymous",
+   "writers are anonymous"
+  ]
+ },
+ {
+  "id": "a07",
+  "kind": "answerable",
+  "sourceId": 129415,
+  "title": "Gastropoda",
+  "question": "What is one of the earliest known land-dwelling gastropods, found in the Carboniferous Coal measures of Europe?",
+  "answers": [
+   "Maturipupa"
+  ]
+ },
+ {
+  "id": "a08",
+  "kind": "answerable",
+  "sourceId": 230187,
+  "title": "Lionel of Antwerp, 1st Duke of Clarence",
+  "question": "In what year did Lionel of Antwerp, 1st Duke of Clarence, bring in the Statute of Kilkenny?",
+  "answers": [
+   "1366"
+  ]
+ },
+ {
+  "id": "a09",
+  "kind": "answerable",
+  "sourceId": 177142,
+  "title": "Ombretta Fumagalli Carulli",
+  "question": "Which party did the Italian politician Ombretta Fumagalli Carulli represent when she was elected to the Chamber of Deputies in 1987?",
+  "answers": [
+   "Christian Democracy"
+  ]
+ },
+ {
+  "id": "a10",
+  "kind": "answerable",
+  "sourceId": 114966,
+  "title": "Vanadium",
+  "question": "The element vanadium is named after Vanadis, which is another name for which goddess?",
+  "answers": [
+   "Freyja"
+  ]
+ },
+ {
+  "id": "a11",
+  "kind": "answerable",
+  "sourceId": 412390,
+  "title": "Butte County, California",
+  "question": "What is the county seat of Butte County, California?",
+  "answers": [
+   "Oroville"
+  ]
+ },
+ {
+  "id": "a12",
+  "kind": "answerable",
+  "sourceId": 113863,
+  "title": "Aqueous solution",
+  "question": "How is a solution of table salt in water written in a chemical equation?",
+  "answers": [
+   "NaCl(aq)"
+  ]
+ },
+ {
+  "id": "a13",
+  "kind": "answerable",
+  "sourceId": 218748,
+  "title": "Second Battle of Ypres",
+  "question": "How many casualties did the Canadians alone suffer at the Second Battle of Ypres?",
+  "answers": [
+   "over 6000",
+   "6000"
+  ]
+ },
+ {
+  "id": "a14",
+  "kind": "answerable",
+  "sourceId": 343790,
+  "title": "Iron Man",
+  "question": "In which comic book issue did the Marvel superhero Iron Man first appear?",
+  "answers": [
+   "Tales of Suspense #39"
+  ]
+ },
+ {
+  "id": "a15",
+  "kind": "answerable",
+  "sourceId": 8762,
+  "title": "Abanyom language",
+  "question": "About how many speakers did the Abanyom language of Nigeria have as of 1986?",
+  "answers": [
+   "12,500",
+   "about 12,500"
+  ]
+ },
+ {
+  "id": "a16",
+  "kind": "answerable",
+  "sourceId": 119499,
+  "title": "Noodle soup",
+  "question": "What are the noodles in the Japanese soup soba made of?",
+  "answers": [
+   "buckwheat"
+  ]
+ },
+ {
+  "id": "a17",
+  "kind": "answerable",
+  "sourceId": 299502,
+  "title": "Orange Julius",
+  "question": "Which company bought out the Orange Julius chain in 1987?",
+  "answers": [
+   "International Dairy Queen Corporation",
+   "Dairy Queen"
+  ]
+ },
+ {
+  "id": "a18",
+  "kind": "answerable",
+  "sourceId": 224266,
+  "title": "WWE Judgment Day",
+  "question": "At which arena was the wrestling event WWE Judgment Day 2003 held?",
+  "answers": [
+   "Charlotte Coliseum"
+  ]
+ },
+ {
+  "id": "a19",
+  "kind": "answerable",
+  "sourceId": 132829,
+  "title": "Mount Merapi",
+  "question": "What death toll had the 2010 eruptions of Mount Merapi reached by 18 November?",
+  "answers": [
+   "273"
+  ]
+ },
+ {
+  "id": "a20",
+  "kind": "answerable",
+  "sourceId": 383406,
+  "title": "Katrin Sjögren",
+  "question": "Since what date has Katrin Sjögren been Premier of Åland?",
+  "answers": [
+   "25 November 2015",
+   "2015"
+  ]
+ },
+ {
+  "id": "a21",
+  "kind": "answerable",
+  "sourceId": 141640,
+  "title": "Megan's Law",
+  "question": "What foundation did the parents of Megan Kanka start two days after her murder?",
+  "answers": [
+   "Megan Nichole Kanka Foundation"
+  ]
+ },
+ {
+  "id": "a22",
+  "kind": "answerable",
+  "sourceId": 100715,
+  "title": "World War II",
+  "question": "By 1943, how many barrels of oil was Japan producing in the Dutch East Indies?",
+  "answers": [
+   "50 million barrels",
+   "50 million"
+  ]
+ },
+ {
+  "id": "a23",
+  "kind": "answerable",
+  "sourceId": 353171,
+  "title": "Microsoft Small Basic",
+  "question": "How many keywords does the Microsoft Small Basic programming language have?",
+  "answers": [
+   "14"
+  ]
+ },
+ {
+  "id": "a24",
+  "kind": "answerable",
+  "sourceId": 267577,
+  "title": "Spontaneous generation",
+  "question": "What book did Sir Thomas Browne write questioning commonly presumed truths such as spontaneous generation?",
+  "answers": [
+   "Pseudodoxia Epidemica"
+  ]
+ },
+ {
+  "id": "a25",
+  "kind": "answerable",
+  "sourceId": 256191,
+  "title": "Transport in Singapore",
+  "question": "In what year did the first section of Singapore's Mass Rapid Transit open?",
+  "answers": [
+   "1987"
+  ]
+ },
+ {
+  "id": "a26",
+  "kind": "answerable",
+  "sourceId": 414351,
+  "title": "Marshall County, Kentucky",
+  "question": "What was the population of Marshall County, Kentucky at the 2020 census?",
+  "answers": [
+   "31,659"
+  ]
+ },
+ {
+  "id": "a27",
+  "kind": "answerable",
+  "sourceId": 166767,
+  "title": "Marina Wheeler",
+  "question": "In what year was the British lawyer Marina Wheeler appointed Queen's Counsel?",
+  "answers": [
+   "2016"
+  ]
+ },
+ {
+  "id": "a28",
+  "kind": "answerable",
+  "sourceId": 441795,
+  "title": "Ruth Sienkiewicz-Mercer",
+  "question": "For how many years was Ruth Sienkiewicz-Mercer treated terribly at the school for the mentally disabled?",
+  "answers": [
+   "sixteen years",
+   "sixteen",
+   "16"
+  ]
+ },
+ {
+  "id": "a29",
+  "kind": "answerable",
+  "sourceId": 447119,
+  "title": "Przewalski's horse",
+  "question": "Apart from Przewalski's horse and the domesticated horse, what is the extinct third subspecies of Equus ferus?",
+  "answers": [
+   "tarpan",
+   "Equus ferus ferus"
+  ]
+ },
+ {
+  "id": "a30",
+  "kind": "answerable",
+  "sourceId": 25604,
+  "title": "Juan Manuel Albendea Pabón",
+  "question": "In which town was the Spanish politician Juan Manuel Albendea Pabón born?",
+  "answers": [
+   "Cabra, Spain",
+   "Cabra"
+  ]
+ },
+ {
+  "id": "a31",
+  "kind": "answerable",
+  "sourceId": 449123,
+  "title": "Mike Tyson",
+  "question": "Who did Mike Tyson fight in his first bout after being released from prison?",
+  "answers": [
+   "Peter McNeeley"
+  ]
+ },
+ {
+  "id": "a32",
+  "kind": "answerable",
+  "sourceId": 57041,
+  "title": "Vidya Sinha",
+  "question": "What was the last movie role of the Indian actress Vidya Sinha?",
+  "answers": [
+   "Bodyguard"
+  ]
+ },
+ {
+  "id": "a33",
+  "kind": "answerable",
+  "sourceId": 210929,
+  "title": "Women in the United States Senate",
+  "question": "Who was the first woman elected to the United States Senate, in 1932?",
+  "answers": [
+   "Hattie Caraway"
+  ]
+ },
+ {
+  "id": "a34",
+  "kind": "answerable",
+  "sourceId": 428549,
+  "title": "Tropical Storm Marco (2008)",
+  "question": "Near which place in Veracruz did Tropical Storm Marco (2008) hit land?",
+  "answers": [
+   "Misantla"
+  ]
+ },
+ {
+  "id": "a35",
+  "kind": "answerable",
+  "sourceId": 95668,
+  "title": "Paul Ray",
+  "question": "In which town was the Utah state representative Paul Ray born?",
+  "answers": [
+   "Peru, Indiana"
+  ]
+ },
+ {
+  "id": "a36",
+  "kind": "answerable",
+  "sourceId": 350769,
+  "title": "OpenOffice Calc",
+  "question": "What is the maximum number of rows per sheet in OpenOffice Calc?",
+  "answers": [
+   "65,536"
+  ]
+ },
+ {
+  "id": "a37",
+  "kind": "answerable",
+  "sourceId": 99643,
+  "title": "Barney Hajiro",
+  "question": "On what date was Barney Hajiro presented with the Medal of Honor at the White House?",
+  "answers": [
+   "June 21, 2000"
+  ]
+ },
+ {
+  "id": "a38",
+  "kind": "answerable",
+  "sourceId": 31076,
+  "title": "Julie Brown",
+  "question": "What popular parody song is the comedian Julie Brown known for?",
+  "answers": [
+   "Homecoming Queen's Got a Gun"
+  ]
+ },
+ {
+  "id": "a39",
+  "kind": "answerable",
+  "sourceId": 142094,
+  "title": "Al Smith",
+  "question": "On what date did the New York politician Al Smith die?",
+  "answers": [
+   "October 4, 1944",
+   "1944"
+  ]
+ },
+ {
+  "id": "a40",
+  "kind": "answerable",
+  "sourceId": 56884,
+  "title": "Vinod Khanna",
+  "question": "From which Punjab constituency was the actor Vinod Khanna elected to the Lok Sabha?",
+  "answers": [
+   "Gurdaspur"
+  ]
+ },
+ {
+  "id": "a41",
+  "kind": "answerable",
+  "sourceId": 167999,
+  "title": "Frits Korthals Altes",
+  "question": "On what date did Frits Korthals Altes take office as Dutch Minister of Justice?",
+  "answers": [
+   "4 November 1982",
+   "1982"
+  ]
+ },
+ {
+  "id": "a42",
+  "kind": "answerable",
+  "sourceId": 37707,
+  "title": "Blur (band)",
+  "question": "Under what name was the band Blur originally formed in 1988?",
+  "answers": [
+   "Seymour"
+  ]
+ },
+ {
+  "id": "a43",
+  "kind": "answerable",
+  "sourceId": 452994,
+  "title": "Amar'e Stoudemire",
+  "question": "In which Israeli basketball team does Amar'e Stoudemire own a significant share?",
+  "answers": [
+   "Hapoel Jerusalem"
+  ]
+ },
+ {
+  "id": "a44",
+  "kind": "answerable",
+  "sourceId": 282463,
+  "title": "Age of Empires III",
+  "question": "Which company made the 2005 computer game Age of Empires III?",
+  "answers": [
+   "Ensemble Studios"
+  ]
+ },
+ {
+  "id": "a45",
+  "kind": "answerable",
+  "sourceId": 384556,
+  "title": "Christian Mayrleb",
+  "question": "Which English Premier League club did the Austrian striker Christian Mayrleb play for?",
+  "answers": [
+   "Sheffield Wednesday"
+  ]
+ },
+ {
+  "id": "a46",
+  "kind": "answerable",
+  "sourceId": 384723,
+  "title": "UEFA Euro 1988",
+  "question": "Which team did the Netherlands beat in the final of UEFA Euro 1988?",
+  "answers": [
+   "Soviet Union",
+   "the Soviet Union"
+  ]
+ },
+ {
+  "id": "a47",
+  "kind": "answerable",
+  "sourceId": 98661,
+  "title": "Martin Richard Hoffmann",
+  "question": "Where was the US Secretary of the Army Martin Richard Hoffmann born?",
+  "answers": [
+   "Stockbridge, Massachusetts",
+   "Stockbridge"
+  ]
+ },
+ {
+  "id": "a48",
+  "kind": "answerable",
+  "sourceId": 417564,
+  "title": "Adams, Green County, Wisconsin",
+  "question": "Who were the first settlers of the town of Adams in Green County, Wisconsin?",
+  "answers": [
+   "Cornish lead miners"
+  ]
+ },
+ {
+  "id": "a49",
+  "kind": "answerable",
+  "sourceId": 51781,
+  "title": "Pedro Armendáriz",
+  "question": "What role did Pedro Armendáriz play in From Russia with Love?",
+  "answers": [
+   "Kerim Bey"
+  ]
+ },
+ {
+  "id": "a50",
+  "kind": "answerable",
+  "sourceId": 296715,
+  "title": "Edmund Gunter",
+  "question": "Who taught the English mathematician Edmund Gunter mathematics?",
+  "answers": [
+   "Henry Briggs"
+  ]
+ },
+ {
+  "id": "a51",
+  "kind": "answerable",
+  "sourceId": 375930,
+  "title": "September",
+  "question": "What did the Anglo-Saxons call the month of September?",
+  "answers": [
+   "Gerstmonath"
+  ]
+ },
+ {
+  "id": "a52",
+  "kind": "answerable",
+  "sourceId": 86211,
+  "title": "200 BC",
+  "question": "Which Roman ambassador delivered an ultimatum to Philip V of Macedon in 200 BC?",
+  "answers": [
+   "Marcus Aemilius Lepidus"
+  ]
+ },
+ {
+  "id": "a53",
+  "kind": "answerable",
+  "sourceId": 454196,
+  "title": "Alessandra Mele",
+  "question": "With which song did the singer Alessandra Mele represent Norway at Eurovision 2023?",
+  "answers": [
+   "Queen of Kings"
+  ]
+ },
+ {
+  "id": "a54",
+  "kind": "answerable",
+  "sourceId": 200645,
+  "title": "Pixie Lott",
+  "question": "Who directed the music video for Pixie Lott's single \"Mama Do\"?",
+  "answers": [
+   "Trudy Bellinger"
+  ]
+ },
+ {
+  "id": "a55",
+  "kind": "answerable",
+  "sourceId": 218002,
+  "title": "Trochenbrod",
+  "question": "Who was the rabbi of Trochenbrod in 1940 when the Communists exiled him to Siberia?",
+  "answers": [
+   "Rabbi Gershon Weissmann",
+   "Gershon Weissmann"
+  ]
+ },
+ {
+  "id": "a56",
+  "kind": "answerable",
+  "sourceId": 387501,
+  "title": "Old Dominion University",
+  "question": "What are the men's sports teams of Old Dominion University called?",
+  "answers": [
+   "Monarchs",
+   "the Monarchs"
+  ]
+ },
+ {
+  "id": "a57",
+  "kind": "answerable",
+  "sourceId": 206396,
+  "title": "Gaetano Donizetti",
+  "question": "Which novel by Walter Scott was Donizetti's opera Lucia di Lammermoor based on?",
+  "answers": [
+   "The Bride of Lammermoor"
+  ]
+ },
+ {
+  "id": "a58",
+  "kind": "answerable",
+  "sourceId": 167451,
+  "title": "Commonwealth Liberal Party",
+  "question": "Who was the first leader of the Commonwealth Liberal Party of Australia?",
+  "answers": [
+   "Alfred Deakin",
+   "Deakin"
+  ]
+ },
+ {
+  "id": "a59",
+  "kind": "answerable",
+  "sourceId": 143392,
+  "title": "Burt Reynolds",
+  "question": "What was the name of the actor Burt Reynolds's father?",
+  "answers": [
+   "Douglas Burton Reynolds"
+  ]
+ },
+ {
+  "id": "a60",
+  "kind": "answerable",
+  "sourceId": 56914,
+  "title": "M. R. Radha",
+  "question": "Which producer was the only eyewitness when M. R. Radha shot M. G. Ramachandran?",
+  "answers": [
+   "Vasu"
+  ]
+ },
+ {
+  "id": "a61",
+  "kind": "answerable",
+  "sourceId": 56351,
+  "title": "Anna Hazare",
+  "question": "Which Indian village is the social activist Anna Hazare known for developing?",
+  "answers": [
+   "Ralegaon Siddhi"
+  ]
+ },
+ {
+  "id": "a62",
+  "kind": "answerable",
+  "sourceId": 338469,
+  "title": "Natalee Holloway",
+  "question": "What is the title of Beth Twitty's book about her daughter Natalee Holloway?",
+  "answers": [
+   "Loving Natalee"
+  ]
+ },
+ {
+  "id": "a63",
+  "kind": "answerable",
+  "sourceId": 167150,
+  "title": "Social Democratic Party (UK)",
+  "question": "Who became the UK Social Democratic Party's first and only Member of the European Parliament in 2018?",
+  "answers": [
+   "Patrick O'Flynn"
+  ]
+ },
+ {
+  "id": "a64",
+  "kind": "answerable",
+  "sourceId": 398662,
+  "title": "Dalek",
+  "question": "In what year did the BBC first register \"Dalek\" as a trademark?",
+  "answers": [
+   "1964"
+  ]
+ },
+ {
+  "id": "a65",
+  "kind": "answerable",
+  "sourceId": 257724,
+  "title": "Quorn, South Australia",
+  "question": "To which power station in Port Augusta did trains through Quorn carry coal from Leigh Creek?",
+  "answers": [
+   "Playford A Power Station",
+   "Playford A"
+  ]
+ },
+ {
+  "id": "a66",
+  "kind": "answerable",
+  "sourceId": 444012,
+  "title": "Greater roadrunner",
+  "question": "What is the scientific name of the greater roadrunner?",
+  "answers": [
+   "Geococcyx californianus"
+  ]
+ },
+ {
+  "id": "a67",
+  "kind": "answerable",
+  "sourceId": 228668,
+  "title": "Solomonid dynasty",
+  "question": "What name did Yekuno Amlak, first emperor of the Solomonid dynasty, use as ruler?",
+  "answers": [
+   "Tasfa Iyassus"
+  ]
+ },
+ {
+  "id": "a68",
+  "kind": "answerable",
+  "sourceId": 275744,
+  "title": "Maya Belenkaya",
+  "question": "Who was the skating partner of the Soviet figure skater Maya Belenkaya?",
+  "answers": [
+   "Igor Moskvin"
+  ]
+ },
+ {
+  "id": "a69",
+  "kind": "answerable",
+  "sourceId": 452554,
+  "title": "Metta Sandiford-Artest",
+  "question": "From which university was the basketball player Metta Sandiford-Artest drafted?",
+  "answers": [
+   "St. John's University"
+  ]
+ },
+ {
+  "id": "a70",
+  "kind": "answerable",
+  "sourceId": 449421,
+  "title": "John McNally (boxer)",
+  "question": "In which weight division did the Irish boxer John McNally win a silver medal at the 1952 Summer Olympics?",
+  "answers": [
+   "bantamweight"
+  ]
+ },
+ {
+  "id": "u01",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Bohuslav Martinů",
+  "question": "What was the name of the tailor in Polička who gave the composer Bohuslav Martinů his first violin lessons?",
+  "answers": []
+ },
+ {
+  "id": "u02",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Katrin Sjögren",
+  "question": "Which secondary school in Mariehamn did the Åland premier Katrin Sjögren graduate from?",
+  "answers": []
+ },
+ {
+  "id": "u03",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Vidya Sinha",
+  "question": "How many people attended the premiere of the 1974 movie Rajnigandha starring Vidya Sinha?",
+  "answers": []
+ },
+ {
+  "id": "u04",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Edmund Gunter",
+  "question": "What was the name of the wife of the English mathematician Edmund Gunter?",
+  "answers": []
+ },
+ {
+  "id": "u05",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Desiet Kidane",
+  "question": "What was the name of the driver of the car that hit the Eritrean cyclist Desiet Kidane in 2021?",
+  "answers": []
+ },
+ {
+  "id": "u06",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Paul Ray",
+  "question": "In which hospital was the Utah politician Paul Ray treated for his cerebral hemorrhage in December 2021?",
+  "answers": []
+ },
+ {
+  "id": "u07",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Orange Julius",
+  "question": "What was the street address of the first Orange Julius stand?",
+  "answers": []
+ },
+ {
+  "id": "u08",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Microsoft Small Basic",
+  "question": "Who was the lead engineer at Microsoft DevLabs responsible for designing Microsoft Small Basic?",
+  "answers": []
+ },
+ {
+  "id": "u09",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Barney Hajiro",
+  "question": "Which elementary school did the Medal of Honor recipient Barney Hajiro attend in Hawaii?",
+  "answers": []
+ },
+ {
+  "id": "u10",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Mike Epps",
+  "question": "What was the name of the comedian Mike Epps's high school drama teacher in Indianapolis?",
+  "answers": []
+ },
+ {
+  "id": "u11",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Via Anelli",
+  "question": "How many residents lived on Via Anelli in Milan in 2010?",
+  "answers": []
+ },
+ {
+  "id": "u12",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Taxman",
+  "question": "How much did EMI pay for the studio time used to record the Beatles song \"Taxman\"?",
+  "answers": []
+ },
+ {
+  "id": "u13",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Thaddeus M. Buczko",
+  "question": "Who was the campaign manager of Thaddeus M. Buczko in his first race for Massachusetts Auditor?",
+  "answers": []
+ },
+ {
+  "id": "u14",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Alessandra Mele",
+  "question": "How many points did Alessandra Mele's song \"Queen of Kings\" receive from the international jury in Melodi Grand Prix 2023?",
+  "answers": []
+ },
+ {
+  "id": "u15",
+  "kind": "unanswerable",
+  "subtype": "missing-detail",
+  "title": "Tara Lipinski",
+  "question": "What was the name of Tara Lipinski's first roller skating coach in New Jersey?",
+  "answers": []
+ },
+ {
+  "id": "u16",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "In what year was the town of Vellmarsk, Ontario incorporated?",
+  "answers": []
+ },
+ {
+  "id": "u17",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "Who founded the Brannigan-Holt Shipping Company of Liverpool?",
+  "answers": []
+ },
+ {
+  "id": "u18",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "In what year was the Treaty of Ostrava-Lindau signed?",
+  "answers": []
+ },
+ {
+  "id": "u19",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "What is the wingspan of the Tasmanian crested harrier-owl?",
+  "answers": []
+ },
+ {
+  "id": "u20",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "Which political party did the Estonian politician Kaarel Viidemaa lead?",
+  "answers": []
+ },
+ {
+  "id": "u21",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "Which river flows through the Hungarian town of Kelemenfalva-Rév?",
+  "answers": []
+ },
+ {
+  "id": "u22",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "In what year did the Hungarian composer Ferenc Ilkovits write his opera Margit of Szeged?",
+  "answers": []
+ },
+ {
+  "id": "u23",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "Who won the Delacroix Prize for Physics in 1974?",
+  "answers": []
+ },
+ {
+  "id": "u24",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "What was the population of the Chilean commune of Puerto Almendral at the 2017 census?",
+  "answers": []
+ },
+ {
+  "id": "u25",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "Which company manufactured the Strathmore Mk II jet trainer aircraft?",
+  "answers": []
+ },
+ {
+  "id": "u26",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "When did the Nigerian footballer Chukwudi Ebelemere make his debut for the national team?",
+  "answers": []
+ },
+ {
+  "id": "u27",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "In which English county is the village of Little Hanbury-on-Wold?",
+  "answers": []
+ },
+ {
+  "id": "u28",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "Who discovered the mineral velmarite in 1923?",
+  "answers": []
+ },
+ {
+  "id": "u29",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "Who was the founding director of the Halvorsen Institute of Marine Acoustics in Bergen?",
+  "answers": []
+ },
+ {
+  "id": "u30",
+  "kind": "unanswerable",
+  "subtype": "fictional",
+  "question": "In what year did the American novelist Harriet Doyle Pembrook publish her novel The Salt Meadows?",
+  "answers": []
+ }
+]

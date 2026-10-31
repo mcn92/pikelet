@@ -1,0 +1,977 @@
+{
+ "note": "Second blind judge pass (a single run, labels shuffled per item, identical texts graded once): u8 and u5 for both models plus u5 with the r192 K256 shortlist. Configs: base-u8, base-u5, base-u5sl, instruct-u8, instruct-u5, instruct-u5sl.",
+ "grades": {
+  "base-u5": {
+   "g1": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "g2": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical, but going outside/park because it rains is not a sensible consequence."
+   },
+   "g3": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical but 'because he was so happy' is causally backwards."
+   },
+   "g4": {
+    "grade": "PASS",
+    "reason": "Plural agreement correct, sensible clause."
+   },
+   "g5": {
+    "grade": "PASS",
+    "reason": "Natural coordinated clause."
+   },
+   "g6": {
+    "grade": "PASS",
+    "reason": "Grammatical reported clause, sensible."
+   },
+   "g7": {
+    "grade": "PARTIAL",
+    "reason": "First clause fine, but next sentence contradicts it."
+   },
+   "g8": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "n1": {
+    "grade": "PASS",
+    "reason": "Mom helps, boat returns; consistent and resolves."
+   },
+   "n2": {
+    "grade": "PASS",
+    "reason": "Mom gets milk; addresses missing milk."
+   },
+   "n3": {
+    "grade": "PASS",
+    "reason": "Consistent burying/finding bone."
+   },
+   "n4": {
+    "grade": "PASS",
+    "reason": "Dad comforts Anna in the dark."
+   },
+   "n5": {
+    "grade": "PASS",
+    "reason": "Owl helps lost bunny home; consistent."
+   },
+   "n6": {
+    "grade": "PASS",
+    "reason": "Mom finds pieces, Jack makes amends; somewhat odd but consistent."
+   },
+   "n7": {
+    "grade": "PASS",
+    "reason": "Plant sprouts; consistent."
+   },
+   "n8": {
+    "grade": "PASS",
+    "reason": "Tug-of-war breaks truck, mom intervenes; consistent."
+   },
+   "i1": {
+    "grade": "FAIL",
+    "reason": "Missing 'rain'."
+   },
+   "i2": {
+    "grade": "FAIL",
+    "reason": "Missing 'cookie'."
+   },
+   "i3": {
+    "grade": "FAIL",
+    "reason": "No dialogue; missing sing and sun."
+   },
+   "i4": {
+    "grade": "FAIL",
+    "reason": "Puppy is given to her, not found; no family homecoming."
+   },
+   "i5": {
+    "grade": "PARTIAL",
+    "reason": "Scared boy learns to swim but no friend helps."
+   },
+   "i6": {
+    "grade": "FAIL",
+    "reason": "Unrelated text; no required words."
+   },
+   "i7": {
+    "grade": "FAIL",
+    "reason": "Sentence absent."
+   },
+   "i8": {
+    "grade": "FAIL",
+    "reason": "Not a summary."
+   },
+   "f1": {
+    "grade": "PASS",
+    "reason": "Says blue."
+   },
+   "f2": {
+    "grade": "FAIL",
+    "reason": "Reply gives no number."
+   },
+   "f3": {
+    "grade": "FAIL",
+    "reason": "Talks about feeding cows; no milk."
+   },
+   "f4": {
+    "grade": "PARTIAL",
+    "reason": "Sea/water correct, but 'they are very big' wrong extra."
+   },
+   "f5": {
+    "grade": "FAIL",
+    "reason": "Does not say cold."
+   },
+   "f6": {
+    "grade": "PASS",
+    "reason": "Says green."
+   },
+   "f7": {
+    "grade": "PASS",
+    "reason": "Says honey."
+   },
+   "f8": {
+    "grade": "PASS",
+    "reason": "Says Tuesday."
+   },
+   "q1": {
+    "grade": "PASS",
+    "reason": "Yellow."
+   },
+   "q2": {
+    "grade": "PASS",
+    "reason": "Under the oak tree."
+   },
+   "q3": {
+    "grade": "FAIL",
+    "reason": "Says room; unsupported."
+   },
+   "q4": {
+    "grade": "FAIL",
+    "reason": "Grandpa claims he caught it."
+   },
+   "q5": {
+    "grade": "PARTIAL",
+    "reason": "Stars plus invented hearts and flowers."
+   },
+   "q6": {
+    "grade": "FAIL",
+    "reason": "Says tree."
+   },
+   "q7": {
+    "grade": "FAIL",
+    "reason": "Says I don't know."
+   },
+   "q8": {
+    "grade": "FAIL",
+    "reason": "No name given."
+   }
+  },
+  "base-u5sl": {
+   "g1": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "g2": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical, but going outside/park because it rains is not a sensible consequence."
+   },
+   "g3": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical but 'because he was so happy' is causally backwards."
+   },
+   "g4": {
+    "grade": "PASS",
+    "reason": "Plural agreement correct, sensible clause."
+   },
+   "g5": {
+    "grade": "PASS",
+    "reason": "Natural coordinated clause."
+   },
+   "g6": {
+    "grade": "PASS",
+    "reason": "Grammatical reported clause, sensible."
+   },
+   "g7": {
+    "grade": "PARTIAL",
+    "reason": "First clause fine, but next sentence contradicts it."
+   },
+   "g8": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "n1": {
+    "grade": "PASS",
+    "reason": "Mom helps, boat returns; consistent and resolves."
+   },
+   "n2": {
+    "grade": "PASS",
+    "reason": "Mom gets milk; addresses missing milk."
+   },
+   "n3": {
+    "grade": "PASS",
+    "reason": "Consistent burying/finding bone."
+   },
+   "n4": {
+    "grade": "PASS",
+    "reason": "Dad comforts Anna in the dark."
+   },
+   "n5": {
+    "grade": "PASS",
+    "reason": "Owl helps lost bunny home; consistent."
+   },
+   "n6": {
+    "grade": "PASS",
+    "reason": "Mom finds pieces, Jack makes amends; somewhat odd but consistent."
+   },
+   "n7": {
+    "grade": "PASS",
+    "reason": "Plant sprouts; consistent."
+   },
+   "n8": {
+    "grade": "PASS",
+    "reason": "Tug-of-war breaks truck, mom intervenes; consistent."
+   },
+   "i1": {
+    "grade": "FAIL",
+    "reason": "Missing 'rain'."
+   },
+   "i2": {
+    "grade": "FAIL",
+    "reason": "Missing 'cookie'."
+   },
+   "i3": {
+    "grade": "FAIL",
+    "reason": "No dialogue; missing sing and sun."
+   },
+   "i4": {
+    "grade": "FAIL",
+    "reason": "Puppy is given to her, not found; no family homecoming."
+   },
+   "i5": {
+    "grade": "PARTIAL",
+    "reason": "Scared boy learns to swim but no friend helps."
+   },
+   "i6": {
+    "grade": "FAIL",
+    "reason": "Unrelated text; no required words."
+   },
+   "i7": {
+    "grade": "FAIL",
+    "reason": "Sentence absent."
+   },
+   "i8": {
+    "grade": "FAIL",
+    "reason": "Not a summary."
+   },
+   "f1": {
+    "grade": "PASS",
+    "reason": "Says blue."
+   },
+   "f2": {
+    "grade": "FAIL",
+    "reason": "Reply gives no number."
+   },
+   "f3": {
+    "grade": "FAIL",
+    "reason": "Talks about feeding cows; no milk."
+   },
+   "f4": {
+    "grade": "PARTIAL",
+    "reason": "Sea/water correct, but 'they are very big' wrong extra."
+   },
+   "f5": {
+    "grade": "FAIL",
+    "reason": "Does not say cold."
+   },
+   "f6": {
+    "grade": "PASS",
+    "reason": "Says green."
+   },
+   "f7": {
+    "grade": "PASS",
+    "reason": "Says honey."
+   },
+   "f8": {
+    "grade": "PASS",
+    "reason": "Says Tuesday."
+   },
+   "q1": {
+    "grade": "PASS",
+    "reason": "Yellow."
+   },
+   "q2": {
+    "grade": "PASS",
+    "reason": "Under the oak tree."
+   },
+   "q3": {
+    "grade": "FAIL",
+    "reason": "Says room; unsupported."
+   },
+   "q4": {
+    "grade": "FAIL",
+    "reason": "Grandpa claims he caught it."
+   },
+   "q5": {
+    "grade": "PARTIAL",
+    "reason": "Stars plus invented hearts and flowers."
+   },
+   "q6": {
+    "grade": "FAIL",
+    "reason": "Says tree."
+   },
+   "q7": {
+    "grade": "FAIL",
+    "reason": "Says I don't know."
+   },
+   "q8": {
+    "grade": "FAIL",
+    "reason": "No name given."
+   }
+  },
+  "instruct-u5": {
+   "g1": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "g2": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical, but going outside/park because it rains is not a sensible consequence."
+   },
+   "g3": {
+    "grade": "PASS",
+    "reason": "Sensible causal clause."
+   },
+   "g4": {
+    "grade": "PASS",
+    "reason": "Plural agreement correct, sensible clause."
+   },
+   "g5": {
+    "grade": "PASS",
+    "reason": "Grammatical clause coordination, slightly awkward."
+   },
+   "g6": {
+    "grade": "PASS",
+    "reason": "Grammatical reported clause, sensible."
+   },
+   "g7": {
+    "grade": "PASS",
+    "reason": "Correct neither/nor completion."
+   },
+   "g8": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "n1": {
+    "grade": "PASS",
+    "reason": "Duck pushes boat back; consistent and resolves."
+   },
+   "n2": {
+    "grade": "PARTIAL",
+    "reason": "Ignores the missing-milk problem."
+   },
+   "n3": {
+    "grade": "PARTIAL",
+    "reason": "Tim says 'look what I found' though Max found it."
+   },
+   "n4": {
+    "grade": "PASS",
+    "reason": "Dad stays until power returns; consistent."
+   },
+   "n5": {
+    "grade": "PASS",
+    "reason": "Owl helps lost bunny home; consistent."
+   },
+   "n6": {
+    "grade": "PASS",
+    "reason": "Jack confesses, apologizes, forgiven."
+   },
+   "n7": {
+    "grade": "PASS",
+    "reason": "Plant grows from care; consistent."
+   },
+   "n8": {
+    "grade": "PASS",
+    "reason": "Tug-of-war breaks truck, mom intervenes; consistent."
+   },
+   "i1": {
+    "grade": "PASS",
+    "reason": "Uses ball, rain, happy."
+   },
+   "i2": {
+    "grade": "FAIL",
+    "reason": "Missing 'cookie'."
+   },
+   "i3": {
+    "grade": "PASS",
+    "reason": "Dialogue plus boat, sing, sun."
+   },
+   "i4": {
+    "grade": "PASS",
+    "reason": "Girl finds puppy in park, brings it home to family."
+   },
+   "i5": {
+    "grade": "PASS",
+    "reason": "Scared boy, friend helps him swim."
+   },
+   "i6": {
+    "grade": "PASS",
+    "reason": "Uses kite, tree, wind; sad ending."
+   },
+   "i7": {
+    "grade": "PARTIAL",
+    "reason": "Has 'The cat jumped onto the cushion', not the table."
+   },
+   "i8": {
+    "grade": "PASS",
+    "reason": "Faithful one-line summary."
+   },
+   "f1": {
+    "grade": "PASS",
+    "reason": "Says blue (tautological addition)."
+   },
+   "f2": {
+    "grade": "FAIL",
+    "reason": "Reply says 'I don't know'."
+   },
+   "f3": {
+    "grade": "FAIL",
+    "reason": "No answer."
+   },
+   "f4": {
+    "grade": "PASS",
+    "reason": "Pond correct."
+   },
+   "f5": {
+    "grade": "FAIL",
+    "reason": "Does not say cold."
+   },
+   "f6": {
+    "grade": "FAIL",
+    "reason": "Says brown."
+   },
+   "f7": {
+    "grade": "PARTIAL",
+    "reason": "Honey, plus odd claim of things we don't like."
+   },
+   "f8": {
+    "grade": "FAIL",
+    "reason": "Says Monday."
+   },
+   "q1": {
+    "grade": "FAIL",
+    "reason": "Says blue."
+   },
+   "q2": {
+    "grade": "PASS",
+    "reason": "Under the oak tree."
+   },
+   "q3": {
+    "grade": "PARTIAL",
+    "reason": "Box correct, omits under the bed."
+   },
+   "q4": {
+    "grade": "FAIL",
+    "reason": "Grandpa claims he caught it."
+   },
+   "q5": {
+    "grade": "PARTIAL",
+    "reason": "Says round and flat, contradictory with 'like stars'."
+   },
+   "q6": {
+    "grade": "PASS",
+    "reason": "In the old barn."
+   },
+   "q7": {
+    "grade": "FAIL",
+    "reason": "Addresses Leo but does not say Leo has it."
+   },
+   "q8": {
+    "grade": "FAIL",
+    "reason": "Says I don't know."
+   }
+  },
+  "instruct-u5sl": {
+   "g1": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "g2": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical, but going outside/park because it rains is not a sensible consequence."
+   },
+   "g3": {
+    "grade": "PASS",
+    "reason": "Sensible causal clause."
+   },
+   "g4": {
+    "grade": "PASS",
+    "reason": "Plural agreement correct, sensible clause."
+   },
+   "g5": {
+    "grade": "PASS",
+    "reason": "Grammatical clause coordination, slightly awkward."
+   },
+   "g6": {
+    "grade": "PASS",
+    "reason": "Grammatical reported clause, sensible."
+   },
+   "g7": {
+    "grade": "PASS",
+    "reason": "Correct neither/nor completion."
+   },
+   "g8": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "n1": {
+    "grade": "PASS",
+    "reason": "Duck pushes boat back; consistent and resolves."
+   },
+   "n2": {
+    "grade": "PARTIAL",
+    "reason": "Ignores the missing-milk problem."
+   },
+   "n3": {
+    "grade": "PARTIAL",
+    "reason": "Tim says 'look what I found' though Max found it."
+   },
+   "n4": {
+    "grade": "PASS",
+    "reason": "Dad stays until power returns; consistent."
+   },
+   "n5": {
+    "grade": "PASS",
+    "reason": "Owl helps lost bunny home; consistent."
+   },
+   "n6": {
+    "grade": "PASS",
+    "reason": "Jack confesses, apologizes, forgiven."
+   },
+   "n7": {
+    "grade": "PASS",
+    "reason": "Plant grows from care; consistent."
+   },
+   "n8": {
+    "grade": "PASS",
+    "reason": "Tug-of-war breaks truck, mom intervenes; consistent."
+   },
+   "i1": {
+    "grade": "PASS",
+    "reason": "Uses ball, rain, happy."
+   },
+   "i2": {
+    "grade": "FAIL",
+    "reason": "Missing 'cookie'."
+   },
+   "i3": {
+    "grade": "PASS",
+    "reason": "Dialogue plus boat, sing, sun."
+   },
+   "i4": {
+    "grade": "PASS",
+    "reason": "Girl finds puppy in park, brings it home to family."
+   },
+   "i5": {
+    "grade": "PASS",
+    "reason": "Scared boy, friend helps him swim."
+   },
+   "i6": {
+    "grade": "PASS",
+    "reason": "Uses kite, tree, wind; sad ending."
+   },
+   "i7": {
+    "grade": "PARTIAL",
+    "reason": "Has 'The cat jumped onto the cushion', not the table."
+   },
+   "i8": {
+    "grade": "PASS",
+    "reason": "Faithful one-line summary."
+   },
+   "f1": {
+    "grade": "PASS",
+    "reason": "Says blue (tautological addition)."
+   },
+   "f2": {
+    "grade": "FAIL",
+    "reason": "Reply says 'I don't know'."
+   },
+   "f3": {
+    "grade": "FAIL",
+    "reason": "No answer."
+   },
+   "f4": {
+    "grade": "PASS",
+    "reason": "Pond correct."
+   },
+   "f5": {
+    "grade": "FAIL",
+    "reason": "Does not say cold."
+   },
+   "f6": {
+    "grade": "FAIL",
+    "reason": "Says brown."
+   },
+   "f7": {
+    "grade": "PARTIAL",
+    "reason": "Honey, plus odd claim of things we don't like."
+   },
+   "f8": {
+    "grade": "FAIL",
+    "reason": "Says Monday."
+   },
+   "q1": {
+    "grade": "FAIL",
+    "reason": "Says blue."
+   },
+   "q2": {
+    "grade": "PASS",
+    "reason": "Under the oak tree."
+   },
+   "q3": {
+    "grade": "PARTIAL",
+    "reason": "Box correct, omits under the bed."
+   },
+   "q4": {
+    "grade": "FAIL",
+    "reason": "Grandpa claims he caught it."
+   },
+   "q5": {
+    "grade": "PARTIAL",
+    "reason": "Says round and flat, contradictory with 'like stars'."
+   },
+   "q6": {
+    "grade": "PASS",
+    "reason": "In the old barn."
+   },
+   "q7": {
+    "grade": "FAIL",
+    "reason": "Addresses Leo but does not say Leo has it."
+   },
+   "q8": {
+    "grade": "FAIL",
+    "reason": "Says I don't know."
+   }
+  },
+  "instruct-u8": {
+   "g1": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "g2": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical, but going outside/park because it rains is not a sensible consequence."
+   },
+   "g3": {
+    "grade": "PASS",
+    "reason": "Sensible causal clause."
+   },
+   "g4": {
+    "grade": "PASS",
+    "reason": "Plural agreement correct, sensible clause."
+   },
+   "g5": {
+    "grade": "PASS",
+    "reason": "Grammatical clause coordination, slightly awkward."
+   },
+   "g6": {
+    "grade": "PASS",
+    "reason": "Grammatical reported clause, sensible."
+   },
+   "g7": {
+    "grade": "PASS",
+    "reason": "Correct neither/nor completion."
+   },
+   "g8": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "n1": {
+    "grade": "PASS",
+    "reason": "Search finds boat via fish; addresses loss."
+   },
+   "n2": {
+    "grade": "PARTIAL",
+    "reason": "Ignores the missing-milk problem."
+   },
+   "n3": {
+    "grade": "PASS",
+    "reason": "Consistent with Tim, Max and bone."
+   },
+   "n4": {
+    "grade": "FAIL",
+    "reason": "Dad turns on the light despite the power outage."
+   },
+   "n5": {
+    "grade": "PASS",
+    "reason": "Owl helps lost bunny home; consistent."
+   },
+   "n6": {
+    "grade": "PASS",
+    "reason": "Jack confesses and is forgiven; responds to hiding."
+   },
+   "n7": {
+    "grade": "PARTIAL",
+    "reason": "Puts found plant into the pot, contradicting seed already planted."
+   },
+   "n8": {
+    "grade": "PASS",
+    "reason": "Tug-of-war breaks truck, mom intervenes; consistent."
+   },
+   "i1": {
+    "grade": "PASS",
+    "reason": "Uses ball, rain, happy."
+   },
+   "i2": {
+    "grade": "PASS",
+    "reason": "Uses dragon, cookie, friend."
+   },
+   "i3": {
+    "grade": "PARTIAL",
+    "reason": "Dialogue, boat, sing present; missing 'sun'."
+   },
+   "i4": {
+    "grade": "PASS",
+    "reason": "Girl finds puppy in park, brings it home to family."
+   },
+   "i5": {
+    "grade": "PASS",
+    "reason": "Scared boy, friend teaches him to swim."
+   },
+   "i6": {
+    "grade": "PASS",
+    "reason": "Uses kite, tree, wind; bad ending."
+   },
+   "i7": {
+    "grade": "FAIL",
+    "reason": "Sentence absent; repetitive loop."
+   },
+   "i8": {
+    "grade": "PASS",
+    "reason": "Faithful one-line summary."
+   },
+   "f1": {
+    "grade": "PASS",
+    "reason": "Says blue."
+   },
+   "f2": {
+    "grade": "FAIL",
+    "reason": "Reply says 'I don't know'."
+   },
+   "f3": {
+    "grade": "PARTIAL",
+    "reason": "Milk, plus wrong eggs and carrots."
+   },
+   "f4": {
+    "grade": "PASS",
+    "reason": "Pond/water correct."
+   },
+   "f5": {
+    "grade": "FAIL",
+    "reason": "Does not say cold."
+   },
+   "f6": {
+    "grade": "FAIL",
+    "reason": "Says brown."
+   },
+   "f7": {
+    "grade": "PASS",
+    "reason": "Says honey."
+   },
+   "f8": {
+    "grade": "FAIL",
+    "reason": "Says Monday, repetitive."
+   },
+   "q1": {
+    "grade": "PASS",
+    "reason": "Yellow."
+   },
+   "q2": {
+    "grade": "PASS",
+    "reason": "Under the oak tree."
+   },
+   "q3": {
+    "grade": "PARTIAL",
+    "reason": "Box correct, omits under the bed."
+   },
+   "q4": {
+    "grade": "FAIL",
+    "reason": "Grandpa claims he caught it."
+   },
+   "q5": {
+    "grade": "FAIL",
+    "reason": "Says round; wrong."
+   },
+   "q6": {
+    "grade": "FAIL",
+    "reason": "Says tree outside barn."
+   },
+   "q7": {
+    "grade": "FAIL",
+    "reason": "Addresses Leo but does not say Leo has it."
+   },
+   "q8": {
+    "grade": "FAIL",
+    "reason": "Says I don't know."
+   }
+  },
+  "base-u8": {
+   "g1": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "g2": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical, but going outside/park because it rains is not a sensible consequence."
+   },
+   "g3": {
+    "grade": "PARTIAL",
+    "reason": "Grammatical but 'because he was so happy' is causally backwards."
+   },
+   "g4": {
+    "grade": "PASS",
+    "reason": "Plural agreement correct, sensible clause."
+   },
+   "g5": {
+    "grade": "PASS",
+    "reason": "Natural coordinated clause."
+   },
+   "g6": {
+    "grade": "PASS",
+    "reason": "Grammatical reported clause, sensible."
+   },
+   "g7": {
+    "grade": "PARTIAL",
+    "reason": "'would hear' is grammatical but semantically empty."
+   },
+   "g8": {
+    "grade": "PASS",
+    "reason": "Grammatical, sensible completion."
+   },
+   "n1": {
+    "grade": "PARTIAL",
+    "reason": "Drifts to Sam swimming and being swept away; boat problem not resolved."
+   },
+   "n2": {
+    "grade": "PARTIAL",
+    "reason": "Finds milk but muddled (pours milk into carton)."
+   },
+   "n3": {
+    "grade": "PASS",
+    "reason": "Consistent; Max shows Tim the bone."
+   },
+   "n4": {
+    "grade": "PASS",
+    "reason": "Dad comforts her; consistent."
+   },
+   "n5": {
+    "grade": "PASS",
+    "reason": "Owl helps lost bunny home; consistent."
+   },
+   "n6": {
+    "grade": "PARTIAL",
+    "reason": "Confused: mom forbids playing with pieces; ignores lie/vase."
+   },
+   "n7": {
+    "grade": "PASS",
+    "reason": "Seed sprouts and grows; consistent."
+   },
+   "n8": {
+    "grade": "PASS",
+    "reason": "Tug-of-war breaks truck, mom intervenes; consistent."
+   },
+   "i1": {
+    "grade": "FAIL",
+    "reason": "Missing 'rain'."
+   },
+   "i2": {
+    "grade": "FAIL",
+    "reason": "Missing 'cookie' and 'friend'."
+   },
+   "i3": {
+    "grade": "FAIL",
+    "reason": "No dialogue; missing sing and sun."
+   },
+   "i4": {
+    "grade": "PARTIAL",
+    "reason": "Family keeps a homeless puppy, but finding is not shown."
+   },
+   "i5": {
+    "grade": "PARTIAL",
+    "reason": "Scared boy learns; friend only mentioned at end."
+   },
+   "i6": {
+    "grade": "FAIL",
+    "reason": "Degenerate repetition; missing tree and wind."
+   },
+   "i7": {
+    "grade": "FAIL",
+    "reason": "Sentence absent; degenerate dialogue."
+   },
+   "i8": {
+    "grade": "FAIL",
+    "reason": "Not a summary."
+   },
+   "f1": {
+    "grade": "PASS",
+    "reason": "Says blue."
+   },
+   "f2": {
+    "grade": "FAIL",
+    "reason": "Reply gives no number."
+   },
+   "f3": {
+    "grade": "PARTIAL",
+    "reason": "Mentions milk but says cows give meat, confused."
+   },
+   "f4": {
+    "grade": "PASS",
+    "reason": "Ocean/water correct."
+   },
+   "f5": {
+    "grade": "FAIL",
+    "reason": "Does not say cold."
+   },
+   "f6": {
+    "grade": "PASS",
+    "reason": "Says green."
+   },
+   "f7": {
+    "grade": "PASS",
+    "reason": "Says honey."
+   },
+   "f8": {
+    "grade": "PASS",
+    "reason": "Says Tuesday."
+   },
+   "q1": {
+    "grade": "PASS",
+    "reason": "Yellow."
+   },
+   "q2": {
+    "grade": "PARTIAL",
+    "reason": "Says in the oak tree, not under."
+   },
+   "q3": {
+    "grade": "FAIL",
+    "reason": "Says room; unsupported."
+   },
+   "q4": {
+    "grade": "FAIL",
+    "reason": "Grandpa claims he caught it."
+   },
+   "q5": {
+    "grade": "FAIL",
+    "reason": "No shape given."
+   },
+   "q6": {
+    "grade": "FAIL",
+    "reason": "Says tree."
+   },
+   "q7": {
+    "grade": "FAIL",
+    "reason": "Says I don't know."
+   },
+   "q8": {
+    "grade": "PARTIAL",
+    "reason": "Says Snowy, near but not Snow."
+   }
+  }
+ }
+}
