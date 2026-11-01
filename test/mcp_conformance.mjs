@@ -67,7 +67,7 @@ function stubPack() {
     };
 }
 
-async function withServer(fn, { packPaths = ['stub.pikelet'], openPikeletFile = async () => stubPack(), onExit = null } = {}) {
+async function withServer(fn, { packPaths = ['stub.pikelet'], openPikeletFile = async () => stubPack(), onExit = null, toolsListGraceMs } = {}) {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     const replies = [];
@@ -85,6 +85,7 @@ async function withServer(fn, { packPaths = ['stub.pikelet'], openPikeletFile = 
         openPikeletFile,
         httpRangeSource: () => { throw new Error('no network in conformance'); },
         serverVersion: '0.0.0-test',
+        ...(toolsListGraceMs === undefined ? {} : { toolsListGraceMs }),
         stdin,
         stdout,
         log: () => {},
@@ -282,6 +283,62 @@ console.log('mount isolation');
         onExit: (err) => { allExit = err; },
     });
     check('a total mount failure exits non-zero', allExit?.exitCode === 1);
+}
+
+console.log('slow mount');
+{
+    // A URL mount on a slow host can take tens of seconds. tools/list must not
+    // wait it out: a client that times out on it starts with no tools at all.
+    // It answers provisionally after the grace period, and list_changed tells
+    // the client to fetch the real list once the mounts settle.
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    await withServer(async ({ send, waitFor, replies }) => {
+        const meta = { [META_VERSION]: '2026-07-28' };
+        send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } } });
+        const init = (await waitFor(1)).result;
+        check('initialize advertises tools.listChanged', init.capabilities?.tools?.listChanged === true);
+        send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: { _meta: meta } });
+        const provisional = (await waitFor(2)).result;
+        const names = (provisional?.tools || []).map((t) => t.name).join(',');
+        check('tools/list answers while a mount is still in flight', names === 'search,list_packs,verify_pack,get_record', names);
+        check('the provisional list carries no cache hints', provisional.ttlMs === undefined && provisional.cacheScope === undefined);
+        check('the provisional list says packs are still mounting',
+            provisional.tools[0].inputSchema.properties.pack.description.includes('still mounting'));
+        check('no list_changed before the mounts settle',
+            !replies.some((r) => r.method === 'notifications/tools/list_changed'));
+        // A tool call made now waits for the mount rather than failing.
+        send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { _meta: meta, name: 'search', arguments: { query: 'what is a stub' } } });
+        release();
+        const call = (await waitFor(3)).result;
+        check('a call made during the mount waits for it and serves', call && !call.isError && call.content[0].text.includes('stub text'),
+            call?.content?.[0]?.text);
+        check('list_changed follows once the mounts settle',
+            replies.some((r) => r.method === 'notifications/tools/list_changed' && r.id === undefined));
+        send({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: { _meta: meta } });
+        const full = (await waitFor(4)).result;
+        check('the list after settling names the pack and is cacheable',
+            full.tools[0].inputSchema.properties.pack.description.includes('stub-pack') && Number.isFinite(full.ttlMs));
+    }, {
+        toolsListGraceMs: 20,
+        openPikeletFile: async () => { await gate; return stubPack(); },
+    });
+
+    // A mount that settles inside the grace period gets the exact list and no
+    // notification: the common local-pack case is unchanged.
+    await withServer(async ({ send, waitFor, replies }) => {
+        send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+        const list = (await waitFor(1)).result;
+        check('a mount inside the grace period gets the named list',
+            list.tools[0].inputSchema.properties.pack.description.includes('stub-pack'));
+        send({ jsonrpc: '2.0', id: 2, method: 'ping' });
+        await waitFor(2);
+        check('no list_changed when the first list was already exact',
+            !replies.some((r) => r.method === 'notifications/tools/list_changed'));
+    }, {
+        toolsListGraceMs: 5000,
+        openPikeletFile: async () => { await new Promise((r) => setTimeout(r, 30)); return stubPack(); },
+    });
 }
 
 console.log(`\nMCP protocol conformance: ${passed} passed, ${failed} failed`);

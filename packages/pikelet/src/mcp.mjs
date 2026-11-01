@@ -46,10 +46,16 @@ const MODERN_VERSIONS = ['2026-07-28'];
 const LEGACY_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 const META_VERSION = 'io.modelcontextprotocol/protocolVersion';
 const META_SERVER_INFO = 'io.modelcontextprotocol/serverInfo';
-// tools/list is static for the life of the process (packs mount once), so
+// tools/list is static once the packs have mounted (they mount once), so
 // modern CacheableResult hints let clients cache it for an hour; private
-// because mounted packs are the user's own configuration.
+// because mounted packs are the user's own configuration. A provisional list
+// served while mounts are still in flight carries no hints.
 const CACHE_HINTS = { ttlMs: 3600000, cacheScope: 'private' };
+// How long tools/list waits for the mounts before answering provisionally.
+// Local packs mount well inside it and get the exact list; a URL mount can
+// take tens of seconds on a slow host, and a client that times out waiting
+// for tools/list starts the session with no tools at all.
+const TOOLS_LIST_GRACE_MS = 2000;
 // Result text is chunk-sized by construction (compile targets ~256
 // tokens); k stays small so one tool result cannot flood a context window.
 const MAX_K = 20;
@@ -122,11 +128,17 @@ function journalToolDefinitions(journalName) {
   ];
 }
 
-function toolDefinitions(packs) {
+// `mounting` describes the tools before the mounts have settled: the same
+// tools with the same schemas, minus the pack names nothing knows yet (a
+// pack's name comes from its manifest). `journalPending` is set when a
+// journal is configured but not yet mounted, so its tools are listed too.
+function toolDefinitions(packs, { mounting = false, journalPending = false } = {}) {
   const packNames = [...packs.keys()];
-  const packDescription = packs.size === 1
-    ? `Only one pack is mounted (${packNames[0]}); the parameter is optional.`
-    : `Omit to search every mounted pack (${packNames.join(', ')}); results stay grouped per pack.`;
+  const packDescription = mounting
+    ? 'Packs are still mounting; list_packs names them once they are ready. Omit to search every mounted pack; results stay grouped per pack.'
+    : packs.size === 1
+      ? `Only one pack is mounted (${packNames[0]}); the parameter is optional.`
+      : `Omit to search every mounted pack (${packNames.join(', ')}); results stay grouped per pack.`;
   return [
     {
       name: 'search',
@@ -215,6 +227,7 @@ function toolDefinitions(packs) {
       },
     },
     ...[...packs.entries()].filter(([, m]) => m.journal).flatMap(([name]) => journalToolDefinitions(name)),
+    ...(journalPending ? journalToolDefinitions('the journal') : []),
   ];
 }
 
@@ -1013,7 +1026,7 @@ export async function loadShelf(location) {
  * injected (the CLI passes pikelet-wasm/complete's openPikeletFile) so
  * tests can stub it.
  */
-export async function runMcpServer({ packPaths, journal = null, openPikeletFile, httpRangeSource, serverVersion = '0.0.0', stdin = process.stdin, stdout = process.stdout, log = (line) => process.stderr.write(`${line}\n`) }) {
+export async function runMcpServer({ packPaths, journal = null, openPikeletFile, httpRangeSource, serverVersion = '0.0.0', toolsListGraceMs = TOOLS_LIST_GRACE_MS, stdin = process.stdin, stdout = process.stdout, log = (line) => process.stderr.write(`${line}\n`) }) {
   if ((!Array.isArray(packPaths) || packPaths.length === 0) && !journal) {
     throw new Error('mcp requires at least one --pack <file.pikelet> or a --journal');
   }
@@ -1090,6 +1103,20 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
   const send = (message) => stdout.write(`${JSON.stringify(message)}\n`);
   const replyError = (id, code, message, data) => send({ jsonrpc: '2.0', id, error: { code, message, ...(data ? { data } : {}) } });
 
+  // tools/list must not wait out a slow mount (see TOOLS_LIST_GRACE_MS). It
+  // answers provisionally instead, and once the mounts settle the client is
+  // told to fetch the list again, now naming the packs actually served. The
+  // flag is set by a reaction on mountsReady itself, so it is already true
+  // by the time anything awaiting a promise derived from it resumes.
+  let mountsSettled = false;
+  let provisionalListServed = false;
+  let open = true;
+  const onMountsSettled = () => {
+    mountsSettled = true;
+    if (provisionalListServed && open) send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
+  };
+  mountsReady.then(onMountsSettled, onMountsSettled);
+
   const rl = readline.createInterface({ input: stdin, crlfDelay: Infinity });
   for await (const line of rl) {
     const trimmed = line.trim();
@@ -1123,7 +1150,7 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
       } else if (method === 'server/discover') {
         reply(id, {
           supportedVersions,
-          capabilities: { tools: {} },
+          capabilities: { tools: { listChanged: true } },
           instructions: 'This server mounts .pikelet knowledge packs. Use search to retrieve '
             + 'provenanced passages with a matchQuality that measures retrieval relevance — whether '
             + 'the pack covers the question\'s topic — not whether the answer is there: "strong" '
@@ -1149,7 +1176,7 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
         const requested = params?.protocolVersion;
         reply(id, {
           protocolVersion: LEGACY_VERSIONS.includes(requested) ? requested : LEGACY_VERSIONS[0],
-          capabilities: { tools: {} },
+          capabilities: { tools: { listChanged: true } },
           serverInfo,
         });
       } else if (method === 'ping') {
@@ -1157,13 +1184,24 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
         // caller who sends it anyway gets a well-formed empty result.
         if (isRequest) reply(id, {});
       } else if (method === 'tools/list') {
-        // Awaits the mounts: the tool definitions name the mounted packs, and
-        // answering early would advertise a shorter list than the server ends
-        // up serving. `initialize` is the only handshake step that does not
-        // wait, which is the point — see mountsReady above.
-        await mountsUsable();
-        // Deterministic order (mount order) per the modern caching rules.
-        reply(id, { tools: toolDefinitions(packs), ...(modern ? CACHE_HINTS : {}) });
+        // Waits briefly for the mounts, since the tool definitions name the
+        // mounted packs. Past the grace period it answers with the same tools
+        // described without pack names, uncached, and list_changed follows
+        // when the mounts settle; tool calls meanwhile wait for the mounts.
+        if (!mountsSettled) {
+          await Promise.race([
+            mountsReady.catch(() => {}),
+            new Promise((resolve) => { setTimeout(resolve, toolsListGraceMs).unref?.(); }),
+          ]);
+        }
+        if (mountsSettled) {
+          await mountsUsable();
+          // Deterministic order (mount order) per the modern caching rules.
+          reply(id, { tools: toolDefinitions(packs), ...(modern ? CACHE_HINTS : {}) });
+        } else {
+          provisionalListServed = true;
+          reply(id, { tools: toolDefinitions(packs, { mounting: true, journalPending: Boolean(journalDir) && !journalName }) });
+        }
       } else if (method === 'tools/call') {
         // Every tool reads the packs map, so a call made while mounting is
         // still in flight waits for it rather than seeing an empty server. A
@@ -1199,6 +1237,8 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
       }
     }
   }
+
+  open = false;
 
   // Settle the mounts before reporting. A client that closes stdin without
   // calling a tool (or any run whose input drains faster than a URL mount's
