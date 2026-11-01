@@ -76,6 +76,11 @@ export async function main(argv) {
       packPaths.push(...await loadShelf(parsed.flags.shelf));
     }
     const { reader } = await loadCompleteModules();
+    // diskBlobCache comes from the reader's Node entry; a pikelet-wasm that
+    // predates it simply mounts uncached.
+    const blobCache = parsed.flags['no-cache'] || typeof reader.diskBlobCache !== 'function'
+      ? null
+      : reader.diskBlobCache();
     await runMcpServer({
       packPaths,
       journal: parsed.flags.journal ?? null,
@@ -86,6 +91,7 @@ export async function main(argv) {
         return reader.httpRangeSource(url, { fetch: nodeFetch, ...options });
       },
       serverVersion: CLI_VERSION,
+      blobCache,
     });
     return;
   }
@@ -123,7 +129,7 @@ Usage:
   pikelet rebase --layer <file> --onto <base> [--onto <layer> ...] --out rebased.pikelet
                  [--old-parent <file> ...] [--on-conflict refuse|skip|keep-both]
                  [--on-foreign refuse|drop]
-  pikelet mcp --pack <file-or-url> [--pack ... | --shelf <file-or-url>] [--journal <name|dir>]
+  pikelet mcp --pack <file-or-url> [--pack ... | --shelf <file-or-url>] [--journal <name|dir>] [--no-cache]
   pikelet mcp install --pack <file-or-url> [--journal <name|dir>] [--client claude-code|claude-desktop]
   pikelet journal init <name|dir> [--force]
   pikelet journal list <name|dir> [--kind <kind>] [--tag <tag>] [--limit <n>]
@@ -140,6 +146,13 @@ either form takes '#<sha256>' to pin the manifest identity (mismatches
 refuse to serve). --shelf mounts every pack on a static packs.json listing
 (see packs/README.md). mcp install writes the MCP client config instead of
 running the server (--server-name names the entry, --force replaces it).
+
+A URL pack's two largest mount reads, the resident index prefix and the
+query encoder, are cached on disk under their sha256 in
+~/.cache/pikelet/blobs ($PIKELET_CACHE_DIR or $XDG_CACHE_HOME moves it; 2 GiB,
+least recently used evicted first), so a later process mounting the same
+pack reads them locally. Every hit is hash-checked before use. --no-cache
+turns it off.
 
 --journal mounts a private journal the agent may write to (docs/agent-journal.md):
 write_note appends a note (handoff, decision, dead-end, measurement, summary,
@@ -287,6 +300,8 @@ const BOOLEAN_FLAGS = new Set([
   // consume the next argument -- an unregistered flag here set itself to
   // '--out' and left --out unset.
   'no-refit',
+  // mcp: skip the on-disk cache of URL packs' committed regions.
+  'no-cache',
 ]);
 
 // Every flag that takes a value. An unregistered flag is refused rather than

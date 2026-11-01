@@ -67,7 +67,7 @@ function stubPack() {
     };
 }
 
-async function withServer(fn, { packPaths = ['stub.pikelet'], openPikeletFile = async () => stubPack(), onExit = null, toolsListGraceMs } = {}) {
+async function withServer(fn, { packPaths = ['stub.pikelet'], openPikeletFile = async () => stubPack(), onExit = null, toolsListGraceMs, httpRangeSource, blobCache } = {}) {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
     const replies = [];
@@ -83,7 +83,8 @@ async function withServer(fn, { packPaths = ['stub.pikelet'], openPikeletFile = 
     const done = runMcpServer({
         packPaths,
         openPikeletFile,
-        httpRangeSource: () => { throw new Error('no network in conformance'); },
+        httpRangeSource: httpRangeSource || (() => { throw new Error('no network in conformance'); }),
+        ...(blobCache === undefined ? {} : { blobCache }),
         serverVersion: '0.0.0-test',
         ...(toolsListGraceMs === undefined ? {} : { toolsListGraceMs }),
         stdin,
@@ -339,6 +340,25 @@ console.log('slow mount');
         toolsListGraceMs: 5000,
         openPikeletFile: async () => { await new Promise((r) => setTimeout(r, 30)); return stubPack(); },
     });
+}
+
+console.log('blob cache wiring');
+{
+    // A URL mount opens with the server's blobCache; a local file, already on
+    // disk, never does.
+    const seen = [];
+    const cache = { get: async () => null, put: async () => {} };
+    await withServer(async ({ send, waitFor }) => {
+        send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_packs', arguments: {} } });
+        await waitFor(1);
+    }, {
+        packPaths: ['https://host.invalid/remote.pikelet', 'local.pikelet'],
+        httpRangeSource: (url) => ({ url, async init() {}, async read() { throw new Error('unused'); } }),
+        blobCache: cache,
+        openPikeletFile: async (target, options) => { seen.push({ remote: typeof target !== 'string', cache: options?.blobCache }); return stubPack(); },
+    });
+    check('a URL mount opens with the blob cache', seen.some((s) => s.remote && s.cache === cache), JSON.stringify(seen.map((s) => [s.remote, !!s.cache])));
+    check('a local mount opens without it', seen.some((s) => !s.remote && s.cache === undefined));
 }
 
 console.log(`\nMCP protocol conformance: ${passed} passed, ${failed} failed`);

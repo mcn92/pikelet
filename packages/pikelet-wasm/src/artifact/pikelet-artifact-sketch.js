@@ -17,6 +17,8 @@ const {
     parseUint8Snapshot,
     sha256Bytes,
     sha256BytesAsync,
+    blobCacheGet,
+    blobCachePut,
     verifySegmentSha256,
 } = require('./pikelet-artifact-common.js');
 const {
@@ -28,6 +30,12 @@ const {
 // ============================================================================
 // Sketch artifact profile (.pikelet-sketch) — spec/SKETCH_PROFILE.md
 // ============================================================================
+
+function hexOf(bytes) {
+    let hex = '';
+    for (const b of bytes) hex += b.toString(16).padStart(2, '0');
+    return hex;
+}
 //
 // Layout: 256-byte header | scales f32[count] | offsets f32[count] |
 // packed pooled sketches | zero padding to 16-byte alignment | raw u8 rows.
@@ -467,8 +475,16 @@ class PikeletSketchArtifact {
         artifact.tier = 'full';
         artifact.fullyResident = Promise.resolve(artifact);
 
-        if (!staged) {
-            const resident = await readChecked(source, SKETCH_HEADER_BYTES, vectorsOffset - SKETCH_HEADER_BYTES, 'resident prefix', artifact.maxReadBytes);
+        // options.blobCache: the resident prefix is the bulk of a mount (46 MiB
+        // of a 649 MiB wiki pack) and is committed by residentSha256, so a
+        // cache keyed by that digest serves it to later processes. A hit is
+        // hash-checked inside blobCacheGet; only verified opens consult it,
+        // since verify:false has nothing to check a hit against. A cache hit
+        // also skips staging: the full tier is already local.
+        const cacheKey = verify && options.blobCache ? hexOf(header.subarray(56, 88)) : null;
+        const cached = cacheKey ? await blobCacheGet(options.blobCache, cacheKey, vectorsOffset - SKETCH_HEADER_BYTES) : null;
+        if (!staged || cached) {
+            const resident = cached || await readChecked(source, SKETCH_HEADER_BYTES, vectorsOffset - SKETCH_HEADER_BYTES, 'resident prefix', artifact.maxReadBytes);
             if (resident.byteLength !== vectorsOffset - SKETCH_HEADER_BYTES) {
                 throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact resident prefix is truncated');
             }
@@ -477,7 +493,9 @@ class PikeletSketchArtifact {
             const residentCopy = new Uint8Array(resident.byteLength);
             residentCopy.set(resident);
             artifact._adoptResident(residentCopy, count, sketchRowBytes, microRowBytes, microOffset);
-            if (verify) await artifact._verifyFullResident(residentCopy, header);
+            if (cached) artifact.residentVerified = true;
+            else if (verify) await artifact._verifyFullResident(residentCopy, header);
+            if (cacheKey && !cached) blobCachePut(options.blobCache, cacheKey, residentCopy);
             return artifact;
         }
 

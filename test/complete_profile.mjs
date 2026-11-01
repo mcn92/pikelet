@@ -895,6 +895,130 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
         else console.log(`    golden miss [${fixture.family}] "${fixture.text}": expected ${fixture.expected}, got ${out.matchQuality} (${out.results.length} results)`);
     }
     check('all 10 abstention goldens reproduce their labels', reproduced === 10, `${reproduced}/10`);
+
+    // options.blobCache: the resident index prefix (residentSha256) is
+    // cached under its digest, so a second open reads it from the cache
+    // instead of the source; a corrupt or faulting cache is only ever a miss.
+    {
+        const fileBytes = fs.readFileSync(first.outPath);
+        const countingSource = () => {
+            const src = memorySource(fileBytes);
+            src.bytes = 0;
+            const read = src.read.bind(src);
+            src.read = async (offset, length) => { src.bytes += length; return read(offset, length); };
+            return src;
+        };
+        const mapCache = () => {
+            const map = new Map();
+            const log = { gets: 0, puts: 0, deletes: 0 };
+            return {
+                map, log,
+                get: async (key) => { log.gets++; return map.get(key) ?? null; },
+                put: async (key, bytes) => { log.puts++; map.set(key, Uint8Array.from(bytes)); },
+                delete: async (key) => { log.deletes++; map.delete(key); },
+            };
+        };
+        const settle = () => new Promise((resolve) => setImmediate(resolve));
+        const probe = evaluation.goldenQueries.find((g) => g.expected !== 'none')?.text || 'what is this';
+        const idsOf = (out) => out.results.map((r) => r.id).join(',');
+
+        const plainSrc = countingSource();
+        const plain = await openPikeletFile(plainSrc);
+        const openBytes = plainSrc.bytes;
+        const expected = idsOf(await plain.query(probe, { k: 5 }));
+        await plain.close();
+
+        const cache = mapCache();
+        const coldSrc = countingSource();
+        const cold = await openPikeletFile(coldSrc, { blobCache: cache });
+        const coldBytes = coldSrc.bytes;
+        await settle();
+        const residentKey = [...cache.map.keys()][0];
+        check('blobCache: a cold open stores the resident prefix under its digest',
+            cache.log.puts === 1 && /^[0-9a-f]{64}$/.test(residentKey || ''), JSON.stringify(cache.log));
+        check('blobCache: a cold open reads what an uncached open reads', coldBytes === openBytes, `${coldBytes} vs ${openBytes}`);
+        await cold.close();
+
+        const warmSrc = countingSource();
+        const warm = await openPikeletFile(warmSrc, { blobCache: cache });
+        const residentBytes = cache.map.get(residentKey).byteLength;
+        check('blobCache: a warm open skips the resident read',
+            warmSrc.bytes === openBytes - residentBytes, `${warmSrc.bytes} read, ${openBytes} - ${residentBytes} expected`);
+        check('blobCache: a warm open reports the resident prefix verified', warm.info().residentVerified === true);
+        check('blobCache: a warm open answers identically', idsOf(await warm.query(probe, { k: 5 })) === expected);
+        await settle();
+        check('blobCache: a hit is not rewritten', cache.log.puts === 1, JSON.stringify(cache.log));
+        await warm.close();
+
+        // A flipped byte: the hit fails its hash, is deleted, the source
+        // serves the prefix, and the verified bytes are stored again.
+        cache.map.get(residentKey)[17] ^= 0xff;
+        const healSrc = countingSource();
+        const healed = await openPikeletFile(healSrc, { blobCache: cache });
+        const healBytes = healSrc.bytes;
+        await settle();
+        check('blobCache: a corrupt entry is a miss, deleted and refetched',
+            cache.log.deletes === 1 && healBytes === openBytes && cache.log.puts === 2, `${JSON.stringify(cache.log)} ${healBytes} vs ${openBytes}`);
+        check('blobCache: the refetched entry is the committed bytes again',
+            sha256(Buffer.from(cache.map.get(residentKey))).toString('hex') === residentKey);
+        check('blobCache: an open over a corrupt entry answers identically', idsOf(await healed.query(probe, { k: 5 })) === expected);
+        await healed.close();
+
+        // A truncated entry and a faulting cache are misses too.
+        cache.map.set(residentKey, cache.map.get(residentKey).subarray(1));
+        const short = await openPikeletFile(countingSource(), { blobCache: cache });
+        check('blobCache: a wrong-length entry is a miss', idsOf(await short.query(probe, { k: 5 })) === expected);
+        await short.close();
+        const faulty = await openPikeletFile(countingSource(), {
+            blobCache: { get: async () => { throw new Error('disk on fire'); }, put: async () => { throw new Error('disk on fire'); } },
+        });
+        check('blobCache: a cache whose get and put throw never fails an open', idsOf(await faulty.query(probe, { k: 5 })) === expected);
+        await faulty.close();
+
+        // The Node disk store: sharded files, atomic writes, LRU budget.
+        const { diskBlobCache, defaultBlobCacheDir } = await import('../packages/pikelet-wasm/complete/blob-cache.node.mjs');
+        const diskDir = path.join(tmp, 'blobs');
+        const disk = diskBlobCache(diskDir);
+        const diskCold = await openPikeletFile(countingSource(), { blobCache: disk });
+        await settle();
+        await disk.flush();
+        check('diskBlobCache: the resident prefix lands at <dir>/<2 hex>/<digest>',
+            fs.existsSync(path.join(diskDir, residentKey.slice(0, 2), residentKey)));
+        check('diskBlobCache: no temp files remain after a write',
+            fs.readdirSync(path.join(diskDir, residentKey.slice(0, 2))).every((n) => !n.endsWith('.tmp')));
+        await diskCold.close();
+        const diskWarmSrc = countingSource();
+        const diskWarm = await openPikeletFile(diskWarmSrc, { blobCache: diskBlobCache(diskDir) });
+        const diskWarmBytes = diskWarmSrc.bytes;
+        check('diskBlobCache: a second process-style open reads the prefix from disk',
+            diskWarmBytes === openBytes - residentBytes && idsOf(await diskWarm.query(probe, { k: 5 })) === expected,
+            `${diskWarmBytes} vs ${openBytes} - ${residentBytes}`);
+        await diskWarm.close();
+        check('diskBlobCache: get on a missing key is null', await disk.get('0'.repeat(64)) === null);
+        let badKey = null;
+        try { await disk.get('../escape'); } catch (err) { badKey = err; }
+        check('diskBlobCache: a key that is not a sha256 digest is refused', /sha256/.test(badKey?.message || ''));
+
+        const lruDir = path.join(tmp, 'blobs-lru');
+        const lru = diskBlobCache(lruDir, { maxBytes: 2500 });
+        const keyOf = (n) => n.toString(16).padStart(64, '0');
+        lru.put(keyOf(1), new Uint8Array(1000)); await lru.flush();
+        lru.put(keyOf(2), new Uint8Array(1000)); await lru.flush();
+        // Touch 1 so 2 is the least recently used when 3 pushes past 2500.
+        const past = new Date(Date.now() - 60000);
+        fs.utimesSync(path.join(lruDir, '00', keyOf(2)), past, past);
+        await lru.get(keyOf(1));
+        await settle();
+        lru.put(keyOf(3), new Uint8Array(1000)); await lru.flush();
+        check('diskBlobCache: past maxBytes the least recently used entry is evicted',
+            await lru.get(keyOf(2)) === null && (await lru.get(keyOf(1)))?.byteLength === 1000
+            && (await lru.get(keyOf(3)))?.byteLength === 1000);
+        lru.put(keyOf(4), new Uint8Array(4000)); await lru.flush();
+        check('diskBlobCache: an entry larger than the whole budget is not stored', await lru.get(keyOf(4)) === null);
+        check('defaultBlobCacheDir honors PIKELET_CACHE_DIR, then XDG_CACHE_HOME',
+            defaultBlobCacheDir({ PIKELET_CACHE_DIR: '/x' }) === path.resolve('/x', 'blobs')
+            && defaultBlobCacheDir({ XDG_CACHE_HOME: '/y' }) === path.join(path.resolve('/y'), 'pikelet', 'blobs'));
+    }
     // Abstention is fit at a fixed top-10 window (pikelet/src/calibrate.mjs
     // K = min(10, candidates)), independent of the k a caller later passes
     // to query(). The verdict for a given retrieval must not depend on k —

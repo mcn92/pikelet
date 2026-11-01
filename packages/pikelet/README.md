@@ -204,6 +204,19 @@ costs ~127 range requests against the 649 MiB file:
 npx pikelet mcp --pack https://github.com/mcn92/pikelet/releases/download/artifact-wiki-inline-v4/pancake-wiki-inline.pancake
 ```
 
+Most of a URL mount is two regions the pack commits to by sha256: the
+resident index prefix and the query encoder (about 71 of 77 MiB on that
+Wikipedia pack). `mcp` caches them on disk under their digests, in
+`~/.cache/pikelet/blobs` (`$PIKELET_CACHE_DIR` or `$XDG_CACHE_HOME` moves
+it; 2 GiB, least recently used evicted first), so the next process to
+mount the same pack reads them locally: measured against the R2-hosted
+copy, a fresh `mcp` process went from 80.1 MiB and 11.5 s to its first
+answer down to 9.1 MiB and 6.9 s. Every hit is hashed against its digest
+before use, so a corrupt entry is just a refetch. Because the keys are
+content digests, an entry never goes stale. `--no-cache` turns it off;
+local files never use it. Library callers pass `diskBlobCache()` (from
+`pikelet-wasm/complete` under Node) as `openPikeletFile`'s `blobCache`.
+
 Either form takes `#<sha256>` to pin the pack's manifest identity — a
 mount that finds different bytes at that location refuses to serve. And
 `--shelf <file-or-url>` mounts every pack on a static `packs.json`

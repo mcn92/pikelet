@@ -462,6 +462,36 @@ async function sha256BytesAsync(bytes) {
     }
 }
 
+// Read-through cache for whole regions that carry a sha256 commitment (the
+// sketch's resident prefix, a pack's query-interp segment), keyed by that
+// digest. A hit is hashed exactly as a network read would be, so the cache
+// can only ever hand back the committed bytes: anything else it holds (a
+// partial write, disk corruption, a bug elsewhere) reads as a miss and the
+// entry is dropped. Because the key is the content, entries never go stale
+// and need no invalidation. Cache faults never fail a read.
+async function blobCacheGet(cache, digestHex, length) {
+    if (!cache || typeof cache.get !== 'function') return null;
+    let hit;
+    try {
+        hit = await cache.get(digestHex);
+        if (!hit) return null;
+        hit = asUint8Array(hit);
+    } catch { return null; }
+    const digest = hit.byteLength === length ? await sha256BytesAsync(hit) : null;
+    let hex = '';
+    if (digest) for (const b of digest) hex += b.toString(16).padStart(2, '0');
+    if (hex === digestHex) return hit;
+    try { await cache.delete?.(digestHex); } catch { /* a miss either way */ }
+    return null;
+}
+
+// Store verified bytes. Fire-and-forget: a slow or failing cache must not
+// hold up the open that just fetched them.
+function blobCachePut(cache, digestHex, bytes) {
+    if (!cache || typeof cache.put !== 'function') return;
+    Promise.resolve().then(() => cache.put(digestHex, bytes)).catch(() => {});
+}
+
 // Verify bytes against an expected 32-byte SHA-256 digest. Verification was
 // requested by the caller, so a missing crypto backend fails closed rather
 // than admitting unverified bytes.
@@ -556,6 +586,8 @@ module.exports = {
     parseUint8Snapshot,
     sha256Bytes,
     sha256BytesAsync,
+    blobCacheGet,
+    blobCachePut,
     verifySha256,
     verifySegmentSha256,
 };

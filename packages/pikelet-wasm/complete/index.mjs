@@ -27,6 +27,7 @@ import { createAbstentionScorer } from './retrieval-abstention.mjs';
 import { openLexicalIndex, openLexicalIndexLazy } from './lexical.mjs';
 import { parseRowMapSegment } from './rowmap.mjs';
 import { PikeletSketchArtifact } from '../src/artifact/pikelet-artifact.js';
+import { blobCacheGet, blobCachePut } from '../src/artifact/pikelet-artifact-common.js';
 import { MAGIC, HEADER_BYTES, TABLE_ENTRY_BYTES, KINDS, KIND_NAMES } from './format.mjs';
 
 import {
@@ -785,6 +786,7 @@ export async function openPikeletFile(input, options = {}) {
             // the same bytes the sketch parses (see expectedHeaderSha256).
             PikeletSketchArtifact.open(windowSource(source, idx.offset, idx.length), {
                 maxReadBytes,
+                ...(options.blobCache ? { blobCache: options.blobCache } : {}),
                 ...(perRecord ? { expectedHeaderSha256: manifest.index.headerSha256 } : {}),
             }),
             readChecked(source, corpus.offset, tablesBytes, 'corpus tables', maxReadBytes, fileBytes),
@@ -1004,9 +1006,16 @@ export async function openPikeletFile(input, options = {}) {
             const loadEmbedder = async () => {
                 let encBytes = encoderBytes;
                 if (qiDeferred) {
-                    const full = await readChecked(source, qi.offset, qi.length, 'query-interp segment', maxReadBytes, fileBytes);
-                    if (await sha256hex(full) !== qi.sha256) {
-                        throw new Error('.pikelet query-interp segment failed hash verification');
+                    // The ~25 MiB encoder is the other bulk of a cold mount;
+                    // options.blobCache serves it by the manifest's segment
+                    // digest (hash-checked on the way out, as a fetch is).
+                    const cached = await blobCacheGet(options.blobCache, qi.sha256, qi.length);
+                    const full = cached || await readChecked(source, qi.offset, qi.length, 'query-interp segment', maxReadBytes, fileBytes);
+                    if (!cached) {
+                        if (await sha256hex(full) !== qi.sha256) {
+                            throw new Error('.pikelet query-interp segment failed hash verification');
+                        }
+                        blobCachePut(options.blobCache, qi.sha256, full);
                     }
                     // The header and calibration slices used at open were
                     // unverified; the digest-verified segment must contain

@@ -96,6 +96,26 @@ export declare function nodeFetch(input: string, init?: {
   inflateGzip?: boolean;
 }): Promise<any>;
 
+/** openPikeletFile's options.blobCache: bytes keyed by their sha256 (lowercase hex). */
+export interface BlobCache {
+  get(key: string): Promise<Uint8Array | null> | Uint8Array | null;
+  put(key: string, bytes: Uint8Array): Promise<void> | void;
+  delete?(key: string): Promise<void> | void;
+}
+
+/**
+ * Node only (the 'node' export condition): a BlobCache on disk, one file per
+ * key under `dir` (default defaultBlobCacheDir()), evicting least recently
+ * used entries past maxBytes (default 2 GiB). flush() settles pending writes.
+ */
+export declare function diskBlobCache(dir?: string, options?: { maxBytes?: number }): BlobCache & {
+  dir: string;
+  flush(): Promise<void>;
+};
+/** $PIKELET_CACHE_DIR/blobs, else $XDG_CACHE_HOME/pikelet/blobs, else ~/.cache/pikelet/blobs. */
+export declare function defaultBlobCacheDir(env?: Record<string, string | undefined>): string;
+export declare const DEFAULT_BLOB_CACHE_BYTES: number;
+
 export interface CompleteQueryResult {
   /**
    * The pack's calibrated verdict on this retrieval. On packs calibrated
@@ -287,6 +307,17 @@ export declare function openPikeletFile(
      * true.
      */
     prefetchEncoder?: boolean;
+    /**
+     * A store for the regions a pack commits to by sha256 that dominate a
+     * cold URL mount: the sketch's resident prefix and the query-interp
+     * segment holding the inline encoder. Keys are those digests (lowercase
+     * hex), so entries never go stale. Every hit is hashed against its key
+     * before use and a mismatch is treated as a miss (and deleted), so the
+     * store need not be trusted; get/put/delete faults never fail an open.
+     * diskBlobCache() (Node) is a ready implementation. Ignored by an open
+     * whose resident verification is off.
+     */
+    blobCache?: BlobCache;
     /**
      * Fully verify the index's lazy vector rows at open (one streamed pass
      * against the identity-anchored vectorsSha256). Default false: without

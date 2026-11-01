@@ -576,7 +576,7 @@ function callListPacks(packs, mountFailures = []) {
  * This adapts one to the other so search/get_record/verify_pack need no
  * chain-specific branch.
  */
-async function mountChain(packs, spec, { httpRangeSource, log, head = null }) {
+async function mountChain(packs, spec, { httpRangeSource, log, head = null, blobCache = null }) {
   const { openPikeletChain } = await import('pikelet-wasm/complete/layer-reader.mjs');
   // Without a lineage the head alone is opened and the reader walks each
   // layer's parent locator down to the base (5.1.1, 7: "Entries without
@@ -596,7 +596,10 @@ async function mountChain(packs, spec, { httpRangeSource, log, head = null }) {
       opened.push(path.resolve(loc));
     }
   }
-  const chain = await openPikeletChain(opened, { fetch: nodeFetch });
+  // Members share one set of open options, so a chain with any URL member
+  // caches all of them; an all-local chain never touches the cache.
+  const anyRemote = opened.some((member) => typeof member !== 'string');
+  const chain = await openPikeletChain(opened, { fetch: nodeFetch, ...(anyRemote && blobCache ? { blobCache } : {}) });
   const info = chain.info();
   // The head identity pins the whole chain: every layer commits to its parent,
   // so this one hash covers every byte a query can touch.
@@ -817,10 +820,10 @@ async function callLatest(packs, journalName, args) {
   };
 }
 
-async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log }) {
+async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log, blobCache = null }) {
   // A shelf entry naming a lineage is a chain, not a pack (7).
   if (Array.isArray(spec.lineage) && spec.lineage.length) {
-    return mountChain(packs, spec, { httpRangeSource, log });
+    return mountChain(packs, spec, { httpRangeSource, log, blobCache });
   }
   const isUrl = /^https?:\/\//i.test(spec.location);
   const target = isUrl ? httpRangeSource(spec.location) : path.resolve(spec.location);
@@ -831,7 +834,13 @@ async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log })
   // Range (`pikelet doctor <url>` certifies a host).
   // A pinned identity is enforced by the reader itself, one header read
   // in — a mismatched pack is refused before any of it is opened.
-  const openOptions = spec.identity ? { expectedIdentity: spec.identity } : {};
+  // A URL mount's resident index prefix and encoder come from the blob cache
+  // when an earlier process fetched them (keyed by digest, hash-checked on
+  // every hit). A local file is already on disk, so it never uses one.
+  const openOptions = {
+    ...(spec.identity ? { expectedIdentity: spec.identity } : {}),
+    ...(isUrl && blobCache ? { blobCache } : {}),
+  };
   let search;
   try {
     search = await openPikeletFile(target, openOptions);
@@ -843,7 +852,7 @@ async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log })
     // on the refusal, not a manifest peek, costs a plain pack no extra read.
     const { LAYER_PROFILE } = await import('pikelet-wasm/complete/layer-manifest.mjs');
     if (String(err?.message).includes(`unsupported profile ${LAYER_PROFILE}`)) {
-      return mountChain(packs, spec, { httpRangeSource, log, head: target });
+      return mountChain(packs, spec, { httpRangeSource, log, head: target, blobCache: isUrl ? blobCache : null });
     }
     if (/identity mismatch/.test(String(err?.message))) {
       throw new Error(`${spec.location}: ${err.message} — the pack at this location is not the `
@@ -1026,7 +1035,7 @@ export async function loadShelf(location) {
  * injected (the CLI passes pikelet-wasm/complete's openPikeletFile) so
  * tests can stub it.
  */
-export async function runMcpServer({ packPaths, journal = null, openPikeletFile, httpRangeSource, serverVersion = '0.0.0', toolsListGraceMs = TOOLS_LIST_GRACE_MS, stdin = process.stdin, stdout = process.stdout, log = (line) => process.stderr.write(`${line}\n`) }) {
+export async function runMcpServer({ packPaths, journal = null, openPikeletFile, httpRangeSource, serverVersion = '0.0.0', toolsListGraceMs = TOOLS_LIST_GRACE_MS, blobCache = null, stdin = process.stdin, stdout = process.stdout, log = (line) => process.stderr.write(`${line}\n`) }) {
   if ((!Array.isArray(packPaths) || packPaths.length === 0) && !journal) {
     throw new Error('mcp requires at least one --pack <file.pikelet> or a --journal');
   }
@@ -1067,7 +1076,7 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
       }
     };
     for (const spec of specs) {
-      await attempt(spec.location ?? spec.name ?? '(lineage)', () => mountPack(packs, spec, { openPikeletFile, httpRangeSource, log }));
+      await attempt(spec.location ?? spec.name ?? '(lineage)', () => mountPack(packs, spec, { openPikeletFile, httpRangeSource, log, blobCache }));
     }
     if (journalDir) await attempt(journalDir, async () => { journalName = await mountJournal(packs, journalDir, { log }); });
     // Warm every pack in the background so the first tool call pays for
