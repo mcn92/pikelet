@@ -462,25 +462,31 @@ async function sha256BytesAsync(bytes) {
     }
 }
 
-// Read-through cache for whole regions that carry a sha256 commitment (the
-// sketch's resident prefix, a pack's query-interp segment), keyed by that
-// digest. A hit is hashed exactly as a network read would be, so the cache
-// can only ever hand back the committed bytes: anything else it holds (a
-// partial write, disk corruption, a bug elsewhere) reads as a miss and the
-// entry is dropped. Because the key is the content, entries never go stale
-// and need no invalidation. Cache faults never fail a read.
+// Read-through cache for bytes a pack commits to by sha256: the whole
+// regions a mount reads (the sketch's resident prefix, a pack's query-interp
+// segment) and the pieces a query reads (rerank rows, corpus records, the
+// digest pages that verify them), keyed by that digest. A key may be a
+// truncated digest of at least 128 bits (sketch row digests are 16-32
+// bytes), and a hit must hash to a digest that starts with it. A hit is
+// hashed exactly as a network read would be, so the cache can only ever hand
+// back the committed bytes: anything else it holds (a partial write, disk
+// corruption, a bug elsewhere) reads as a miss and the entry is dropped.
+// Because the key is the content, entries never go stale and need no
+// invalidation. Cache faults never fail a read. `length`, when given, must
+// match too.
 async function blobCacheGet(cache, digestHex, length) {
     if (!cache || typeof cache.get !== 'function') return null;
+    if (typeof digestHex !== 'string' || digestHex.length < 32 || digestHex.length > 64) return null;
     let hit;
     try {
         hit = await cache.get(digestHex);
         if (!hit) return null;
         hit = asUint8Array(hit);
     } catch { return null; }
-    const digest = hit.byteLength === length ? await sha256BytesAsync(hit) : null;
+    const digest = length === undefined || hit.byteLength === length ? await sha256BytesAsync(hit) : null;
     let hex = '';
     if (digest) for (const b of digest) hex += b.toString(16).padStart(2, '0');
-    if (hex === digestHex) return hit;
+    if (hex && hex.startsWith(digestHex)) return hit;
     try { await cache.delete?.(digestHex); } catch { /* a miss either way */ }
     return null;
 }

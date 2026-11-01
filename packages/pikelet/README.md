@@ -211,10 +211,15 @@ Wikipedia pack). `mcp` caches them on disk under their digests, in
 it; 2 GiB, least recently used evicted first), so the next process to
 mount the same pack reads them locally: measured against the R2-hosted
 copy, a fresh `mcp` process went from 80.1 MiB and 11.5 s to its first
-answer down to 9.1 MiB and 6.9 s. Every hit is hashed against its digest
-before use, so a corrupt entry is just a refetch. Because the keys are
-content digests, an entry never goes stale. `--no-cache` turns it off;
-local files never use it. Library callers pass `diskBlobCache()` (from
+answer down to 9.1 MiB and 6.9 s. Queries add to it: the rerank rows,
+records, and digest pages a question reads are stored the same way (in
+append-only logs capped at 64 MiB, oldest dropped first), so asking a
+question an earlier process already asked transferred 178 KiB instead of
+1.3 MiB and answered in 0.65 s instead of 1.45 s. The keyword index's lazy
+reads are never cached: nothing verifies them per read. Every hit is hashed
+against its digest before use, so a corrupt entry is just a refetch.
+Because the keys are content digests, an entry never goes stale.
+`--no-cache` turns it off; local files never use it. Library callers pass `diskBlobCache()` (from
 `pikelet-wasm/complete` under Node) as `openPikeletFile`'s `blobCache`.
 
 Either form takes `#<sha256>` to pin the pack's manifest identity — a

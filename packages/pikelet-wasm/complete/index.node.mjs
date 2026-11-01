@@ -9,7 +9,7 @@ import { nodeFetch } from './node-fetch.mjs';
 
 export * from './index.mjs';
 export { nodeFetch };
-export { diskBlobCache, defaultBlobCacheDir, DEFAULT_BLOB_CACHE_BYTES } from './blob-cache.node.mjs';
+export { diskBlobCache, defaultBlobCacheDir, DEFAULT_BLOB_CACHE_BYTES, DEFAULT_SMALL_CACHE_BYTES } from './blob-cache.node.mjs';
 
 export function httpRangeSource(url, options = {}) {
     return portableHttpRangeSource(url, { fetch: nodeFetch, ...options });

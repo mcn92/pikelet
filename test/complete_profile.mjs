@@ -910,12 +910,13 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
         };
         const mapCache = () => {
             const map = new Map();
-            const log = { gets: 0, puts: 0, deletes: 0 };
+            const log = { gets: 0, puts: 0, deletes: 0, putKeys: [], deleteKeys: [] };
             return {
                 map, log,
                 get: async (key) => { log.gets++; return map.get(key) ?? null; },
-                put: async (key, bytes) => { log.puts++; map.set(key, Uint8Array.from(bytes)); },
-                delete: async (key) => { log.deletes++; map.delete(key); },
+                put: async (key, bytes) => { log.puts++; log.putKeys.push(key); map.set(key, Uint8Array.from(bytes)); },
+                delete: async (key) => { log.deletes++; log.deleteKeys.push(key); map.delete(key); },
+                putsOf: (key) => log.putKeys.filter((k) => k === key).length,
             };
         };
         const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -947,8 +948,49 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
         check('blobCache: a warm open reports the resident prefix verified', warm.info().residentVerified === true);
         check('blobCache: a warm open answers identically', idsOf(await warm.query(probe, { k: 5 })) === expected);
         await settle();
-        check('blobCache: a hit is not rewritten', cache.log.puts === 1, JSON.stringify(cache.log));
+        check('blobCache: a hit is not rewritten', cache.putsOf(residentKey) === 1, JSON.stringify(cache.log.putKeys.slice(0, 4)));
         await warm.close();
+
+        // Per-query pieces: the warm query above stored the rerank rows (by
+        // their digests), the corpus records it hydrated, and the digest
+        // pages that verify both. A later process asking the same question
+        // reads none of them from the source.
+        const plainQuerySrc = countingSource();
+        const plainQ = await openPikeletFile(plainQuerySrc);
+        const plainOpenBytes = plainQuerySrc.bytes;
+        await plainQ.query(probe, { k: 5 });
+        const uncachedQueryBytes = plainQuerySrc.bytes - plainOpenBytes;
+        await plainQ.close();
+        const infoReader = await openPikeletFile(countingSource());
+        const plainInfo = infoReader.info();
+        await infoReader.close();
+        check('blobCache: the fixture verifies rows and records per read (so both are cacheable)',
+            plainInfo.indexRowIntegrity === 'per-row-sha256' && plainInfo.corpusIntegrity === 'per-record-sha256',
+            JSON.stringify([plainInfo.indexRowIntegrity, plainInfo.corpusIntegrity]));
+        const perQueryKeys = new Set(cache.log.putKeys.filter((k) => k !== residentKey));
+        check('blobCache: a query stores rows, records and digest pages',
+            perQueryKeys.size > 5 && [...perQueryKeys].some((k) => k.length < 64), `${perQueryKeys.size} keys`);
+        const againSrc = countingSource();
+        const again = await openPikeletFile(againSrc, { blobCache: cache });
+        const againOpen = againSrc.bytes;
+        const againIds = idsOf(await again.query(probe, { k: 5 }));
+        check('blobCache: the same question in a later process reads nothing from the source',
+            againSrc.bytes === againOpen && uncachedQueryBytes > 0 && againIds === expected,
+            `${againSrc.bytes - againOpen} bytes (uncached query: ${uncachedQueryBytes})`);
+        await again.close();
+        // A corrupt row entry: a miss, deleted, refetched, same answer.
+        const rowKey = [...perQueryKeys].find((k) => k.length < 64);
+        cache.map.get(rowKey)[0] ^= 0xff;
+        const rowSrc = countingSource();
+        const rowHeal = await openPikeletFile(rowSrc, { blobCache: cache });
+        const rowOpen = rowSrc.bytes;
+        const rowIds = idsOf(await rowHeal.query(probe, { k: 5 }));
+        check('blobCache: a corrupt row entry is a miss, deleted, and the row refetched',
+            cache.log.deleteKeys.includes(rowKey) && rowSrc.bytes > rowOpen && rowIds === expected,
+            `${rowSrc.bytes - rowOpen} bytes refetched`);
+        await settle();
+        check('blobCache: the refetched row is stored again', cache.map.has(rowKey));
+        await rowHeal.close();
 
         // A flipped byte: the hit fails its hash, is deleted, the source
         // serves the prefix, and the verified bytes are stored again.
@@ -958,7 +1000,8 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
         const healBytes = healSrc.bytes;
         await settle();
         check('blobCache: a corrupt entry is a miss, deleted and refetched',
-            cache.log.deletes === 1 && healBytes === openBytes && cache.log.puts === 2, `${JSON.stringify(cache.log)} ${healBytes} vs ${openBytes}`);
+            cache.log.deleteKeys.filter((k) => k === residentKey).length === 1 && healBytes === openBytes && cache.putsOf(residentKey) === 2,
+            `${cache.log.deleteKeys.length} deletes, ${cache.putsOf(residentKey)} puts; ${healBytes} vs ${openBytes}`);
         check('blobCache: the refetched entry is the committed bytes again',
             sha256(Buffer.from(cache.map.get(residentKey))).toString('hex') === residentKey);
         check('blobCache: an open over a corrupt entry answers identically', idsOf(await healed.query(probe, { k: 5 })) === expected);
@@ -982,10 +1025,11 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
         const diskCold = await openPikeletFile(countingSource(), { blobCache: disk });
         await settle();
         await disk.flush();
-        check('diskBlobCache: the resident prefix lands at <dir>/<2 hex>/<digest>',
-            fs.existsSync(path.join(diskDir, residentKey.slice(0, 2), residentKey)));
-        check('diskBlobCache: no temp files remain after a write',
-            fs.readdirSync(path.join(diskDir, residentKey.slice(0, 2))).every((n) => !n.endsWith('.tmp')));
+        // This fixture's resident prefix is 22 KB, under SMALL_ENTRY_BYTES,
+        // so it lands in the log; the file layout is checked below with
+        // 64 KiB entries.
+        check('diskBlobCache: a small resident prefix is stored in the log',
+            residentBytes < 64 * 1024 && fs.readdirSync(path.join(diskDir, 'small')).length === 1);
         await diskCold.close();
         const diskWarmSrc = countingSource();
         const diskWarm = await openPikeletFile(diskWarmSrc, { blobCache: diskBlobCache(diskDir) });
@@ -1000,21 +1044,67 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
         check('diskBlobCache: a key that is not a sha256 digest is refused', /sha256/.test(badKey?.message || ''));
 
         const lruDir = path.join(tmp, 'blobs-lru');
-        const lru = diskBlobCache(lruDir, { maxBytes: 2500 });
+        // Entries of 64 KiB and up are files, under maxBytes.
+        const BIG = 64 * 1024;
+        const lru = diskBlobCache(lruDir, { maxBytes: 2.5 * BIG });
         const keyOf = (n) => n.toString(16).padStart(64, '0');
-        lru.put(keyOf(1), new Uint8Array(1000)); await lru.flush();
-        lru.put(keyOf(2), new Uint8Array(1000)); await lru.flush();
-        // Touch 1 so 2 is the least recently used when 3 pushes past 2500.
+        lru.put(keyOf(1), new Uint8Array(BIG)); await lru.flush();
+        check('diskBlobCache: an entry of 64 KiB or more lands at <dir>/<2 hex>/<digest>, with no temp file left',
+            fs.existsSync(path.join(lruDir, '00', keyOf(1)))
+            && fs.readdirSync(path.join(lruDir, '00')).every((n) => !n.endsWith('.tmp')));
+        lru.put(keyOf(2), new Uint8Array(BIG)); await lru.flush();
+        // Touch 1 so 2 is the least recently used when 3 pushes past 2.5 entries.
         const past = new Date(Date.now() - 60000);
         fs.utimesSync(path.join(lruDir, '00', keyOf(2)), past, past);
         await lru.get(keyOf(1));
         await settle();
-        lru.put(keyOf(3), new Uint8Array(1000)); await lru.flush();
+        lru.put(keyOf(3), new Uint8Array(BIG)); await lru.flush();
         check('diskBlobCache: past maxBytes the least recently used entry is evicted',
-            await lru.get(keyOf(2)) === null && (await lru.get(keyOf(1)))?.byteLength === 1000
-            && (await lru.get(keyOf(3)))?.byteLength === 1000);
-        lru.put(keyOf(4), new Uint8Array(4000)); await lru.flush();
+            await lru.get(keyOf(2)) === null && (await lru.get(keyOf(1)))?.byteLength === BIG
+            && (await lru.get(keyOf(3)))?.byteLength === BIG);
+        lru.put(keyOf(4), new Uint8Array(4 * BIG)); await lru.flush();
         check('diskBlobCache: an entry larger than the whole budget is not stored', await lru.get(keyOf(4)) === null);
+        await lru.close();
+
+        // Entries under 64 KiB go to the log: append-only generations with an
+        // in-memory index, rebuilt by the next instance (the next process).
+        const logDir = path.join(tmp, 'blobs-log');
+        const small = diskBlobCache(logDir, { smallMaxBytes: 4 * 4096 });
+        const smallKey = (n) => n.toString(16).padStart(32, '0');
+        const filled = (n, len) => new Uint8Array(len).fill(n);
+        for (let n = 1; n <= 3; n++) small.put(smallKey(n), filled(n, 1000));
+        await small.flush();
+        check('diskBlobCache: small entries share a log file, not a file each',
+            fs.readdirSync(path.join(logDir, 'small')).length === 1 && !fs.existsSync(path.join(logDir, '00')));
+        check('diskBlobCache: a small entry reads back from the log', (await small.get(smallKey(2)))?.[999] === 2);
+        await small.close();
+        const reopened = diskBlobCache(logDir, { smallMaxBytes: 4 * 4096 });
+        check('diskBlobCache: a new instance indexes the log it finds (another process\'s entries)',
+            (await reopened.get(smallKey(3)))?.[0] === 3 && (await reopened.get(smallKey(1)))?.length === 1000);
+        // A torn tail: everything before it still reads.
+        const genFile = path.join(logDir, 'small', fs.readdirSync(path.join(logDir, 'small'))[0]);
+        fs.appendFileSync(genFile, Buffer.from([0x50, 0x4b, 0x42, 0x31, 16, 1, 2]));
+        await reopened.close();
+        const torn = diskBlobCache(logDir, { smallMaxBytes: 4 * 4096 });
+        check('diskBlobCache: a torn record at the end of a log is ignored', (await torn.get(smallKey(3)))?.[0] === 3);
+        torn.put(smallKey(4), filled(4, 1000)); await torn.flush();
+        const afterTorn = diskBlobCache(logDir, { smallMaxBytes: 4 * 4096 });
+        check('diskBlobCache: writes after a torn tail go to a new generation and stay readable',
+            (await afterTorn.get(smallKey(4)))?.[0] === 4 && fs.readdirSync(path.join(logDir, 'small')).length === 2);
+        await afterTorn.close();
+        // Generations are 4096 bytes here; writing well past four of them
+        // drops the oldest whole, and entry 1 was never read again.
+        for (let n = 10; n < 30; n++) { torn.put(smallKey(n), filled(n, 1000)); await torn.flush(); }
+        check('diskBlobCache: the log keeps four generations and drops the oldest whole',
+            fs.readdirSync(path.join(logDir, 'small')).length === 4 && await torn.get(smallKey(1)) === null
+            && (await torn.get(smallKey(29)))?.[0] === 29);
+        await torn.close();
+        let shortKey = null;
+        try { await torn.get('ab'.repeat(15)); } catch (err) { shortKey = err; }
+        check('diskBlobCache: a key under 128 bits is refused', /32-64 hex digits/.test(shortKey?.message || ''));
+        const off = diskBlobCache(path.join(tmp, 'blobs-nolog'), { smallMaxBytes: 0 });
+        await off.put(smallKey(1), filled(1, 100)); await off.flush();
+        check('diskBlobCache: smallMaxBytes 0 stores no small entries', await off.get(smallKey(1)) === null);
         check('defaultBlobCacheDir honors PIKELET_CACHE_DIR, then XDG_CACHE_HOME',
             defaultBlobCacheDir({ PIKELET_CACHE_DIR: '/x' }) === path.resolve('/x', 'blobs')
             && defaultBlobCacheDir({ XDG_CACHE_HOME: '/y' }) === path.join(path.resolve('/y'), 'pikelet', 'blobs'));

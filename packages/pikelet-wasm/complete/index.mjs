@@ -1200,12 +1200,16 @@ export async function openPikeletFile(input, options = {}) {
             const pending = (async () => {
                 const from = Math.min(recordCount, page * pageRecords);
                 const to = Math.min(recordCount, (page + 1) * pageRecords);
+                const key = toHex(pageTable.subarray(32 * page, 32 * page + 32));
+                const cached = await blobCacheGet(options.blobCache, key, 32 * (to - from));
+                if (cached) return cached;
                 const bytes = await readChecked(source, corpus.offset + recordDigestsAt + 32 * from, 32 * (to - from),
                     `corpus digest page ${page}`, maxReadBytes, fileBytes);
-                if (await sha256hex(bytes) !== toHex(pageTable.subarray(32 * page, 32 * page + 32))) {
+                if (await sha256hex(bytes) !== key) {
                     digestPages.delete(page);
                     throw new Error(`.pikelet corpus digest page ${page} failed hash verification`);
                 }
+                blobCachePut(options.blobCache, key, bytes);
                 return bytes;
             })();
             digestPages.set(page, pending);
@@ -1234,14 +1238,29 @@ export async function openPikeletFile(input, options = {}) {
             }
             const start = recordOffsets[id];
             const end = recordOffsets[id + 1];
+            // With options.blobCache a verified record is keyed by its own
+            // digest, so the digest comes first; another process may already
+            // have fetched the record. Only verified reads use the cache.
+            const cacheable = perRecord && verifyRecords && options.blobCache;
+            let digest = null;
+            if (cacheable) {
+                const page = Math.floor(id / pageRecords);
+                const at = 32 * (id - page * pageRecords);
+                digest = toHex((await pageDigests(page)).subarray(at, at + 32));
+                const cached = await blobCacheGet(options.blobCache, digest, end - start);
+                if (cached) return cached;
+            }
             const bytes = await readChecked(source, corpus.offset + start, end - start, `corpus record ${id}`, maxRecordBytes, fileBytes);
             if (perRecord && verifyRecords) {
-                const page = Math.floor(id / pageRecords);
-                const digests = await pageDigests(page);
-                const at = 32 * (id - page * pageRecords);
-                if (await sha256hex(bytes) !== toHex(digests.subarray(at, at + 32))) {
+                if (!digest) {
+                    const page = Math.floor(id / pageRecords);
+                    const at = 32 * (id - page * pageRecords);
+                    digest = toHex((await pageDigests(page)).subarray(at, at + 32));
+                }
+                if (await sha256hex(bytes) !== digest) {
                     throw new Error(`.pikelet corpus record ${id} failed integrity verification`);
                 }
+                blobCachePut(options.blobCache, digest, bytes);
             }
             return bytes;
         };

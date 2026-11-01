@@ -96,7 +96,7 @@ export declare function nodeFetch(input: string, init?: {
   inflateGzip?: boolean;
 }): Promise<any>;
 
-/** openPikeletFile's options.blobCache: bytes keyed by their sha256 (lowercase hex). */
+/** openPikeletFile's options.blobCache: bytes keyed by their sha256 (lowercase hex, 32-64 digits). */
 export interface BlobCache {
   get(key: string): Promise<Uint8Array | null> | Uint8Array | null;
   put(key: string, bytes: Uint8Array): Promise<void> | void;
@@ -104,17 +104,23 @@ export interface BlobCache {
 }
 
 /**
- * Node only (the 'node' export condition): a BlobCache on disk, one file per
- * key under `dir` (default defaultBlobCacheDir()), evicting least recently
- * used entries past maxBytes (default 2 GiB). flush() settles pending writes.
+ * Node only (the 'node' export condition): a BlobCache on disk under `dir`
+ * (default defaultBlobCacheDir()). Entries of 64 KiB or more get a file each,
+ * evicting least recently used past maxBytes (default 2 GiB). Smaller ones
+ * (per-query rows, records, digest pages) go to append-only log generations
+ * capped at smallMaxBytes in total (default 64 MiB; 0 disables them), the
+ * oldest generation dropped whole. flush() settles pending writes; close()
+ * releases the log's file handles.
  */
-export declare function diskBlobCache(dir?: string, options?: { maxBytes?: number }): BlobCache & {
+export declare function diskBlobCache(dir?: string, options?: { maxBytes?: number; smallMaxBytes?: number }): BlobCache & {
   dir: string;
   flush(): Promise<void>;
+  close(): Promise<void>;
 };
 /** $PIKELET_CACHE_DIR/blobs, else $XDG_CACHE_HOME/pikelet/blobs, else ~/.cache/pikelet/blobs. */
 export declare function defaultBlobCacheDir(env?: Record<string, string | undefined>): string;
 export declare const DEFAULT_BLOB_CACHE_BYTES: number;
+export declare const DEFAULT_SMALL_CACHE_BYTES: number;
 
 export interface CompleteQueryResult {
   /**
@@ -308,14 +314,18 @@ export declare function openPikeletFile(
      */
     prefetchEncoder?: boolean;
     /**
-     * A store for the regions a pack commits to by sha256 that dominate a
-     * cold URL mount: the sketch's resident prefix and the query-interp
-     * segment holding the inline encoder. Keys are those digests (lowercase
-     * hex), so entries never go stale. Every hit is hashed against its key
-     * before use and a mismatch is treated as a miss (and deleted), so the
-     * store need not be trusted; get/put/delete faults never fail an open.
-     * diskBlobCache() (Node) is a ready implementation. Ignored by an open
-     * whose resident verification is off.
+     * A store for bytes a pack commits to by sha256. At mount: the sketch's
+     * resident prefix and the query-interp segment holding the inline
+     * encoder, which dominate a cold URL mount. Per query: rerank vector
+     * rows (format 2), corpus records, and the digest pages that verify
+     * both. Keys are those digests in lowercase hex (a row's digest may be
+     * truncated to 16-31 bytes), so entries never go stale. Every hit is
+     * hashed and must match its key (a prefix, for a truncated key); a
+     * mismatch is treated as a miss and deleted, so the store need not be
+     * trusted, and get/put/delete faults never fail a read. Only reads that
+     * are verified on their own use it: nothing when verification is off,
+     * and never the lazy lexical index. diskBlobCache() (Node) is a ready
+     * implementation.
      */
     blobCache?: BlobCache;
     /**

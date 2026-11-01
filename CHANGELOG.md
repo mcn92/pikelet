@@ -8,6 +8,24 @@ Through 0.6.0 these were published as `pancake-wasm` and
 packages are pre-1.0: a minor bump may carry breaking changes, and each entry lists them
 first.
 
+## Unreleased
+
+### Added
+
+- **Queries use the disk cache too.** With `blobCache`, the verified pieces
+  a query reads are stored and served by digest: rerank vector rows (by
+  their row digests; format 2), corpus records (by their record digests),
+  and the digest pages that verify both (by their page-table hashes). Every
+  hit is hash-checked against its key, a truncated row digest of at least
+  128 bits included, and only reads verified on their own use the cache:
+  the lazy lexical index never does. `diskBlobCache()` keeps entries under
+  64 KiB in append-only log generations (64 MiB in total by default,
+  `smallMaxBytes`; the oldest generation dropped whole, hits rewritten to
+  the newest) instead of one file each, and gains `close()`. On the
+  Wikipedia pack over R2, asking a question an earlier process already
+  asked transferred 178 KiB in 11 requests instead of 1.3 MiB in 29, and
+  answered in 0.65 s instead of 1.45 s; a new question costs what it did.
+
 ## pikelet-wasm 0.13.0 / pikelet 0.13.0 — 2026-11-01
 
 Mounting a pack over HTTP is much cheaper the second time: `pikelet mcp`

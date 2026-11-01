@@ -471,6 +471,9 @@ class PikeletSketchArtifact {
         // Per-row verification on format 2 follows the same switch as the
         // resident hash: on by default, verify:false opts the whole open out.
         artifact.verifyRows = version >= 2 && verify;
+        // Per-query pieces (digest pages and rows) use the same cache as the
+        // resident prefix, but only where each read is verified on its own.
+        artifact.blobCache = artifact.verifyRows && options.blobCache ? options.blobCache : null;
         const staged = options.staged === true && artifact.microDims > 0;
         artifact.tier = 'full';
         artifact.fullyResident = Promise.resolve(artifact);
@@ -781,8 +784,37 @@ class PikeletSketchArtifact {
             }
         }
         if (!missing.length) return rows;
-        missing.sort((a, b) => a - b);
         const { dim, rowsPerBlock, rowDigestBytes, pageBytes, blockBytes, vectorsOffset } = this;
+        // options.blobCache at open: a block's digest page is keyed by its
+        // page-table entry and each row by its digest in that page, so a row
+        // another process already fetched and verified is read from disk.
+        // Every hit is hash-checked against its key (blobCacheGet).
+        const cache = this.blobCache;
+        if (cache) {
+            const byBlock = new Map();
+            for (const id of missing) {
+                const b = Math.floor(id / rowsPerBlock);
+                if (!byBlock.has(b)) byBlock.set(b, []);
+                byBlock.get(b).push(id);
+            }
+            const still = [];
+            await mapLimit([...byBlock], 16, async ([b, ids]) => {
+                const page = await blobCacheGet(cache, hexOf(this.pageTable.subarray(b * 32, b * 32 + 32)), pageBytes);
+                if (!page) { still.push(...ids); return; }
+                for (const id of ids) {
+                    const idx = id - b * rowsPerBlock;
+                    const hit = await blobCacheGet(cache, hexOf(page.subarray(idx * rowDigestBytes, (idx + 1) * rowDigestBytes)), dim);
+                    if (!hit) { still.push(id); continue; }
+                    const row = new Uint8Array(hit);
+                    rows.set(id, row);
+                    this.cacheRow(id, row);
+                }
+            });
+            if (!still.length) return rows;
+            missing.length = 0;
+            missing.push(...still);
+        }
+        missing.sort((a, b) => a - b);
         const blocks = new Map();
         for (const id of missing) {
             const b = Math.floor(id / rowsPerBlock);
@@ -836,6 +868,7 @@ class PikeletSketchArtifact {
                             throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row digest page failed hash verification', { block: b });
                         }
                     }
+                    if (cache) blobCachePut(cache, hexOf(expected), page.slice());
                 }
                 for (const id of blocks.get(b).ids) {
                     const idx = id - b * rowsPerBlock;
@@ -848,6 +881,7 @@ class PikeletSketchArtifact {
                                 throw pikeletError(PIKELET_ERROR_CODES.SNAPSHOT_INVALID, 'Sketch artifact row failed digest verification', { id });
                             }
                         }
+                        if (cache) blobCachePut(cache, hexOf(slot), row);
                     }
                     if (rows.has(id)) rows.set(id, row);
                     this.cacheRow(id, row);

@@ -151,8 +151,9 @@ A URL pack's two largest mount reads, the resident index prefix and the
 query encoder, are cached on disk under their sha256 in
 ~/.cache/pikelet/blobs ($PIKELET_CACHE_DIR or $XDG_CACHE_HOME moves it; 2 GiB,
 least recently used evicted first), so a later process mounting the same
-pack reads them locally. Every hit is hash-checked before use. --no-cache
-turns it off.
+pack reads them locally. The verified pieces queries read (rows, records,
+digest pages) are kept too, in logs capped at 64 MiB. Every hit is
+hash-checked before use. --no-cache turns it off.
 
 --journal mounts a private journal the agent may write to (docs/agent-journal.md):
 write_note appends a note (handoff, decision, dead-end, measurement, summary,
