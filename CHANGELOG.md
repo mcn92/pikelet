@@ -8,6 +8,84 @@ Through 0.6.0 these were published as `pancake-wasm` and
 packages are pre-1.0: a minor bump may carry breaking changes, and each entry lists them
 first.
 
+## pikelet-wasm 0.13.0 / pikelet 0.13.0 — 2026-11-01
+
+Mounting a pack over HTTP is much cheaper the second time: `pikelet mcp`
+now keeps the two largest mount reads of a URL pack on disk, so a fresh
+process mounting the 649 MiB Wikipedia pack from R2 transfers 9.1 MiB
+instead of 80.1 MiB. A slow remote mount no longer leaves an MCP client
+with no tools. `compile` and `append` now name what they drop instead of
+dropping it silently, and a layered pack keeps its name over MCP. Upgrade
+if you mount packs by URL or update them with `append`. Packs compiled
+before this release still verify and serve, and compiling the same inputs
+gives the same identities as 0.12.0. Both packages move to 0.13.0 together,
+and `pikelet` requires `pikelet-wasm` ^0.13.0.
+
+### Compatibility
+
+- **`pikelet mcp` writes a cache for URL packs.** The resident index prefix
+  and the query encoder of each URL pack mounted (about 71 MiB for the
+  Wikipedia pack) are stored in `~/.cache/pikelet/blobs`, up to 2 GiB,
+  evicting least recently used entries first. `$PIKELET_CACHE_DIR` or
+  `$XDG_CACHE_HOME` moves it, and `--no-cache` turns it off. Local packs
+  never use it.
+- **A layered pack mounts under its pack's name.** A chain is named like a
+  single pack: from the shelf entry, else the base's manifest name, else
+  the file name with the `.0002` layer number dropped. A chain mounted from
+  `docs.0002.pikelet` was served as `docs.0002`; it is now `docs`, the
+  name its base alone mounted under. Tool calls that name the old pack
+  need updating. A single pack keeps a four-digit suffix (`wiki.2025`).
+- **A missing calibration questions file is an error.** A
+  `--calibration-queries` file (or `runtime.calibrationQueries`) that does
+  not exist used to calibrate without the questions and say nothing; it
+  now fails, naming the path.
+- **`tools/list` can answer before the packs have mounted.** After 2
+  seconds it answers with the same tools described without pack names,
+  uncached, and sends `notifications/tools/list_changed` once the mounts
+  settle; `initialize` and `server/discover` advertise
+  `tools.listChanged`. Tool calls still wait for the mounts.
+
+### Added
+
+- **On-disk cache for URL packs (`pikelet-wasm`).** `openPikeletFile`
+  takes `blobCache`, a store keyed by sha256. It holds the sketch's
+  resident prefix and the query-interp segment that carries the encoder.
+  Every hit is hashed against its key, so a corrupt entry is a miss that
+  is deleted and refetched, and cache faults never fail an open.
+  `diskBlobCache()` and `defaultBlobCacheDir()` (Node, from
+  `pikelet-wasm/complete`) provide one on disk, and `pikelet mcp` uses it
+  for URL packs. Measured against the Wikipedia pack on R2, a fresh
+  process went from 80.1 MiB and 11.5 s to its first answer down to
+  9.1 MiB and 6.9 s. Per-query reads are not cached.
+- **A chain reports its pack's name.** `openPikeletChain(...).info().name`
+  is the base's name.
+
+### Fixed
+
+- **A slow remote mount left an MCP client with no tools.** `tools/list`
+  waited for every mount; when a URL mount stalled (6.3 MiB in 37 s from
+  R2), Claude Code gave up on the list and started the session with no
+  tools at all. See Compatibility for how it answers now.
+- **A calibration question naming no record was dropped silently.** Each
+  is now logged by name with the reason, and with the title it probably
+  meant when Markdown formatting is the difference (titles are matched
+  after formatting is stripped). An `expectId` outside the corpus is named
+  the same way.
+- **`append` dropped short pages without saying which.** Documents under
+  25 whitespace-separated tokens are skipped whole; `compile` and `append`
+  now log them with their token counts, and `append`'s refusal when
+  nothing is left names them.
+- **`append`'s closing hint was not a usable next step.** It suggested
+  `openPikeletChain([...])`, which takes a query vector, not text; it now
+  prints `pikelet mcp --pack <layer>#<identity>`.
+
+### Documentation
+
+- **Deleting is not redacting.** `append --remove` and `--supersede` take a
+  record out of search, but earlier files keep its bytes and `get_record`
+  serves it by id, marked `tombstoned`, so old citations resolve.
+  `compact` writes a base without it. Both READMEs say so.
+
 ## pikelet-wasm 0.12.0 / pikelet 0.12.0 — 2026-10-30
 
 Query embedding is about 1.65x faster, because the inline encoder now
