@@ -88,7 +88,7 @@ npx pikelet append --parent docs.0001.pikelet --remove 412 --out docs.0002.pikel
 npx pikelet mcp --pack docs.0002.pikelet
 ```
 
-On a 20-record test pack with a 24.6 MiB base, deleting a record took a 1.2 KiB layer and replacing one took 6.9 KiB. Mounting the newest layer finds and verifies the rest of the chain, locally or over HTTP, and `#<sha256>` on it pins the whole history. Layers inherit the base's calibration until the chain drifts past 20% of the base's records; then it serves `unscored` until `compact` folds it into a fresh base. The format is specified in [`LAYERED_PROFILE.md`](LAYERED_PROFILE.md).
+On a 20-record test pack with a 24.6 MiB base, deleting a record took a 1.2 KiB layer and replacing one took 6.9 KiB. Deleting hides a record from search but does not erase it: the older files still hold its bytes, and `get_record` still serves it by id, marked `tombstoned`, so old citations resolve. `compact` writes a new base without it. Mounting the newest layer finds and verifies the rest of the chain, locally or over HTTP, and `#<sha256>` on it pins the whole history. Layers inherit the base's calibration until the chain drifts past 20% of the base's records; then it serves `unscored` until `compact` folds it into a fresh base. The format is specified in [`LAYERED_PROFILE.md`](LAYERED_PROFILE.md).
 
 ## Match quality
 

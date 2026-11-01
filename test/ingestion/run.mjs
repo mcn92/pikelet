@@ -12,6 +12,7 @@ await import('./strip.test.mjs');
 await import('./folder.test.mjs');
 await import('./git.test.mjs');
 await import('./conversations.test.mjs');
+await import('./short-docs.test.mjs');
 
 const { passed, failed } = counts();
 console.log(`\nIngestion conformance: ${passed} passed, ${failed} failed`);

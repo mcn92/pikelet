@@ -7,7 +7,7 @@
 // run — no compile, no encoder, no network.
 
 import { PassThrough } from 'node:stream';
-import { runMcpServer } from '../packages/pikelet/src/mcp.mjs';
+import { runMcpServer, mountName } from '../packages/pikelet/src/mcp.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -340,6 +340,20 @@ console.log('slow mount');
         toolsListGraceMs: 5000,
         openPikeletFile: async () => { await new Promise((r) => setTimeout(r, 30)); return stubPack(); },
     });
+}
+
+console.log('mount names');
+{
+    const none = new Map();
+    check('a shelf name wins', mountName(none, { name: 'shelf', location: 'x.pikelet' }, { name: 'manifest' }) === 'shelf');
+    check('else the manifest name', mountName(none, { location: 'x.pikelet' }, { name: 'manifest' }) === 'manifest');
+    check('else the file name', mountName(none, { location: '/p/docs.pikelet' }, {}) === 'docs');
+    check('a chain head drops its layer number', mountName(none, { location: '/p/docs.0002.pikelet' }, { name: null }, { chain: true }) === 'docs');
+    check('a chain head over a URL drops it too',
+        mountName(none, { location: 'https://h.example/packs/docs.0013.pikelet' }, {}, { chain: true }) === 'docs');
+    check('a single pack keeps a four-digit suffix: it is part of the name',
+        mountName(none, { location: '/p/wiki.2025.pikelet' }, {}) === 'wiki.2025');
+    check('a collision gets a numeric suffix', mountName(new Map([['docs', {}]]), { location: 'docs.pikelet' }, {}) === 'docs-2');
 }
 
 console.log('blob cache wiring');

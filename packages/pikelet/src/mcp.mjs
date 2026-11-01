@@ -643,12 +643,7 @@ async function mountChain(packs, spec, { httpRangeSource, log, head = null, blob
     close: () => chain.close(),
   };
 
-  let name = spec.name || path.basename(isUrlLike(spec.location) ? new URL(spec.location).pathname : spec.location).replace(/\.pikelet$/, '');
-  if (packs.has(name)) {
-    let n = 2;
-    while (packs.has(`${name}-${n}`)) n += 1;
-    name = `${name}-${n}`;
-  }
+  const name = mountName(packs, spec, info, { chain: true });
   packs.set(name, {
     search, identity: info.identity,
     file: isUrlLike(spec.location) ? spec.location : path.resolve(spec.location),
@@ -820,6 +815,30 @@ async function callLatest(packs, journalName, args) {
   };
 }
 
+/**
+ * The name a mount serves under: the shelf entry's, else the manifest's (a
+ * chain reports its base's), else the file name. A chain's head is a layer
+ * file, and the documented `append --out` naming gives it a `.0002` suffix;
+ * that is dropped so `docs.0002.pikelet` mounts as `docs`, the name the base
+ * alone mounted under. (Only for chains: on a single pack `wiki.2025` is a
+ * name, not a layer number.) Names address packs in every tool call, so a
+ * collision gets a stable numeric suffix rather than shadowing a mount.
+ */
+export function mountName(packs, spec, info, { chain = false } = {}) {
+  let name = spec.name || info.name;
+  if (!name) {
+    const file = path.basename(isUrlLike(spec.location) ? new URL(spec.location).pathname : spec.location)
+      .replace(/\.pikelet$/, '');
+    name = chain ? file.replace(/\.\d{4}$/, '') : file;
+  }
+  if (packs.has(name)) {
+    let n = 2;
+    while (packs.has(`${name}-${n}`)) n += 1;
+    name = `${name}-${n}`;
+  }
+  return name;
+}
+
 async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log, blobCache = null }) {
   // A shelf entry naming a lineage is a chain, not a pack (7).
   if (Array.isArray(spec.lineage) && spec.lineage.length) {
@@ -866,15 +885,7 @@ async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log, b
     throw new Error(`${spec.location}: kind-2 packs need a host encoder and cannot be mounted self-contained; `
       + 'compile packs with the inline encoder (the compile default) to serve them over MCP');
   }
-  let name = spec.name || info.name
-    || path.basename(isUrl ? new URL(spec.location).pathname : spec.location).replace(/\.pikelet$/, '');
-  // Names address packs in every tool call; collisions get a stable
-  // numeric suffix rather than silently shadowing an earlier mount.
-  if (packs.has(name)) {
-    let n = 2;
-    while (packs.has(`${name}-${n}`)) n += 1;
-    name = `${name}-${n}`;
-  }
+  const name = mountName(packs, spec, info);
   packs.set(name, { search, identity: info.identity, file: isUrl ? spec.location : path.resolve(spec.location), remote: isUrl });
   log(`mounted ${name} (${info.records} records, identity ${info.identity.slice(0, 12)}…, ${spec.identity ? 'identity-pinned' : 'unpinned'}) from ${spec.location}`);
 }

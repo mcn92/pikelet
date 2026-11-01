@@ -15,7 +15,7 @@ import fssync from 'node:fs';
 import path from 'node:path';
 import { CliError, loadCompleteModules, DEFAULT_CONFIG } from './common.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
-import { ingestFolder, ingestUrl, chunkDocs, dedupeChunks, ingestDeclaration, INGEST_CHUNKER } from './ingest.mjs';
+import { ingestFolder, ingestUrl, chunkDocs, describeDroppedDocs, MIN_CHUNK_TOKENS, dedupeChunks, ingestDeclaration, INGEST_CHUNKER } from './ingest.mjs';
 
 const defaultLog = (line) => console.log(line);
 
@@ -183,10 +183,17 @@ export async function appendLayer(flags, options = {}) {
         targetTokens: plan0.ingest.targetTokens ?? DEFAULT_CONFIG.chunking.targetTokens,
         overlapPercent: plan0.ingest.overlapPercent ?? DEFAULT_CONFIG.chunking.overlapPercent,
       };
-      chunks = dedupeChunks(chunkDocs(docs, chunking));
+      const chunked = chunkDocs(docs, chunking);
+      chunks = dedupeChunks(chunked);
       log(`Ingested ${docs.length} doc(s) -> ${chunks.length} chunk(s)`);
+      // A short page is dropped whole; name it, or it silently never reaches
+      // the layer (and with nothing else to append, the refusal below would
+      // not say why).
+      const dropped = describeDroppedDocs(chunked.dropped);
+      if (dropped) log(`Skipped ${chunked.dropped.length} doc(s) under ${MIN_CHUNK_TOKENS} tokens: ${dropped}`);
       if (!chunks.length && !removeIds.length && !supersedePairs.length) {
-        throw new CliError('the sources produced no chunks, and no --remove or --supersede was given: nothing to append (6.1)');
+        throw new CliError('the sources produced no chunks, and no --remove or --supersede was given: nothing to append (6.1)'
+          + (dropped ? `. Every document was under ${MIN_CHUNK_TOKENS} whitespace-separated tokens: ${dropped}` : ''));
       }
     }
 
@@ -336,7 +343,10 @@ export async function appendLayer(flags, options = {}) {
       + `identity ${written.identity}`);
     log(`  calibrationDrift ${drift.drift.toFixed(4)}`
       + `${drift.exceedsLimit ? ' (drift-exceeded: the chain serves unscored)' : ''}`);
-    log(`Mount the chain: openPikeletChain([base, ..., '${path.basename(outPath)}'])`);
+    // Mounting the newest layer walks its parent locators down to the base, and
+    // the head identity pins every member. (The library's openPikeletChain
+    // takes a query vector, not text, so it is no copy-paste next step.)
+    log(`Serve the chain: pikelet mcp --pack ${outPath}#${written.identity}`);
     return {
       outPath, identity: written.identity, fileBytes: written.fileBytes,
       rowBase: plan.rowBase, records: plan.records, depth: plan.depth,

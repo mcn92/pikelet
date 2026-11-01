@@ -349,6 +349,14 @@ explicitly), so opening or mounting the newest layer walks down to the base,
 locally or over HTTP, verifying each link. `#<sha256>` on any member flag
 pins it, and pinning the newest layer pins the whole chain.
 
+**Deleting is not redacting.** `--remove` and `--supersede` take a record
+out of search, but every earlier file stays byte-for-byte as it was, so the
+record's bytes are still in the chain. `get_record` serves it by id, marked
+`tombstoned: true`, so that citations made before the deletion still
+resolve. To actually drop the bytes, `compact` the chain into a new base and
+stop publishing the old members; anyone who already has a copy of them
+keeps the record.
+
 The base's encoder and calibration carry over. The chain keeps the base's
 abstention fit until the records added plus deleted exceed the drift limit
 (20% of the base's records by default); `append` refuses to cross it unless

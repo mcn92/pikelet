@@ -847,7 +847,7 @@ function aucFor(posRows, negRows) {
 // the project directory, same as encoder.calibrationPath). Optional — a
 // corpus without one just has no human-written source and relies on the
 // synthetic classes plus substitution/morphological positives.
-async function loadCalibrationQueries(config, projectDir, log) {
+export async function loadCalibrationQueries(config, projectDir, log) {
   const rel = config?.runtime?.calibrationQueries;
   if (!rel || !projectDir) return [];
   const file = path.resolve(projectDir, rel);
@@ -855,7 +855,11 @@ async function loadCalibrationQueries(config, projectDir, log) {
   try {
     text = await fs.readFile(file, 'utf8');
   } catch (err) {
-    if (err.code === 'ENOENT') return [];
+    // The path is set only when someone asked for it (--calibration-queries
+    // or the project config), so a missing file is a mistake to report, not
+    // a corpus without human questions: it used to calibrate without them
+    // and say nothing.
+    if (err.code === 'ENOENT') throw new Error(`calibration queries file not found: ${file}`);
     throw err;
   }
   const out = [];
@@ -872,6 +876,24 @@ async function loadCalibrationQueries(config, projectDir, log) {
     out.push({ text: row.text, sourceId: row.expectId, sourceTitle: row.expectTitle });
   }
   return out;
+}
+
+// Why a human-written question names no record, or null when it names one.
+// Such a question can never verify, so it is reported by name instead of
+// being counted with the unretrievable ones. The usual cause is a title
+// written with the Markdown formatting ingest strips ("How a `.pikelet`
+// query runs" for the record "How a .pikelet query runs").
+export function calibrationQuestionUnmatched({ sourceTitle, sourceId }, chunks) {
+  if (sourceId !== undefined) {
+    return Number.isSafeInteger(sourceId) && sourceId >= 0 && sourceId < chunks.length
+      ? null
+      : `expectId ${JSON.stringify(sourceId)} is not a record id (0-${chunks.length - 1})`;
+  }
+  if (chunks.some((c) => (c.title || '').trim() === sourceTitle)) return null;
+  const plain = String(sourceTitle).replace(/[`*_]/g, '').trim();
+  const near = plain !== sourceTitle && chunks.some((c) => (c.title || '').trim() === plain);
+  return `no record is titled ${JSON.stringify(sourceTitle)}`
+    + (near ? `; did you mean ${JSON.stringify(plain)}? Titles are matched after Markdown formatting is stripped` : '');
 }
 
 // evidence(text, { excludeIds }) is the artifact reader's own retrieval
@@ -1116,7 +1138,14 @@ export async function calibrateRetrievalAbstention({ chunks, config, embedQuery,
   const humanTemplates = await loadCalibrationQueries(config, projectDir, log);
   const humanRows = [];
   let humanDropped = 0;
+  let humanUnmatched = 0;
   for (const { text, sourceTitle, sourceId } of humanTemplates) {
+    const unmatched = calibrationQuestionUnmatched({ sourceTitle, sourceId }, chunks);
+    if (unmatched) {
+      humanUnmatched++;
+      log(`Calibration: skipping question ${JSON.stringify(text.slice(0, 80))}: ${unmatched}`);
+      continue;
+    }
     const hits = await search(text);
     if (verify(hits, sourceTitle, sourceId)) {
       humanRows.push({ text, label: 1, sourceTitle, sourceId, ...(await signalsFor(text, hits)) });
@@ -1593,6 +1622,9 @@ export async function calibrateRetrievalAbstention({ chunks, config, embedQuery,
     // corpus without them is validated only by cvAuc.
     humanCalibrationQueries: humanRows.length,
     humanQueriesDroppedAsUnretrievable: humanDropped,
+    // Present only when some question named no record, so packs built
+    // without such questions keep their bytes (and identities).
+    ...(humanUnmatched ? { humanQueriesNamingNoRecord: humanUnmatched } : {}),
     realQueryAuc: realQueryAuc === null ? null : +realQueryAuc.toFixed(6),
     realQueryAbstentionRate: humanRows.length ? +(realQueryAbstained / humanRows.length).toFixed(6) : null,
     foreignNegativeQueries: negatives.filter((r) => r.negativeKind === 'foreign-bank').length,

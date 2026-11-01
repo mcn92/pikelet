@@ -1052,7 +1052,7 @@ console.log('chain files: a base and two layers assemble and re-read');
     const basePath = path.join(chainTmp, 'base.pikelet');
     const baseBuilt = assemblePikeletFile({
         profile: PROFILE_V2, dim: CDIM, metric: 'cosine', encoder: ENC2,
-        corpus: { ...baseCorpus.corpus, ingest: INGEST2 }, index: {},
+        corpus: { ...baseCorpus.corpus, ingest: INGEST2, provenance: { name: 'ladder-docs' } }, index: {},
     }, [
         { kind: 'index', bytes: sketchFor(baseIds) },
         { kind: 'corpus', bytes: baseCorpus.bytes },
@@ -1221,6 +1221,7 @@ console.log('chain files: a base and two layers assemble and re-read');
     check('the chain mounts every member', ci.layers === 3 && ci.searchTiers === 2);
     check('it reports the head identity, not a member\'s', ci.identity === l2Identity);
     check('and the base identity separately', ci.baseIdentity === baseIdentity);
+    check('the chain carries the base\'s name, so a host need not name it after a layer file', ci.name === 'ladder-docs', ci.name);
     check('record counts are chain-wide', ci.records === 25 && ci.liveRecords === 22 && ci.tombstones === 3);
     check('global lexical stats count tombstoned records (5.4)',
         ci.lexical.N === 25 && ci.lexical.statsIncludeTombstoned === true);

@@ -714,6 +714,17 @@ function ingestDeclaration(chunking = {}) {
   };
 }
 
+// The documents chunkDocs dropped for having fewer than MIN_CHUNK_TOKENS
+// whitespace-separated tokens, named for a log line or an error: "a.md (12
+// tokens), b.md (3 tokens)", the first `limit` of them. Empty when none were.
+function describeDroppedDocs(dropped, limit = 8) {
+  if (!Array.isArray(dropped) || !dropped.length) return '';
+  const named = dropped.slice(0, limit)
+    .map((doc) => `${doc.sourcePath || doc.url || doc.title || doc.id} (${doc.tokens} tokens)`)
+    .join(', ');
+  return `${named}${dropped.length > limit ? `, and ${dropped.length - limit} more` : ''}`;
+}
+
 function chunkDocs(docs, options) {
   const chunks = [];
   chunks.dropped = [];
@@ -1029,6 +1040,8 @@ export {
   decodeEntities,
   normalizeText,
   chunkDocs,
+  describeDroppedDocs,
+  MIN_CHUNK_TOKENS,
   ingestDeclaration,
   INGEST_CHUNKER,
   tokenize,

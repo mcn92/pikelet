@@ -369,6 +369,10 @@ export async function openPikeletChain(members, options = {}) {
                     profile: LAYER_PROFILE,
                     identity: chainMembers[chainMembers.length - 1].identity,
                     baseIdentity: base.identity,
+                    // The pack's name is the base's: layers add records, not a
+                    // new name. Without it a host fell back to naming the
+                    // chain after its newest layer's file.
+                    name: opened[0].info().name ?? null,
                     layers: chainMembers.length,
                     searchTiers: searchTiers.length,
                     records: table.rowTotal,

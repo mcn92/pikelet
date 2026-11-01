@@ -7,7 +7,7 @@ import fssync from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { sha256, CLI_VERSION, DEFAULT_CONFIG, RANGE_ARTIFACT_MAGIC, MODEL_MAP, CliError, buildTimestamp, loadPikelet } from './common.mjs';
-import { ingestFolder, ingestUrl, chunkDocs, dedupeChunks, applySourceRoutes, publicChunk, sentenceWindows } from './ingest.mjs';
+import { ingestFolder, ingestUrl, chunkDocs, describeDroppedDocs, MIN_CHUNK_TOKENS, dedupeChunks, applySourceRoutes, publicChunk, sentenceWindows } from './ingest.mjs';
 import { ingestGit } from './git-source.mjs';
 import { ingestConversations } from './conversation-source.mjs';
 import { buildCompleteArtifact } from './complete-build.mjs';
@@ -45,14 +45,14 @@ async function buildAssets(projectDir, config, options = {}) {
   }
   const chunked = chunkDocs(docs, config.chunking);
   const chunks = dedupeChunks(chunked);
+  const dropped = describeDroppedDocs(chunked.dropped);
   if (chunks.length === 0) {
-    const dropped = (chunked.dropped || [])
-      .slice(0, 8)
-      .map((doc) => `${doc.sourcePath || doc.url || doc.title || doc.id} (${doc.tokens} tokens)`)
-      .join(', ');
-    const suffix = dropped ? ` Dropped as too short: ${dropped}${chunked.dropped.length > 8 ? ', ...' : ''}.` : '';
-    throw new CliError(`Chunking produced 0 chunks. Chunking counts whitespace-separated tokens and drops documents under 25 of them.${suffix} Next: use longer whitespace-delimited content or adjust source filters.`, 1);
+    const suffix = dropped ? ` Dropped as too short: ${dropped}.` : '';
+    throw new CliError(`Chunking produced 0 chunks. Chunking counts whitespace-separated tokens and drops documents under ${MIN_CHUNK_TOKENS} of them.${suffix} Next: use longer whitespace-delimited content or adjust source filters.`, 1);
   }
+  // Some dropped, some kept: still worth naming, or a short page simply
+  // goes missing from the pack.
+  if (dropped) log(`Skipped ${chunked.dropped.length} doc(s) under ${MIN_CHUNK_TOKENS} tokens: ${dropped}`);
   applySourceRoutes(chunks, config);
   log(`Ingested ${docs.length} docs -> ${chunks.length} chunks`);
 
