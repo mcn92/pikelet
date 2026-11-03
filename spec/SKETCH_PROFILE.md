@@ -241,8 +241,9 @@ Mapping to the Search Artifact Contract's layers:
   segment; the vectors segment is the declared lazy segment. Result
   hydration is out of scope for v1 (corpus is an adjacent asset, as in the
   other transitional profiles).
-- **Identity (4.1):** transitional — whole-segment hashes only, as
-  described in 2.1.
+- **Identity (4.1):** format 1 is transitional — whole-segment hashes
+  only, as described in 2.1. Format 2 adds per-row commitments (2.4), so
+  every lazily fetched row is verified on its own read.
 - **Evaluation (4.6):** producers SHOULD ship recall-vs-C measurements as
   an adjacent asset and set `recommendedRerank`; this becomes a mandatory
   segment in the complete profile.

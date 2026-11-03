@@ -107,7 +107,9 @@ An artifact is immutable after publication.
 
 Readers MUST NOT mutate artifact bytes as part of query execution. Producers
 MAY create a new artifact that supersedes an old one, but that new artifact has
-a new identity.
+a new identity. Supersession may be whole (a new base) or incremental (a
+layer that commits to its parent's identity, `LAYERED_PROFILE.md`); either
+way no published artifact changes.
 
 Mutable services may cache, prefetch, or materialize artifact ranges, but those
 runtime caches are not part of the artifact.
@@ -453,9 +455,12 @@ Its execution model is a resident scan followed by a single parallel fetch
 round for exact rerank — sequential fetch depth 1 by construction.
 
 Byte layout and execution semantics are specified in `SKETCH_PROFILE.md`.
-Like the other current profiles it is transitional on identity (whole-segment
-hashes, no per-chunk commitments) and carries corpus, encoder, evaluation,
-and calibration as adjacent assets.
+Format 1 is transitional on identity (whole-segment hashes only). Format 2,
+the default since pikelet-wasm 0.5.0, adds per-row commitments: every
+fetched row is verified against a digest page anchored in the resident
+prefix (`SKETCH_PROFILE.md` 2.4). Both formats carry corpus, encoder,
+evaluation, and calibration as adjacent assets; the complete profile (9.4)
+carries them inside.
 
 ### 9.4 Complete Search Artifact Profile
 
@@ -474,15 +479,22 @@ an artifact compiler and reader.
 These decisions must be resolved before freezing a byte-layout specification:
 
 1. Which corpus fields are mandatory, and which are host/application metadata?
-2. Are inline encoders mandatory for the complete profile, or can a pinned
-   external teacher be complete?
+2. ~~Are inline encoders mandatory for the complete profile, or can a pinned
+   external teacher be complete?~~ Resolved: neither is mandatory.
+   `COMPLETE_PROFILE.md` 3.6 defines inline students (kind 1), a pinned
+   external encoder verified against embedded vectors (kind 2) and the
+   inline transformer (kind 3).
 3. What is the minimum evaluation segment for small artifacts?
 4. How should abstention be represented when a host does not implement it?
 5. What compatibility promise is attached to each major format version?
 6. Which range-read diagnostics are required versus optional?
 7. How are signatures and provenance layered on top of content identity?
-8. What chunk sizes balance range-verification overhead against the real
-   range-read shapes of each segment type?
+8. ~~What chunk sizes balance range-verification overhead against the real
+   range-read shapes of each segment type?~~ Resolved by measurement for
+   index rows and corpus records (`COMPLETE_PROFILE.md` 8, question 6):
+   per-row digests in 16-row blocks, per-record digests behind a page
+   table. A lazily opened lexical segment is still covered only by its
+   whole-segment digest.
 9. What numeric distance-error bounds apply per metric and quantization scheme
    for independent-reader conformance?
 

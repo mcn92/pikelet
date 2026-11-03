@@ -4,7 +4,10 @@ Copyright 2026 Matthew Noonan. This specification is part of the Pikelet
 project and is licensed under the Apache License 2.0 (see `LICENSE`).
 
 **Status:** Draft 4 (2026-09-26) — the last conceptual-review draft; not
-implemented, not frozen.
+frozen. Implemented and shipping since pikelet-wasm 0.9.0 / pikelet 0.9.0
+(2026-09-29): `pikelet append`, `compact` and `rebase`, chain mounting in
+`pikelet mcp` and `openPikeletChain` in `pikelet-wasm`. Section 11 records
+where the implementation differs from this text.
 
 **Measurement pass, 2026-09-26.** Open questions 1, 2 and 3 have been run
 against the shipped code on BEIR corpora; 13's preamble states the method
@@ -15,8 +18,9 @@ conservative; bloom pollution is real but never changed a verdict, and
 4.5's claim about *which direction* it pushes was backwards; stale lexical
 statistics cost under 0.005 nDCG@10, so 13.3's proposed per-layer `df`
 correction table is dropped. None of this is wiki-pack scale, and questions
-4-9 remain untouched, so the implementation gate of 13 has moved but not
-opened. Draft 4 revises Draft 3 (same day) after a
+4-9 remain untouched, so the implementation gate of 13 had moved but not
+opened (the implementation went ahead after this pass; 4-9 are still
+open). Draft 4 revises Draft 3 (same day) after a
 fourth review that found no remaining architectural defect: the
 compaction conformance oracle no longer demands ranking invariance from
 an operation designed to change retrieval statistics, and instead asserts
@@ -1433,7 +1437,7 @@ own commitments as an attack, not a hint.
 
 ## 10. Conformance
 
-- **Fixtures:** `test/layered_profile.mjs` (to be added to `npm test`)
+- **Fixtures:** `test/layered_profile.mjs` (run by `npm test`)
   builds in-process, deterministically, from the complete-profile suite's
   seeded kind-2 host-encoder corpus:
   (A) a base plus three layers — additions, deletions, a supersession, and
@@ -1573,45 +1577,57 @@ own commitments as an attack, not a hint.
 
 ## 11. Relationship to existing documents and code
 
+This section was written as the plan for implementing the profile. It now
+records what shipped, and where the implementation differs from the plan.
+
 - **Contract §8 (non-goals).** Still true: no mutable indexes, no online
   updates. A chain is a sequence of immutable artifacts; the mutable thing
-  is a ref, which the contract never covered. A one-line note that
-  supersession may be incremental (a layer) as well as whole (a new base)
-  keeps §4.2 and this profile in visible agreement.
-- **`COMPLETE_PROFILE.md` §3.3.** Register kind 6 (`tombstones`) and kind
-  7 (`lineage`) in the kind table, and kind 4 (`inherited-v1`) in §3.6.
-  Add `corpus.ingest` to the manifest fields the compiler writes (§3.2),
-  so future bases are appendable without assertion. No layout in that
-  document changes, and its required-segment rule is untouched because a
-  layer is not a complete artifact (4.3).
-- **`SKETCH_PROFILE.md`.** Unchanged on disk. The sketch *reader* gains a
-  search option, `excludeRows` (a bitset over local ids), honored by the
-  JS scan and by the engine's `_pikelet_sketch_scan` kernel, which today
-  takes no mask (a new kernel parameter; the scalar and SIMD paths must
-  agree). Masked rows never enter the candidate heap, so `C` counts live
-  rows. `extraCandidates` that are masked are dropped before fetch.
-- **Lexical reader (`complete/lexical.mjs`).** Gains a scoring entry point
-  that takes externally supplied `idf`/`avgdl` and a doc-id exclusion
-  mask applied while postings are scored, before the top-`n` cut.
-- **Reader (`complete/index.mjs`).** `SUPPORTED_PROFILES[2]` becomes a set;
-  a chain-mount wrapper around `openPikeletFile` owns the interval table,
-  the ancestry table, projected masks, the union supersession map, merged
-  lexical statistics, merged search, the resolution rules of 5.1.1 and
-  the budgets of 5.9; `fuseCandidates` and `createAbstentionScorer` are
-  unchanged.
-- **CLI (`packages/pikelet`).** `append`, `rebase`, `compact`; `compile`
-  records `corpus.ingest`; `append` takes `--reader-drift-limit` (the
-  reader limit its drift check applies); `mcp` learns `lineage` entries.
+  is a ref, which the contract never covered. Contract §4.2 notes that
+  supersession may be incremental (a layer) as well as whole (a new base).
+- **`COMPLETE_PROFILE.md`.** Segment kinds 6 (`tombstones`) and 7
+  (`lineage`) are registered in §3.3 and query-interpretation kind 4
+  (`inherited-v1`) in §3.6. The compiler writes `corpus.ingest` (§3.2), so
+  bases compiled since are appendable without `--assert-ingest`. No layout
+  in that document changed.
+- **`SKETCH_PROFILE.md`.** Unchanged on disk. The sketch reader's search
+  takes an `exclude` option (an LSB-first bitset over local ids), and
+  masked rows never enter the candidate heap, so `C` counts live rows.
+  *Differs from the plan:* the engine's `_pikelet_sketch_scan` kernel takes
+  no mask. When a mask is in play the reader asks the kernel for `C` plus
+  the masked count and drops masked ids, which yields the exact top-`C`
+  live rows; if that over-fetch exceeds the kernel's buffers it falls back
+  to the masked JS scan.
+- **Lexical reader (`complete/lexical.mjs`).** Its scoring takes an
+  `exclude(id)` predicate applied while postings are scored, before the
+  top-`n` cut, and `stats` supplying chain-global `docCount`/`avgdl`.
+- **Reader.** The chain reader is `openPikeletChain`
+  (`complete/layer-reader.mjs`): it owns the interval and ancestry tables,
+  projected masks, the union supersession map, merged lexical statistics,
+  merged search, the resolution rules of 5.1.1 and the budgets of 5.9.
+  `fuseCandidates` and `createAbstentionScorer` are unchanged. *Differs:*
+  `SUPPORTED_PROFILES` in `complete/index.mjs` still lists only the
+  complete profiles, because `openPikeletFile` opens single files; the
+  layer profile is recognized by the chain reader. A chain's `query()`
+  takes a query vector; text queries go through `pikelet mcp`.
+- **CLI (`packages/pikelet`).** `append`, `rebase` and `compact` ship;
+  `compile` records `corpus.ingest`; `append` takes
+  `--reader-drift-limit`; `mcp` mounts `lineage` entries from a shelf.
   Parent-locator resolution and the reader drift limit are reader options
-  (`openPikeletChain`'s `resolveParents` and `readerDriftLimit`), not
-  `mcp` flags; `doctor` reports chain depth, drift, both limits,
-  `ingestAsserted` and the budgets a mount consumed.
-- **MCP.** `search` results add `layer` and the response carries the head
-  `identity`; `get_record` takes an optional `identity` and adds
-  `tombstoned`, `supersededBy`, `successors`, `currentSuccessor` and, on a
-  compacted base, `historicalContent`; `list_packs` adds `layers`,
-  `tombstones`, `calibrationDrift`, `calibrationStatus`, `ingestAsserted`;
-  `verify_pack` reports per layer and validates lineage.
+  (`openPikeletChain`'s `resolveParents` and `readerDriftLimit`), not `mcp`
+  flags. *Not implemented:* `doctor` reports nothing chain-specific (depth,
+  drift, limits, `ingestAsserted`, budgets).
+- **MCP.** `search` results carry `layer`, and each section carries the
+  head identity as `packIdentity`. `get_record` adds `tombstoned`,
+  `supersededBy`, `successors` and `currentSuccessor`. `list_packs` adds
+  `layers`, `tombstones`, `calibrationDrift` and `calibrationStatus`.
+  *Differs:* `get_record` takes no `identity` argument (citation
+  translation is the library's `citation(identity, id)`), and there is no
+  `historicalContent` on a compacted base. `verify_pack` on a chain runs
+  the base's tests against the whole chain, skipping goldens whose
+  expected record a layer removed, and reports them as base-scoped
+  (`testsFrom`), rather than reporting per layer. A compacted base's
+  lineage segment is hash-checked and parsed when a citation first needs
+  it, not by `verify_pack`.
 
 ## 12. Non-goals
 

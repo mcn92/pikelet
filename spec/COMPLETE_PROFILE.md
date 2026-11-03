@@ -221,7 +221,8 @@ version.
 ```
 [0, 4)    u32 version          shared encoder+calibration version
 [4, 8)    u32 kind             1 = student-inline-v1, 2 = external-transformers-v1,
-                               3 = inline-transformer-v1
+                               3 = inline-transformer-v1, 4 = inherited-v1 (layers
+                               only; LAYERED_PROFILE.md 4.5)
 [8, 12)   u32 encoderBytes
 [12, 16)  u32 calibrationBytes
 [16, ...) encoder              per kind, below
@@ -621,3 +622,5 @@ both as equivalent.
    convergence). Verify-everything hosts warm the ~7 MB digest region
    once instead of today's 167 MB full-vectors pass (~24× less
    transfer).
+   (The outcome above was written before that revision; it is now
+   `SKETCH_PROFILE.md` 2.4.)
