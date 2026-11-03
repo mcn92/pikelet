@@ -89,6 +89,6 @@ The model may already contain some of these facts in its pretrained parameters. 
 
 Roughly **12.5% of the 648.5 MiB artifact** crossed the wire across that whole session. Excluding the one-time ~25 MiB encoder load, fresh-query traffic ran **~0.5–1.1 MiB per query**. The complete artifact was never downloaded.
 
-The headless-Claude test above used a fresh process per question, so each invocation repaid the ~52 MiB mount and ~25 MiB encoder cost — about 78 MiB per cold query. That's a real operational distinction: **persistent sessions amortize mount and encoder cost; independent cold processes do not.**
+The headless-Claude test above used a fresh process per question, so each invocation repaid the ~52 MiB mount and ~25 MiB encoder cost — about 78 MiB per cold query. When this was measured that was a real operational distinction: persistent sessions amortized mount and encoder cost, and independent cold processes did not. Since 0.13.0, `pikelet mcp` caches those two regions on disk under their sha256 digests, so a later process mounting the same pack reads them locally: measured against the R2-hosted copy, a fresh process went from 80.1 MiB to 9.1 MiB before its first answer. `--no-cache` reproduces the cold behavior above.
 
 *(The large benchmark fixture still carries its historical `.pancake` filename from before the Pikelet rename; current artifacts use `.pikelet`.)*

@@ -1,6 +1,6 @@
 # Agent journal: a private, agent-writable pack of development history
 
-**Status: milestone 1 implemented, unreleased.** `pikelet journal
+**Status: milestone 1 shipped in pikelet 0.11.0 (experimental).** `pikelet journal
 init|list|compact`, `pikelet mcp --journal`, and the `write_note` and `latest`
 tools work as described under [Implemented](#implemented-milestone-1). The
 rest of this document is design; the open questions are still open.
@@ -194,8 +194,9 @@ be recorded.
   id", which is cheap; `created` breaks ties after compaction.
 - **`timeline(from?, to?)`** lists notes between two dates, versions or commits.
 - **`search`** works over the journal like any pack, with filters on kind and
-  tag, and benefits from a keyword search mode (planned separately), since
-  notes are full of names, ids and identifiers.
+  tag, and benefits from keyword matching (the BM25 half of hybrid
+  retrieval, which ships), since notes are full of names, ids and
+  identifiers.
 
 Every journal result is labelled as agent-written and unverified (below).
 

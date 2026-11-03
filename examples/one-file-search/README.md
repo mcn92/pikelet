@@ -45,7 +45,7 @@ in Node and in the browser over HTTP range requests, with no backend and
 no separate search service.
 
 ```bash
-node compile.mjs                      # 03's assets -> pikelet-docs.pikelet (1.4 MiB)
+node compile.mjs                      # encoder-conformance assets -> pikelet-docs.pikelet (1.4 MiB)
 node compile.mjs --inspect pikelet-docs.pikelet
 node test-file.mjs                    # the file proves itself (goldens live inside it)
 npx vite build web                    # build the browser page
@@ -144,11 +144,12 @@ smoke, provenance, identity, abstention, and embedded-evaluation checks.
   playground source and built static output. The default pack URL points at
   the R2-hosted Wikipedia pack above.
 - `search-reader.mjs`, `demo.mjs`, `test.mjs` — the original composition
-  spike over 03's six separate asset files, kept as the reference the
-  one-file reader is tested against.
+  spike over the legacy `03-edge-docs-search` Worker's six separate asset
+  files (now in `test/fixtures/encoder-conformance/`), kept as the
+  reference the one-file reader is tested against.
 - `abstention.mjs` — calibration scoring shared by both readers (extracted
   from 03's worker.js).
-- `../../complete/builder.mjs` (`pikelet-wasm/complete/builder`) — shared
+- `../../packages/pikelet-wasm/complete/builder.mjs` (`pikelet-wasm/complete/builder`) — shared
   container assembly (canonical JSON, header + table layout, streamed
   writes, the recall-vs-C rerank sweep) used by both compilers.
 - `compile-wiki.mjs` / `test-wiki.mjs` — the wiki-scale compiler and its
@@ -179,10 +180,3 @@ smoke, provenance, identity, abstention, and embedded-evaluation checks.
 - Query: sketch scan + source-tuned parallel rerank row reads + parallel
   hydration; single-digit-millisecond embeds for kind 1, encoder-dominated
   latency for kind 3.
-
-## Still out of scope
-
-Promotion into the published `pikelet-wasm` package, the
-`pikelet` compile frontend, per-chunk range verification
-(spec section 6), and large-corpus compilation (the wiki pack is the
-intended flagship).

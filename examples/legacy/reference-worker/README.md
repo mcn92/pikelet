@@ -4,9 +4,9 @@ This directory contains a reference Cloudflare Worker deployment built on top of
 
 > **Note:** This example runs from the repository checkout and imports the same
 > public Worker entrypoint that the package exports as `pikelet-wasm/web`. To
-> use the published package instead, you need `pikelet-wasm@0.2.0` or later —
-> earlier releases predate the 0.2 API this example is written against. See the
-> [root README](../../README.md#install).
+> use the published package instead, install `pikelet-wasm` (any published
+> version: the first, 0.7.0, already carried the API this example is written
+> against). See the [root README](../../../README.md#quick-start).
 
 The Worker keeps a Pikelet index in-process when hot and persists snapshots to
 Cloudflare R2. Treat it as a **snapshot-first ANN serving layer** rather than

@@ -90,10 +90,11 @@ Artifact stats include both per-query and cumulative range-read counters:
 }
 ```
 
-## Search Artifact mode
+## Search Artifact mode (deprecated)
 
-Experimental bundled Search Artifact mode is available when `pikelet.config.json`
-contains:
+Artifact mode is deprecated: it serves the retired `.pikelet-range` profile.
+Prefer the default snapshot runtime, or `pikelet compile` for a complete
+`.pikelet`. It still works when `pikelet.config.json` contains:
 
 ```json
 {

@@ -24,7 +24,7 @@ At SIFT1M scale (same artifact as the full-JSON example above) the gap is
 starker, because range-profile quality is bought with traversal depth while
 sketch quality is bought with rerank width inside the same single round.
 `--range-sweep` gives the graph profile its own knobs (`efSearch`,
-`expansionBatch`, `gap` — the last row is the ROADMAP's settled recipe) so
+`expansionBatch`, `gap` — the last row is the settled recipe) so
 the comparison is the graph's frontier against the sketch's single point:
 
 ```bash

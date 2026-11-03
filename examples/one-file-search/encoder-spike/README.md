@@ -95,3 +95,8 @@ Remaining for a kind-3 format entry is packaging, not correctness: the
 encoder segment layout (blob + vocab as segments, embedding table as a
 lazy range-read region), the reader integration, and the streamed-FFN /
 threads / relaxed-SIMD optimizations as wanted.
+
+(Since shipped: the packaging and reader integration are kind 3,
+`inline-transformer-v1`, in `spec/COMPLETE_PROFILE.md` 3.6, and the
+kernels build from `packages/pikelet-wasm/complete/encoder-kernels/`. This
+log is the spike's record as of its writing.)

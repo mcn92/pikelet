@@ -2,7 +2,7 @@
 
 ## Start here
 
-### [`06-mcp-knowledge-pack/`](06-mcp-knowledge-pack/) — compile, mount, and query a pack over MCP
+### [`mcp-knowledge-pack/`](mcp-knowledge-pack/) — compile, mount, and query a pack over MCP
 
 The current product, end to end, in the smallest form: compile a short
 public-domain text into a `.pikelet`, mount it with `pikelet mcp`, and run
@@ -10,19 +10,19 @@ two queries — one straightforward, one whose premise is false — to show
 what `matchQuality` does and doesn't tell an agent. If you have five
 minutes, run this one.
 
-### [`05-one-file-search/`](05-one-file-search/) — the file itself
+### [`one-file-search/`](one-file-search/) — the file itself
 
 Compiles the five Search Artifact components (corpus, index, encoder,
 evaluation, calibration) into one content-addressed `.pikelet` and serves
 queries from it in Node and in the browser over HTTP range requests, with
-no backend. This is what `06` mounts over MCP and what `pikelet compile`
-builds.
+no backend. This is what `mcp-knowledge-pack` mounts over MCP and what
+`pikelet compile` builds.
 
-### [`04-static-wiki-pack/`](04-static-wiki-pack/) — the same idea at wiki scale
+### [`static-wiki-pack/`](static-wiki-pack/) — the same idea at wiki scale
 
 The offline pipeline that builds a 456k-passage Wikipedia pack: embed,
 compile, host on static/R2 storage, query entirely client-side. Also the
-data-prep step `05`'s wiki-scale scripts consume directly.
+data-prep step `one-file-search`'s wiki-scale scripts consume directly.
 
 If you have 15 seconds instead:
 
@@ -32,11 +32,14 @@ npm run demo:artifact
 
 opens a committed docs search artifact, searches it lazily, and prints the
 range reads — the smallest possible proof that search can be a file your
-app ships (see `legacy/range-artifact-demo/` below for what this runs).
-Or scaffold a deployable project instead of reading the pieces:
+app ships. It runs the legacy `.pikelet-range` profile (see
+`legacy/range-artifact-demo/` below), not a `.pikelet`. To build a
+`.pikelet` from your own folder, or scaffold a deployable search app
+instead:
 
 ```bash
-npx pikelet create --name my-docs-search --source ./docs --runtime artifact --mode student --no-deploy --yes
+npx pikelet compile --source ./docs --out docs.pikelet
+npx pikelet create --name my-docs-search --source ./docs --no-deploy --yes
 ```
 
 ## Legacy: the engine, directly
@@ -59,9 +62,9 @@ direction.
 - [`legacy/03-edge-docs-search/`](legacy/03-edge-docs-search/) — a
   Cloudflare Worker that restores a raw snapshot and embeds queries
   locally with a bundled student encoder: the "six separate asset files
-  in a live server" shape `05-one-file-search`'s single artifact replaced.
-  Still cited by `spec/` as a golden-fixture source for the abstention
-  conformance suite.
+  in a live server" shape `one-file-search`'s single artifact replaced.
+  Its assets and abstention goldens now live in
+  `test/fixtures/encoder-conformance/`, which is what `spec/` cites.
 - [`legacy/reference-worker/`](legacy/reference-worker/) — full
   Cloudflare Worker reference: raw-vector `/search`/`/add` HTTP API, R2
   snapshot restore, auth, rate limiting, admin routes. Covered by

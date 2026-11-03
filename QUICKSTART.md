@@ -23,14 +23,9 @@ serves queries from Cloudflare Workers AI; it downloads its 36 MiB encoder
 weights on first use.
 
 The CLI needs Node 22.23.4+, 24.22.1+ or 26.12.1+. `pikelet-wasm` runs on
-Node 18+, browsers, and Cloudflare Workers (CI tests Node 22, 24 and 26); this guide assumes `pikelet-wasm@0.8.1`
-or later.
-
-Upgrade from 0.8.0 if you mount `.pikelet` files you did not compile yourself.
-0.8.0 sized the inline encoder's WASM buffers from the artifact's own
-declaration with an upper bound only, so a pack declaring an out-of-range
-`maxTokens` could overflow them at mount, before any query. 0.8.1 bounds it.
-See the CHANGELOG.
+Node 18+, browsers, and Cloudflare Workers (CI tests Node 22, 24 and 26); this guide assumes both packages at
+0.13.0 or later, the first release with the on-disk cache in step 5. The
+CHANGELOG lists what changed between releases.
 
 ## 2. Compile a pack
 
@@ -92,6 +87,24 @@ The flags in the example are optional but worth setting:
 Other flags: `--force` overwrites the output, `--max-pages` caps a crawl, and
 `--include`/`--exclude` filter a folder. `pikelet compile --help` lists the
 rest, including the `--encoder-*` flags for swapping the packaged MiniLM.
+Documents too short to index are dropped, and `compile` names each one it
+drops.
+
+Two other sources replace `--source`:
+
+```bash
+pikelet compile --git ./repo --git-rev v0.9.0..HEAD --out history.pikelet
+pikelet compile --conversations ~/.claude/projects/my-project --out conversations.pikelet
+```
+
+`--git` builds one record per commit (subject, message, date, author, files
+changed; merges excluded), cited by the commit's GitHub URL when `origin` is
+on GitHub and by its sha otherwise. `--git-rev` takes a revision or a range
+and defaults to `HEAD`, the whole history. `--conversations` builds one
+record per exchange from Claude Code session transcripts or a Claude.ai or
+ChatGPT data export, keeping only what was said and redacting common
+credential shapes and email addresses. Redaction is pattern-based and best
+effort, so keep a conversation pack private.
 
 ## 3. Query it from code
 
@@ -231,7 +244,20 @@ pikelet mcp install --client claude-code \
 
 `--pack` repeats for several packs; if one fails to mount (an unreachable
 host, a refused pin), the others still serve and `list_packs` reports the
-missing one. To publish several packs together, list them in a static
+missing one.
+
+`mcp` caches what a URL mount reads on disk, under `~/.cache/pikelet/blobs`
+(`$PIKELET_CACHE_DIR` moves it). Most of a mount is two regions the pack
+commits to by sha256, the resident index and the query encoder, so the next
+process to mount the same pack reads them locally instead of over the
+network. From the release after 0.13.0, the verified pieces a query reads
+(rerank rows, records, digest pages) are kept the same way. The keys
+are content digests, so an entry never goes stale, and every hit is
+re-hashed before use. `--no-cache` turns it off. From code, pass
+`blobCache: diskBlobCache()` (exported by `pikelet-wasm/complete` under Node)
+to `openPikeletFile`.
+
+To publish several packs together, list them in a static
 `packs.json` shelf and mount it with `--shelf <url>`; see
 [packs/README.md](packs/README.md) for the format.
 
@@ -291,7 +317,7 @@ The compacted file is an ordinary pack: open it with `openPikeletFile`, mount
 it, or append to it. Citations made against the old chain still translate to
 it. From code, use `openPikeletFile` on single-file packs; chains are served
 through `pikelet mcp`, or compacted first. `rebase` moves a layer onto a
-different parent. [README.md](README.md#update-a-pack-without-rebuilding-it)
+different parent. [README.md](README.md#updating-a-pack)
 and [the CLI README](packages/pikelet/README.md#updating-a-pack-append-compact-rebase)
 cover the details.
 

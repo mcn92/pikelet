@@ -34,10 +34,10 @@ models/docs-student.bin                distilled query encoder (1.08 MiB)
 corpus/docs-corpus.json                doc chunks for result display
 ```
 
-The docs artifact is built from the worker-semantic-search snapshot:
+The docs artifact is built from the encoder-conformance docs snapshot:
 
 ```bash
-node -e "require('./pikelet.js').buildRangeArtifactFile(
+node -e "require('pikelet-wasm').buildRangeArtifactFile(
   'test/fixtures/encoder-conformance/assets/docs-index.bin',
   'examples/legacy/range-artifact-demo/static/public/artifacts/pikelet-docs.pikelet-range',
   { layout: 'rcm' })"

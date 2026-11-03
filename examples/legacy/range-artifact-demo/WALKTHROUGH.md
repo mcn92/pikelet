@@ -6,15 +6,22 @@
 npm run demo:artifact
 ```
 
-Expected output shape:
+It opens the committed docs artifact (`pikelet-docs.pikelet-range`, so it
+runs from a fresh clone). Expected output shape:
 
 ```txt
-Search Artifact demo: 1,000,000 vectors, 128D
-resident router: 83,254 records (38.9 MiB)
-lazy reads: 2,689 requests, 1.30 MiB fetched across 10 queries
-per query: 268.9 requests, 0.130 MiB, 26.6 rounds mean
-sample top-3 ids: 932085, 934876, 708177
+Search Artifact demo: 208 vectors, 384D
+resident router: 15 records (0.0 MiB)
+lazy reads: 161 requests, 0.12 MiB fetched across 10 queries
+per query: 16.1 requests, 0.012 MiB, 15.3 rounds mean
+sample top-3 ids: 90, 204, 181
 ```
+
+The rest of this walkthrough describes the SIFT1M artifact, which is not
+committed; pass `--artifact <file.pikelet-range>` to run the demo against it.
+At that scale the same demo printed 1,000,000 vectors (128D), an 83,254-record
+(38.9 MiB) resident router, and 268.9 requests / 0.130 MiB / 26.6 rounds per
+query.
 
 ## What It Demonstrates
 
@@ -26,7 +33,7 @@ The current v2 artifact separates the graph into:
 - a resident router segment: all upper-layer HNSW nodes
 - a lazy base segment: range-addressable level-0 records
 
-The demo opens the SIFT1M artifact, keeps only the router resident, and fetches
+On SIFT1M the demo keeps only the router resident, and fetches
 base-layer records on demand through the same `read(offset, length)` interface
 that an HTTP Range or Cloudflare R2 deployment would use.
 

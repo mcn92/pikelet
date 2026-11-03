@@ -3,8 +3,9 @@
 **Scope:** The full Pikelet vector-search system as built today — the C++ HNSW
 backends, the WASM C ABI, the JavaScript wrapper, the native benchmarking addon,
 serialization, and the Cloudflare Worker reference deployments.
-**Last updated:** 2026-09-22 (symbol names, export inventory, compaction
-ordering; the ground-up read dates from 2026-07-19)
+**Last updated:** 2026-11-03 (constructor limits, the compaction seed, the
+snapshot level checks; 2026-09-22 for symbol names, export inventory and
+compaction ordering; the ground-up read dates from 2026-07-19)
 **Status:** Reflects the current source tree under `packages/pikelet-wasm/` (`engine/`, `src/core/pikelet-core.js`,
 `native/`, `examples/legacy/reference-worker*`). This document was written from a ground-up
 re-read of the code. It covers the engine and its wrappers only; the
@@ -135,6 +136,15 @@ tunable.
 | `ef_construction` | Beam width during insert | |
 | `ef_search` | Beam width during query | Passed per query; the JS wrapper owns the mutable default. |
 
+Each backend's constructor calls `validate_config()` first: `dims` must be
+1–65536, `M` 2–128 (`M = 0` still means the default; `M = 1` would make
+`level_mult = 1/ln(1)` infinite), `max_elements` positive, and
+`max_elements * dims` and `max_elements * M0` must fit `size_t` (32 bits on
+wasm32, where a wrapped product would size an undersized arena). A violation
+throws `std::invalid_argument`; `pikelet_init` returns `INVALID_HANDLE` and the
+N-API `Init` throws a `RangeError`. `Pikelet.create()` mirrors the dims bound
+on the JS side.
+
 ### 3.2 Level assignment
 
 Identical in both backends: an exponential distribution
@@ -195,7 +205,10 @@ node's slot, or overrun the buffer on the last node). The uint8 backend's
   index into place; a reinsertion failure returns with the index unchanged
   and `out_map` cleared. (Holding both graphs for the duration of the loop
   costs peak memory; the earlier ordering, which freed the old graph first,
-  left the index half-cleared on that failure path.) Deletion state is reset
+  left the index half-cleared on that failure path.) The fresh index is
+  built with the seed the original was created with (kept in `seed_`), so
+  an index created with `seed: N` stays reproducible across a heavy
+  compaction rather than reseeding to the default 108. Deletion state is reset
   and the `old_id → new_id` map is returned through an `out_map`
   out-parameter. (`float_hnsw.hpp:390`,
   `uint8_float_hnsw.hpp:503`.)
@@ -584,6 +597,13 @@ hardened to fail closed rather than corrupt memory or abort the instance:
 Per-edge neighbor ids are also validated `< count_`, and vector/scale/offset
 components are rejected if non-finite (bit-level exponent check, since
 `std::isfinite` is unreliable under `-ffast-math`).
+
+The graph's levels must also be consistent: the entry point must sit at
+`max_level`, and every level-`l` edge must name a node whose own top level is
+at least `l`. Traversal indexes a node's upper-level edge list by level
+without a bounds check, so either inconsistency would read (and `insert()`
+would write) past that node's `upper_` vector. A snapshot failing either
+check is refused like any other malformed one.
 
 ## 10. Build Pipeline (WASM and Native)
 

@@ -19,7 +19,9 @@ shelf file), and optionally its immutable manifest `identity` — the sha256
 every mount verifies before serving, so a shelf pins exact knowledge
 states, not just locations. Packs are range-read off dumb HTTP: mounting
 the 649 MiB Wikipedia pack transfers ~52 MiB and each question costs ~127
-range requests; the file is never downloaded whole.
+range requests; the file is never downloaded whole. `pikelet mcp` caches
+the mount's digest-committed regions on disk, so a later mount of the same
+pack reads most of that locally.
 
 ## Adding a pack
 

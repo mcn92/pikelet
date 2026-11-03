@@ -18,9 +18,8 @@ const QUERIES = [
       "This assumes the essay is a sincere farming manual. It is satire: Swift's actual point is the " +
       "opposite of the literal proposal. Retrieval still surfaces passages that describe the proposal in " +
       "concrete, confident-sounding detail (yields, culinary uses) — because that content is genuinely in " +
-      "the corpus. Distance alone does not flag the false premise; only reading the passage does. (This " +
-      "21-record corpus is too small to calibrate abstention, so matchQuality reports 'unscored' rather " +
-      "than strong/weak/none either way — see the README for what that means.)",
+      "the corpus. matchQuality measures whether the pack covers the topic, and it does, so it does not " +
+      "flag the false premise either; only reading the passage does.",
   },
 ];
 
