@@ -1032,16 +1032,22 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
             residentBytes < 64 * 1024 && fs.readdirSync(path.join(diskDir, 'small')).length === 1);
         await diskCold.close();
         const diskWarmSrc = countingSource();
-        const diskWarm = await openPikeletFile(diskWarmSrc, { blobCache: diskBlobCache(diskDir) });
+        // A store that has served a log hit holds a read handle; Node 26
+        // treats a FileHandle left to garbage collection as an error, so
+        // every instance here is closed.
+        const diskWarmCache = diskBlobCache(diskDir);
+        const diskWarm = await openPikeletFile(diskWarmSrc, { blobCache: diskWarmCache });
         const diskWarmBytes = diskWarmSrc.bytes;
         check('diskBlobCache: a second process-style open reads the prefix from disk',
             diskWarmBytes === openBytes - residentBytes && idsOf(await diskWarm.query(probe, { k: 5 })) === expected,
             `${diskWarmBytes} vs ${openBytes} - ${residentBytes}`);
         await diskWarm.close();
+        await diskWarmCache.close();
         check('diskBlobCache: get on a missing key is null', await disk.get('0'.repeat(64)) === null);
         let badKey = null;
         try { await disk.get('../escape'); } catch (err) { badKey = err; }
         check('diskBlobCache: a key that is not a sha256 digest is refused', /sha256/.test(badKey?.message || ''));
+        await disk.close();
 
         const lruDir = path.join(tmp, 'blobs-lru');
         // Entries of 64 KiB and up are files, under maxBytes.
@@ -1105,6 +1111,7 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
         const off = diskBlobCache(path.join(tmp, 'blobs-nolog'), { smallMaxBytes: 0 });
         await off.put(smallKey(1), filled(1, 100)); await off.flush();
         check('diskBlobCache: smallMaxBytes 0 stores no small entries', await off.get(smallKey(1)) === null);
+        await off.close();
         check('defaultBlobCacheDir honors PIKELET_CACHE_DIR, then XDG_CACHE_HOME',
             defaultBlobCacheDir({ PIKELET_CACHE_DIR: '/x' }) === path.resolve('/x', 'blobs')
             && defaultBlobCacheDir({ XDG_CACHE_HOME: '/y' }) === path.join(path.resolve('/y'), 'pikelet', 'blobs'));
