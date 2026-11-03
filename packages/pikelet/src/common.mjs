@@ -224,7 +224,7 @@ const CLI_VERSION = OWN_PACKAGE.version;
 // than carrying a second hardcoded one that drifts.
 const PIKELET_WASM_RANGE = OWN_PACKAGE.dependencies['pikelet-wasm'];
 const DEFAULT_PREFIX = 'Represent this sentence for searching relevant passages: ';
-const CONFIG_SCHEMA_URL = 'https://raw.githubusercontent.com/mcn92/pikelet/main/pikelet/schemas/v1/pikelet.config.schema.json';
+const CONFIG_SCHEMA_URL = 'https://raw.githubusercontent.com/mcn92/pikelet/main/packages/pikelet/schemas/v1/pikelet.config.schema.json';
 const DEFAULT_CONFIG = Object.freeze({
   chunking: { targetTokens: 256, overlapPercent: 15 },
   embedding: {

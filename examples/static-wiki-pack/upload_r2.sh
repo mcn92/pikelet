@@ -23,7 +23,7 @@ put pack/corpus.bin.p1 "$DATA/corpus.split.ab" application/octet-stream
 rm "$DATA"/corpus.split.*
 
 # --- pack: everything else ---
-put pack/wiki.pancake-sketch      "$DATA/wiki.pancake-sketch"      application/octet-stream
+put pack/wiki.pikelet-sketch      "$DATA/wiki.pikelet-sketch"      application/octet-stream
 put pack/corpus-offsets.u32       "$DATA/corpus-offsets.u32"       application/octet-stream
 put pack/wiki-vocab.bloom         "$DATA/wiki-vocab.bloom"         application/octet-stream
 put pack/wiki-abstention.json     "$DATA/wiki-abstention.json"     application/json

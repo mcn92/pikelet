@@ -11,7 +11,7 @@ import { openDocsSearch, docsAssetPaths } from './search-reader.mjs';
 
 const fixturesPath = path.join(
     path.dirname(new URL(import.meta.url).pathname),
-    '..', 'legacy', '03-edge-docs-search', 'fixtures', 'abstention-golden.json'
+    '..', '..', 'test', 'fixtures', 'encoder-conformance', 'abstention-golden.json'
 );
 const fixtures = JSON.parse(fs.readFileSync(fixturesPath, 'utf8'));
 

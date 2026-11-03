@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/mcn92/pikelet/main/pikelet/schemas/v1/pikelet.config.schema.json",
+  "$id": "https://raw.githubusercontent.com/mcn92/pikelet/main/packages/pikelet/schemas/v1/pikelet.config.schema.json",
   "type": "object",
   "required": ["version", "name", "source", "chunking", "embedding", "index", "validation"],
   "properties": {

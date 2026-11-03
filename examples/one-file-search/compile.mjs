@@ -2,7 +2,7 @@
 // Compile the five Search Artifact components into one .pikelet file per
 // spec/COMPLETE_PROFILE.md (Draft 1), and inspect/verify the result:
 //
-//   node compile.mjs                 # compile 03's assets -> pikelet-docs.pikelet
+//   node compile.mjs                 # compile the encoder-conformance assets -> pikelet-docs.pikelet
 //   node compile.mjs --inspect pikelet-docs.pikelet
 //
 // This is the kind-1 (student-inline) compiler over the docs corpus; see
@@ -76,7 +76,7 @@ async function compile(paths, outPath) {
         recommendedRerank: rerankSweep.recommendedRerank,
     });
     const goldenQueries = JSON.parse(fs.readFileSync(path.join(
-        path.dirname(paths.manifestPath), '..', 'fixtures', 'abstention-golden.json'), 'utf8'));
+        path.dirname(paths.manifestPath), '..', 'abstention-golden.json'), 'utf8'));
 
     // Corpus layout v2: per-record digests behind a page table, so each
     // hydrated record verifies on its own range read (spec 3.5, Draft 2).

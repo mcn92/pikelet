@@ -129,9 +129,9 @@ export async function openDocsSearch({ manifestPath, indexPath, encoderPath, cal
     };
 }
 
-/** Convenience: open directly over 03's committed assets. */
+/** Convenience: open directly over the committed encoder-conformance assets. */
 export function docsAssetPaths() {
-    const assets = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'legacy', '03-edge-docs-search', 'assets');
+    const assets = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'test', 'fixtures', 'encoder-conformance', 'assets');
     return {
         manifestPath: path.join(assets, 'docs-manifest.json'),
         indexPath: path.join(assets, 'docs-index.bin'),

@@ -1,36 +1,38 @@
 #!/usr/bin/env node
 // Encode a BEIR dataset's corpus + test queries the way `embedding.mode:
-// "workers-ai"` does — BGE-small-en-v1.5 through transformers.js — so the
-// CLI's DEFAULT mode gets a relevance number on the same ladder as the
-// inline MiniLM (B-F) and Arctic-XS (G-H) rows.
+// "workers-ai"` does — BGE-small-en-v1.5 through the CLI's own build-time
+// encoder — so the CLI's DEFAULT mode gets a relevance number on the same
+// ladder as the inline MiniLM (B-F) and Arctic-XS (G-H) rows.
 //
 // Why this is a separate script rather than a flag on encode-pikelet.mjs:
 // workers-ai is a SPLIT-ENCODER mode. The corpus is embedded locally at
-// build time with transformers.js (Xenova/bge-small-en-v1.5, the hfModel in
-// MODEL_MAP), while queries are embedded at request time by Cloudflare's
-// AI binding (@cf/baai/bge-small-en-v1.5, the workersAiModel). Both halves
-// are the same upstream BGE-small-en-v1.5, which is the premise the whole
-// mode rests on and what `assertEncoderManifest` pins by name.
+// build time with the inline-transformer kernel running the pinned u8 export
+// of BAAI/bge-small-en-v1.5 (MODEL_MAP's weights), while queries are
+// embedded at request time by Cloudflare's AI binding
+// (@cf/baai/bge-small-en-v1.5, the workersAiModel). Both halves are the same
+// upstream BGE-small-en-v1.5, which is the premise the whole mode rests on
+// and what `assertEncoderManifest` pins by name.
 //
 // WHAT THIS MEASURES, AND WHAT IT DOES NOT. This encodes BOTH halves
-// locally with the Xenova ONNX export. That measures the MODEL, which is
-// what the ladder is for. It does NOT exercise a real `env.AI.run` call, so
-// it cannot detect drift between Cloudflare's hosted copy and this ONNX
-// export (different quantization, runtime, possibly a different snapshot) —
-// spec risk R1, which `assertEncoderManifest` guards by NAME, not by value.
-// Confirming the two agree numerically needs a live Workers AI account; see
-// the README's "what config I does not cover" note. Do not read these rows
-// as validating the Cloudflare call path.
+// locally with the kernel, through embed.mjs's own embedChunks, so the
+// corpus vectors are the ones a real build produces. It does NOT exercise a
+// real `env.AI.run` call, so it cannot detect drift between Cloudflare's
+// hosted copy and the local u8 export — spec risk R1, which
+// `assertEncoderManifest` guards by NAME, not by value. Do not read these
+// rows as validating the Cloudflare call path. (Before 0.12.0 this script
+// encoded with transformers.js's ONNX export. The 0.12.0 CHANGELOG entry
+// records the switch: kernel passage vectors scored against live Workers AI
+// query vectors give SciFact nDCG@10 0.6991, against 0.6992 before.)
 //
-// The prefix policy is the contract (PIKELET_CLI_SPEC.md §Stage 3): BGE
-// v1.5 retrieval depends on an asymmetric query-side instruction prefix and
-// raw passages. DEFAULT_CONFIG.embedding.prefixPolicy in the CLI is
+// The prefix policy is the contract: BGE v1.5 retrieval depends on an
+// asymmetric query-side instruction prefix and raw passages.
+// DEFAULT_CONFIG.embedding.prefixPolicy in the CLI is
 // { passage: '', query: DEFAULT_PREFIX } and encoder.workers-ai.js applies
 // manifest.prefixPolicy.query before calling the AI binding, so this script
 // applies exactly the same split. --no-prefix ablates it, the same way
 // ablate-query-prefix.mjs does for Arctic-XS.
 //
-// Usage: node benchmarks/beir/encode-workers-ai.mjs <dataset> [--no-prefix] [--batch 16]
+// Usage: node benchmarks/beir/encode-workers-ai.mjs <dataset> [--no-prefix]
 // Reads:  work/<dataset>/records.jsonl, cache/<dataset>/queries.jsonl,
 //         cache/<dataset>/qrels/test.tsv
 // Writes: work/<dataset>/vectors-corpus-workersai.f32
@@ -44,22 +46,14 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import os from 'node:os';
 import { DEFAULT_PREFIX, MODEL_MAP } from '../../packages/pikelet/src/common.mjs';
-import { tensorToVectors } from '../../packages/pikelet/src/embed.mjs';
+import { embedChunks } from '../../packages/pikelet/src/embed.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const dataset = args[0];
 const noPrefix = args.includes('--no-prefix');
 if (!dataset || dataset.startsWith('--')) {
-  console.error('usage: node benchmarks/beir/encode-workers-ai.mjs <dataset> [--no-prefix] [--batch 16]');
-  process.exit(1);
-}
-// embed.mjs batches 16 at a time; keep the same default so this measures the
-// shipped batching, and allow an override only for throughput experiments.
-const batchArg = args.indexOf('--batch');
-const BATCH = batchArg === -1 ? 16 : Number.parseInt(args[batchArg + 1], 10);
-if (!Number.isInteger(BATCH) || BATCH < 1 || BATCH > 512) {
-  console.error('--batch must be an integer between 1 and 512');
+  console.error('usage: node benchmarks/beir/encode-workers-ai.mjs <dataset> [--no-prefix]');
   process.exit(1);
 }
 
@@ -107,46 +101,32 @@ const queries = await readJsonl(path.join(cacheDir, 'queries.jsonl'));
 const testIds = testQueryIds();
 const testQueries = queries.filter((q) => testIds.has(q._id));
 
-let transformers;
-try {
-  transformers = await import('@xenova/transformers');
-} catch (error) {
-  console.error(`Failed to load @xenova/transformers (workers-ai's build-time encoder): ${error.message}`);
-  process.exit(1);
-}
-
-// Same pipeline construction as embed.mjs's workers-ai branch: the quantized
-// ONNX export of the MODEL_MAP hfModel.
-console.error(`loading ${model.hfModel} (quantized ONNX; first run downloads ~30 MB to the platform cache)...`);
-const tLoad = performance.now();
-const extractor = await transformers.pipeline('feature-extraction', model.hfModel, { quantized: true });
-const loadMs = performance.now() - tLoad;
-console.error(`encoder ready in ${(loadMs / 1000).toFixed(1)}s`);
-
 // embed.mjs pools/normalizes from embeddingConfig; DEFAULT_CONFIG.embedding
-// sets mean + normalize true for this mode.
+// sets mean + normalize true for this mode. The prefixes are applied below,
+// so the declaration's own prefixPolicy stays empty.
 const POOLING = 'mean';
 const NORMALIZE = true;
+const embedConfig = {
+  embedding: {
+    mode: 'workers-ai',
+    buildModel: BUILD_MODEL,
+    dims: DIM,
+    pooling: POOLING,
+    normalize: NORMALIZE,
+    prefixPolicy: { passage: '', query: '' },
+  },
+};
 
 async function embedTexts(texts, label) {
-  const flat = new Float32Array(texts.length * DIM);
   const t0 = performance.now();
-  for (let i = 0; i < texts.length; i += BATCH) {
-    const batch = texts.slice(i, i + BATCH);
-    const output = await extractor(batch, { pooling: POOLING, normalize: NORMALIZE });
-    const vectors = tensorToVectors(output, DIM);
-    if (vectors.length !== batch.length) {
-      throw new Error(`${label}: expected ${batch.length} vectors from batch at ${i}, got ${vectors.length}`);
-    }
-    for (let j = 0; j < vectors.length; j++) {
-      if (vectors[j].length !== DIM) throw new Error(`${label}: vector ${i + j} has ${vectors[j].length} dims, expected ${DIM}`);
-      flat.set(vectors[j], (i + j) * DIM);
-    }
-    const done = Math.min(i + BATCH, texts.length);
-    if (i % (BATCH * 25) === 0 || done === texts.length) {
-      const rate = done / ((performance.now() - t0) / 1000);
-      console.error(`${label} ${done}/${texts.length} (${rate.toFixed(1)}/s)`);
-    }
+  const vectors = await embedChunks(texts.map((text) => ({ text })), embedConfig, (line) => console.error(`${label}: ${line}`), workDir);
+  if (vectors.length !== texts.length) {
+    throw new Error(`${label}: expected ${texts.length} vectors, got ${vectors.length}`);
+  }
+  const flat = new Float32Array(texts.length * DIM);
+  for (let i = 0; i < vectors.length; i++) {
+    if (vectors[i].length !== DIM) throw new Error(`${label}: vector ${i} has ${vectors[i].length} dims, expected ${DIM}`);
+    flat.set(vectors[i], i * DIM);
   }
   return { flat, ms: performance.now() - t0 };
 }
@@ -155,7 +135,7 @@ async function embedTexts(texts, label) {
 const passagePrefix = '';
 const queryPrefix = noPrefix ? '' : DEFAULT_PREFIX;
 
-console.error(`encoding ${records.length} corpus records (batch ${BATCH}, passage prefix ${passagePrefix ? 'ENABLED' : 'none'})...`);
+console.error(`encoding ${records.length} corpus records (passage prefix ${passagePrefix ? 'ENABLED' : 'none'})...`);
 const corpus = await embedTexts(records.map((r) => `${passagePrefix}${r.text}`), 'corpus');
 
 console.error(`encoding ${testQueries.length} test queries (query prefix ${noPrefix ? 'DISABLED (ablation)' : 'ENABLED'})...`);
@@ -169,15 +149,15 @@ writeFileSync(path.join(workDir, `encode-workers-ai${suffix}.json`), JSON.string
   dataset,
   mode: 'workers-ai',
   build_model: BUILD_MODEL,
-  hf_model: model.hfModel,          // what encoded these vectors, locally
+  hf_model: model.hfModel,          // the upstream model behind the local weights
+  build_weights: model.weights.file, // what encoded these vectors, locally (u8 kernel)
+  build_weights_sha256: model.weights.sha256,
   workers_ai_model: model.workersAiModel, // what would encode queries in production
   measures_cloudflare_call: false,  // see the header note: model only, not the AI binding
   pooling: POOLING,
   normalize: NORMALIZE,
-  batch: BATCH,
   passage_prefix: passagePrefix,
   query_prefix: queryPrefix,
-  encoder_load_ms: loadMs,
   corpus_count: records.length,
   corpus_encode_ms: corpus.ms,
   query_count: testQueries.length,

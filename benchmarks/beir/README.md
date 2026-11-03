@@ -31,12 +31,16 @@ has only config A so far; TREC-COVID has not been run):
 - **H** Arctic-XS encoder + affine-u8 sketch artifact + BM25, hybrid RRF —
   parallel to E, so an encoder decision is checked against what actually
   ships (hybrid), not dense-only in isolation
-- **I** BGE-small-en-v1.5 (`Xenova/bge-small-en-v1.5` via transformers.js) —
-  the encoder `embedding.mode: "workers-ai"` uses at build time, which is the
-  CLI's **default** mode. Scored through query-B/C/D/E with
-  `--vectors workersai`, so the retrieval logic is identical to B-E and only
-  the encoder changes. **This measures the model, not the Workers AI call**;
-  see the note below.
+- **I** BGE-small-en-v1.5 — the encoder `embedding.mode: "workers-ai"` uses
+  at build time, which is the CLI's **default** mode. Scored through
+  query-B/C/D/E with `--vectors workersai`, so the retrieval logic is
+  identical to B-E and only the encoder changes. **This measures the model,
+  not the Workers AI call**; see the note below. The rows below were encoded
+  with transformers.js's `Xenova/bge-small-en-v1.5` ONNX export, which the
+  CLI used before 0.12.0; `encode-workers-ai.mjs` now encodes with the CLI's
+  own u8 BGE kernel, whose passage vectors are within 0.997-0.999 cosine of
+  that export's (SciFact nDCG@10 0.6991 against 0.6992, per the 0.12.0
+  CHANGELOG entry).
 
 See `config.json` for the frozen dataset list committed ahead of any
 results.
@@ -62,7 +66,7 @@ benchmarks/beir/
                            in-memory lexical index (complete/builder.mjs buildLexicalSegment) and a real
                            PikeletSketchArtifact from index.export(), fuses exactly as complete/index.mjs does
   query-F.mjs              config F: BM25 lexical only (retrieval: 'lexical')
-  encode-workers-ai.mjs    config I: BGE-small-en-v1.5 via transformers.js — the encoder
+  encode-workers-ai.mjs    config I: BGE-small-en-v1.5 through the CLI's u8 kernel — the encoder
                            `embedding.mode: "workers-ai"` (the CLI's DEFAULT mode) uses at build
                            time -> vectors-{corpus,queries}-workersai.f32. Queries carry the
                            asymmetric BGE prefix, passages do not. Measures the MODEL only, never
@@ -376,10 +380,11 @@ much closer to that than ArguAna's passage-vs-passage argument retrieval).
 Swapping the shipped default encoder on the strength of a single favorable
 dataset, when the other two show a real regression, would trade a measured
 loss on the more representative workload for a measured gain on the least
-representative one. This matches the Wikipedia-scale finding from
-`calibration-lexical-blindspot-2026-09-11`: Arctic-XS's earlier apparent
-"improvement" was traced to a calibration blind spot the encoder swap
-happened to route around, not a general retrieval-quality edge — this BEIR
+representative one. This matches the earlier Wikipedia-scale finding
+(2026-09-11): Arctic-XS's apparent "improvement" there was traced to a
+blind spot in the calibration fit, which scored vector evidence only and
+could not see BM25, and the encoder swap happened to route around it. It
+was not a general retrieval-quality edge — this BEIR
 run is independent confirmation that the encoder itself is not the fix.
 `--encoder-model`/`--encoder-weights`/`--encoder-pooling`/
 `--encoder-query-prefix` remain available as a CLI-level opt-in for a
