@@ -6,9 +6,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 export class PikeletMcpClient {
-  constructor({ packs, timeoutMs = 60_000 }) {
+  constructor({ packs, extraArgs = [], timeoutMs = 60_000 }) {
     const bin = path.join(REPO_ROOT, 'packages', 'pikelet', 'bin', 'pikelet.mjs');
-    const args = ['mcp', ...packs.flatMap((p) => ['--pack', p])];
+    const args = ['mcp', ...packs.flatMap((p) => ['--pack', p]), ...extraArgs];
     this.timeoutMs = timeoutMs;
     this.nextId = 1;
     this.messages = [];

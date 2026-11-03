@@ -11,8 +11,9 @@ caller opts out), and **F is lexical-only** (`retrieval: 'lexical'`). A
 benchmark that only ever measured A-D was reporting a mode the reader almost
 never runs in practice.
 
-The ladder now covers eight points on SciFact, NFCorpus, and ArguAna (FiQA
-has only config A so far; TREC-COVID has not been run):
+The ladder covers nine points (A-I) on SciFact and NFCorpus, A-H on
+ArguAna, and A-F on FiQA (no Arctic-XS or BGE encode yet); TREC-COVID has
+not been run:
 
 - **A** upstream MiniLM float exhaustive (reference baseline, not Pikelet)
 - **B** Pikelet encoder + float32 exhaustive
@@ -21,8 +22,9 @@ has only config A so far; TREC-COVID has not been run):
   `PikeletSketchArtifact`/HNSW-equivalent search, but vector-only)
 - **E** Pikelet encoder + affine-u8 sketch artifact + BM25, hybrid RRF — **the
   production default**, same fusion math as `complete/index.mjs` exactly
-  (RRF_K=60, BM25 candidates within a factor of 1.5 of the top lexical score
-  join the exact rerank as `extraCandidates` before RRF runs)
+  (weighted RRF: `rrfK` 60, `lexicalWeight` 0.5, `guardMargin` 0.05; BM25
+  candidates within a factor of 1.5 of the top lexical score join the exact
+  rerank as `extraCandidates` before fusion runs)
 - **F** BM25 lexical only (`retrieval: 'lexical'`)
 - **G** Arctic-XS encoder (Snowflake/snowflake-arctic-embed-xs, CLS pooling)
   + affine-u8 sketch artifact, dense only — directly parallel to D, isolating
@@ -86,7 +88,7 @@ benchmarks/beir/
   conformance/             golden-vector test proving quantize.mjs matches the real engine exactly (see below)
   cache/                  downloaded datasets (gitignored)
   work/                   converted records, id maps, embedded vectors, raw runs (gitignored)
-  results/                scored JSON output, one file per dataset+configuration (gitignored)
+  results/                scored JSON output, one file per dataset+configuration (tracked)
 ```
 
 ## Why the official host, not the `beir` pip package's default
@@ -179,6 +181,10 @@ node benchmarks/beir/conformance/test-quantization.mjs   # golden-vector proof q
 | NFCorpus | G Arctic-XS / dense only | 0.3085 | 0.1462 | 0.2607 | 5.9 |
 | NFCorpus | G-noprefix (Arctic-XS, no query prefix) | 0.1546 | 0.0777 | 0.1818 | 5.5 |
 | NFCorpus | H Arctic-XS / hybrid | 0.3283 | 0.1558 | 0.2729 | 5.6 |
+| NFCorpus | I BGE-small / float exhaustive | 0.3425 | 0.1625 | 0.3190 | 2.4 |
+| NFCorpus | I BGE-small / affine-u8 exhaustive | 0.3432 | 0.1622 | 0.3183 | 2.4 |
+| NFCorpus | I BGE-small / affine-u8, dense only | 0.3438 | 0.1627 | 0.3195 | 0.2 |
+| NFCorpus | **I BGE-small / hybrid** | **0.3569** | **0.1682** | 0.3172 | 5.1 |
 | ArguAna (1406q) | A upstream float exhaustive | 0.5017 | 0.7909 | 0.9772 | 7.8 |
 | ArguAna | B Pikelet encoder / float exhaustive | 0.4875 | 0.7824 | 0.9772 | 6.1 |
 | ArguAna | C Pikelet encoder / affine-u8 exhaustive | 0.4889 | 0.7831 | 0.9772 | 6.3 |
@@ -307,7 +313,8 @@ This ladder does not yet include a
 dataset where the two rankings meaningfully disagree at the top (that would
 be the interesting case to add next — a corpus with real known-item/keyword
 lookups, closer to what surfaced the calibration-side lexical blind spot;
-see `packages/pikelet/src/calibrate.mjs`'s `fusedTop`/`LEXICAL_CUTOFF`).
+see `LEXICAL_CUTOFF` and `fuseCandidates()` in
+`packages/pikelet-wasm/complete/index.mjs` and `complete/fusion.mjs`).
 
 **`config.json`'s `hybridWeight: 0.35` field is still stale/unused dead
 config**, but the reason has changed: production's fusion does now carry a
@@ -397,8 +404,8 @@ fallback): mean cosine similarity between Pikelet-encoder and
 float-reference query embeddings for identical SciFact query text is 0.9998
 (min 0.9998, max 0.9999).
 
-**Windowed mean-pooling rate (documents exceeding the inline encoder's
-128-token window) varies a lot by dataset**: SciFact 5073/5183 (97.9%),
+**Windowed mean-pooling rate (documents exceeding the 128-token window
+these runs used) varies a lot by dataset**: SciFact 5073/5183 (97.9%),
 ArguAna 6595/8674 (76.0%). Despite both being mostly windowed, SciFact held
 quality; ArguAna is also where the real encoder-quantity drop showed up —
 worth investigating whether these two facts are related (windowing cost
@@ -438,7 +445,7 @@ scores to full precision) — confirms determinism, not just speed.
 `Pikelet.create()`'s `export()` is an opaque whole-index snapshot; there is
 no JS-callable method to read back a stored row's quantized bytes or
 (scale, offset). `quantize.mjs` reimplements the engine's exact per-row
-affine scheme (`src/uint8_float_hnsw.hpp:206-234`: min/max range, `scale =
+affine scheme (`insert()` in `packages/pikelet-wasm/engine/uint8_float_hnsw.hpp`: min/max range, `scale =
 range/255`, round-half-up, cosine metric normalizes before quantizing) so
 config C measures the real algorithm, not an approximation of it.
 `conformance/test-quantization.mjs` proves this with golden vectors

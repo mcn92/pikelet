@@ -65,7 +65,7 @@ node benchmarks/range-proof/mcp-proof.mjs [path/to/pack.pikelet]
 ```
 
 The other half of the demo: mounts the pack over HTTP into the *real*
-`pikelet mcp` server (`packages/pikelet/bin/pikelet.mjs mcp <url>#<sha256>`) as a
+`pikelet mcp` server (`packages/pikelet/bin/pikelet.mjs mcp <url>#<sha256> --no-cache`) as a
 subprocess, then drives it as an actual MCP client would — JSON-RPC 2.0
 over stdio (`initialize`, `tools/list`, `tools/call` with `list_packs` and
 `search`) — exactly what an agent framework's LLM tool caller does, not a
@@ -74,7 +74,14 @@ direct call into the reader library. Reports each query's MCP response
 server's own range-request count and bytes for that call, pulled from the
 server's independent request log — so the "answer + citations" side and
 the "what actually went over the wire" side are shown from two different
-vantage points that have to agree.
+vantage points that have to agree. `--no-cache` keeps every run a cold
+mount: without it the on-disk blob cache (keyed by digest, not URL) would
+serve a repeat run's resident index and encoder locally.
+
+`llm-proof.mjs` does the same through headless Claude: each question spawns
+an independent `claude -p` restricted to the pack's MCP tools
+(`--strict-mcp-config`), again with `--no-cache`, so every question pays a
+fresh process's mount.
 
 ## What this is not
 

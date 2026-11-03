@@ -6,8 +6,8 @@ vectors (see `benchmarks/beir/README.md`). This directory proves that
 reimplementation is exact, not just plausible.
 
 - `gen-golden-quantization.cpp` — the quantization logic copied **verbatim**
-  from `src/uint8_float_hnsw.hpp:198-234` (the real engine's `insert()`
-  cosine path), compiled standalone with plain `g++` (no Emscripten
+  from `packages/pikelet-wasm/engine/uint8_float_hnsw.hpp` (the quantize
+  block of the real engine's `insert()`, cosine path), compiled standalone with plain `g++` (no Emscripten
   needed — this only exercises the scalar math, not the WASM bindings).
   Emits 5 known rows (input, normalized, scale, offset, quantized bytes,
   a query vector, and the exact float dot product) as

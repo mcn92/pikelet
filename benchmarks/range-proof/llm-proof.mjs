@@ -101,7 +101,9 @@ async function main() {
   const mcpConfigPath = path.join(ROOT, '.tmp-test-work', 'wiki-mcp-config.json');
   fs.mkdirSync(path.dirname(mcpConfigPath), { recursive: true });
   fs.writeFileSync(mcpConfigPath, JSON.stringify({
-    mcpServers: { 'wiki-pack': { command: 'node', args: [PIKELET_BIN, 'mcp', url] } },
+    // --no-cache: each query is meant to pay a fresh process's mount; the
+    // on-disk blob cache would otherwise serve every run after the first.
+    mcpServers: { 'wiki-pack': { command: 'node', args: [PIKELET_BIN, 'mcp', url, '--no-cache'] } },
   }, null, 2));
 
   console.log(`MCP config points at: ${url}`);

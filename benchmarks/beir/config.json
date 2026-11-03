@@ -12,5 +12,5 @@
   "hybridWeight": 0.35,
   "encoder": "pikelet-bundled-minilm",
   "seed": 1337,
-  "notes": "Frozen before running results. Do not tune these values based on observed scores without recording both a 'default configuration' and a separately labeled 'BEIR-tuned configuration' result. hybridWeight is stale/unused: complete/index.mjs's RRF has no weight term (unweighted 1/(RRF_K+rank) sum), and query-E.mjs/query-H.mjs correctly ignore this field rather than documenting a knob that doesn't exist in the shipped reader. See benchmarks/beir/README.md's 'Hybrid RRF vs. dense only' section."
+  "notes": "Frozen before running results. Do not tune these values based on observed scores without recording both a 'default configuration' and a separately labeled 'BEIR-tuned configuration' result. hybridWeight is stale/unused: the shipped fusion's weight is fuseCandidates()'s lexicalWeight (FUSION_DEFAULTS in complete/fusion.mjs, 0.5, with guardMargin 0.05), not this field, and query-E.mjs/query-H.mjs correctly ignore it; each run records the fusion it used in system.fusion. See benchmarks/beir/README.md's 'Hybrid RRF vs. dense only' section."
 }

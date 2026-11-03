@@ -2,7 +2,7 @@
 // Configuration C — Pikelet encoder / affine-u8 exhaustive.
 //
 // Corpus vectors are quantized with Pikelet's exact row-wise affine u8
-// scheme (src/uint8_float_hnsw.hpp:206-234; reimplemented in quantize.mjs
+// scheme (packages/pikelet-wasm/engine/uint8_float_hnsw.hpp; reimplemented in quantize.mjs
 // since the engine exposes no readback API for stored rows) and searched
 // exhaustively — no HNSW, no approximation. This isolates what corpus
 // quantization costs, holding the encoder fixed at B's (Pikelet's) output.
@@ -80,7 +80,7 @@ const testIds = testQueryIds();
 const dim = corpus.dim;
 
 // Quantize corpus rows once (cosine metric: normalize, then affine-u8
-// quantize — src/uint8_float_hnsw.hpp:198-234).
+// quantize — packages/pikelet-wasm/engine/uint8_float_hnsw.hpp).
 const quantized = new Array(corpus.count);
 for (let i = 0; i < corpus.count; i++) {
   const raw = corpus.flat.subarray(i * dim, (i + 1) * dim);

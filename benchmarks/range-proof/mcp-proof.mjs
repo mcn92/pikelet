@@ -52,9 +52,11 @@ async function main() {
   console.log('='.repeat(72));
   console.log('Start the real pikelet mcp server, mounted at that URL');
   console.log('='.repeat(72));
-  console.log(`$ pikelet mcp ${url}`);
+  console.log(`$ pikelet mcp ${url} --no-cache`);
   console.log();
-  const mcp = new PikeletMcpClient({ packs: [url] });
+  // --no-cache: the request log below is the point, and the on-disk blob
+  // cache would serve a repeat run's mount and encoder without a request.
+  const mcp = new PikeletMcpClient({ packs: [url], extraArgs: ['--no-cache'] });
   await mcp.initialize();
 
   const { packs } = await mcp.call('list_packs');

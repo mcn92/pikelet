@@ -1,5 +1,6 @@
 // Standalone conformance harness: emits known quantization rows using the
-// EXACT same code path as src/uint8_float_hnsw.hpp's insert() (copied
+// EXACT same code path as packages/pikelet-wasm/engine/uint8_float_hnsw.hpp's
+// insert() (copied
 // verbatim below, since the real class is templated on the whole HNSW graph
 // and not easily invoked standalone without the full engine). Compiled with
 // plain g++, no Emscripten needed — this only tests the quantization math.
@@ -9,7 +10,8 @@
 #include <vector>
 #include <random>
 
-// Verbatim from src/uint8_float_hnsw.hpp:198-234 (cosine path)
+// Verbatim from the quantize block of insert() in
+// packages/pikelet-wasm/engine/uint8_float_hnsw.hpp (cosine path)
 void quantize_row(const float* src, size_t dims, std::vector<uint8_t>& q, float& scale, float& offset) {
     float vmin = src[0], vmax = src[0];
     for (size_t d = 1; d < dims; d++) {

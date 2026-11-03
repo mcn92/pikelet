@@ -79,7 +79,8 @@ than the corpus, or `gap` cannot occur.
 
 `fusion-sim.mjs` fetches the reader's vector, lexical and hybrid lists once
 per question and scores each fusion rule as a pure function of the first
-two; its `rrf60` rule must reproduce the shipped hybrid ranks (it reports
+two; its `defaults` rule (the reader's `FUSION_DEFAULTS`) must reproduce
+the shipped hybrid ranks (it reports
 how many it matched — the residue is phrase pinning, which it omits). Add
 a candidate rule there and read its @1/@3 against `shipped` and `oracle`
 (the better of vector and lexical per question) before touching the

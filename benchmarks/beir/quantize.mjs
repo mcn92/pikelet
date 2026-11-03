@@ -1,10 +1,10 @@
 // Row-wise affine u8 quantization, matching Pikelet's engine exactly
-// (src/uint8_float_hnsw.hpp:206-234 — insert(), cosine-normalized-then-quantized).
+// (packages/pikelet-wasm/engine/uint8_float_hnsw.hpp — insert(), cosine-normalized-then-quantized).
 // Reimplemented here because the WASM index exposes no readback API for
 // stored quantized bytes (Pikelet.create()'s export() is an opaque
 // whole-index snapshot) — see benchmarks/beir/README.md quantization note.
 
-// L2-normalize (cosine metric normalizes before quantizing: uint8_float_hnsw.hpp:198-200).
+// L2-normalize (cosine metric normalizes before quantizing: uint8_float_hnsw.hpp, insert()).
 export function l2normalize(vec) {
   let s = 0;
   for (let d = 0; d < vec.length; d++) s += vec[d] * vec[d];

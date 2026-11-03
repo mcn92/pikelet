@@ -97,9 +97,9 @@ const COVERAGE_BATCH_COUNT = 5;
 // Only BM25 hits within this fraction of the top lexical score join fusion.
 // Common query terms give every matching document a near-tied score (idf
 // collapses them flat); a wide cutoff let that tied mass ride into fusion on
-// a technicality. Kept identical to pikelet/src/calibrate.mjs's
-// LEXICAL_CUTOFF so calibration is fit against the same fusion the reader
-// actually serves.
+// a technicality. Calibration (pikelet/src/calibrate.mjs) gathers its
+// evidence through this reader's own retrieval, so it is fit against the
+// same cutoff and fusion the reader serves.
 export const LEXICAL_CUTOFF = 1.5;
 // Query-interpretation segments above this size open lazily (kind 3's
 // inline encoder is ~25 MiB); smaller ones keep the one-read eager path.

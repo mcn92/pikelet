@@ -8,8 +8,8 @@
 // Per answerable question it fetches, once each, the reader's own lists:
 // vector order (ids + exact distances), lexical order (BM25 hits after the
 // reader's cutoff, each with its exact distance), and the shipped hybrid
-// order (to validate the simulation: the 'rrf60' rule must reproduce it,
-// give or take phrase pinning). Every rule is then a pure function of
+// order (to validate the simulation: the 'defaults' rule, the reader's
+// FUSION_DEFAULTS, must reproduce it, give or take phrase pinning). Every rule is then a pure function of
 // those lists. Ranks are the position of the first result carrying the
 // evidence (scripts/lib/relevance-sets.mjs: source-record ids when the
 // set names them, near-verbatim quotes otherwise).
@@ -66,7 +66,7 @@ const byScore = (rows, score) => rows
 // RRF and the vector-margin guard are the reader's own fuseCandidates
 // (complete/fusion.mjs), fed the pool in exact-distance order the way the
 // reader's rerank output is; a rule that wins here is the rule that ships.
-const { fuseCandidates } = await import(path.join(ROOT, 'packages', 'pikelet-wasm', 'complete', 'fusion.mjs'));
+const { fuseCandidates, FUSION_DEFAULTS } = await import(path.join(ROOT, 'packages', 'pikelet-wasm', 'complete', 'fusion.mjs'));
 const poolByDistance = (lists) => ranked(lists).sort((a, b) => a.distance - b.distance).map((r) => ({ id: r.id, distance: r.distance }));
 const rrf = (K, w) => (lists) => fuseCandidates(poolByDistance(lists), lists.lexical.map((h) => h.id), { rrfK: K, lexicalWeight: w }).map((h) => h.id);
 const guard = (tau, K = 60, w = 1) => (lists) => fuseCandidates(poolByDistance(lists), lists.lexical.map((h) => h.id), { rrfK: K, lexicalWeight: w, guardMargin: tau }).map((h) => h.id);
@@ -88,7 +88,9 @@ const RULES = {
   vector: vectorOnly,
   lexicalFirst,
   augmented,
-  rrf60: rrf(60, 1),          // shipped rule (minus phrase pinning)
+  // the shipped rule (minus phrase pinning), read from the reader itself
+  defaults: (lists) => fuseCandidates(poolByDistance(lists), lists.lexical.map((h) => h.id), FUSION_DEFAULTS).map((h) => h.id),
+  rrf60: rrf(60, 1),          // equal-weight RRF, the shipped rule before 2026-09-23
   'rrf60 w.5': rrf(60, 0.5),
   rrf10: rrf(10, 1),
   'rrf10 w.5': rrf(10, 0.5),
@@ -133,17 +135,17 @@ for (const q of questions) {
   ranks.shipped = shipped;
   const oracle = [ranks.vector, rankOf(lists.lexical.map((h) => h.id))].filter((r) => r !== null);
   ranks.oracle = oracle.length ? Math.min(...oracle) : null;
-  if (shipped !== null || ranks.rrf60 !== null) {
+  if (shipped !== null || ranks.defaults !== null) {
     simCompared++;
-    if (shipped === ranks.rrf60) simMatches++;
-    if (shipped !== null && ranks.rrf60 !== null && Math.abs(shipped - ranks.rrf60) <= 1) simWithin1++;
+    if (shipped === ranks.defaults) simMatches++;
+    if (shipped !== null && ranks.defaults !== null && Math.abs(shipped - ranks.defaults) <= 1) simWithin1++;
   }
   rows.push({ id: q.id, cls: q.cls, q: q.text, lexicalHits: lists.lexical.length, ranks });
 }
 await search.close();
 
 // ---- report ---------------------------------------------------------------
-console.log(`simulation check: rrf60 reproduces the shipped hybrid rank on ${simMatches}/${simCompared} questions (within ±1: ${simWithin1}); differences come from phrase pinning and pool ties.\n`);
+console.log(`simulation check: defaults (FUSION_DEFAULTS) reproduces the shipped hybrid rank on ${simMatches}/${simCompared} questions (within ±1: ${simWithin1}); differences come from phrase pinning and pool ties.\n`);
 const classes = [...new Set(rows.map((r) => r.cls))];
 const names = [...Object.keys(RULES), 'shipped', 'oracle'];
 const at = (rs, name, n) => rs.filter((r) => r.ranks[name] !== null && r.ranks[name] <= n).length;
