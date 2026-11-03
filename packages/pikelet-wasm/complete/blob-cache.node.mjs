@@ -36,6 +36,11 @@ const GENERATIONS = 4;
 // (u32 LE), data. A scan stops at the first record that does not parse.
 const RECORD_MAGIC = 0x3142_4b50;
 const GEN_FILE = /^gen-(\d{8})\.log$/;
+// Entries are pack content, record text included, and a pack can be a
+// private repository or a conversation history: the store is private to its
+// owner whatever the umask.
+const DIR_MODE = 0o700;
+const FILE_MODE = 0o600;
 
 // $PIKELET_CACHE_DIR, else $XDG_CACHE_HOME/pikelet/blobs, else
 // ~/.cache/pikelet/blobs: the same root the CLI already caches encoder
@@ -60,6 +65,14 @@ export function diskBlobCache(dir = defaultBlobCacheDir(), { maxBytes = DEFAULT_
         return key;
     };
     const fileOf = (key) => path.join(root, key.slice(0, 2), checkKey(key));
+    // Once per instance, before the first write: a root made by an older
+    // store (or by mkdir -p under umask 022) is tightened, which also closes
+    // off whatever it already holds. Best effort; on Windows modes are moot.
+    let privateRoot = null;
+    const makeRootPrivate = () => (privateRoot ??= (async () => {
+        await fs.mkdir(root, { recursive: true, mode: DIR_MODE });
+        await fs.chmod(root, DIR_MODE).catch(() => {});
+    })());
     const pending = new Set();
     const track = (promise) => {
         pending.add(promise);
@@ -173,12 +186,13 @@ export function diskBlobCache(dir = defaultBlobCacheDir(), { maxBytes = DEFAULT_
     };
 
     const rotate = async () => {
-        await fs.mkdir(smallDir, { recursive: true });
+        await makeRootPrivate();
+        await fs.mkdir(smallDir, { recursive: true, mode: DIR_MODE });
         const gens = await listGens();
         current = Math.max(current, gens.length ? gens[gens.length - 1] : 0) + 1;
         // Exclusive create; another process that rotated first owns the
         // name, and appending after its records is fine.
-        await fs.writeFile(genPath(current), new Uint8Array(0), { flag: 'wx' }).catch((err) => {
+        await fs.writeFile(genPath(current), new Uint8Array(0), { flag: 'wx', mode: FILE_MODE }).catch((err) => {
             if (err?.code !== 'EEXIST') throw err;
         });
         for (const gen of (await listGens()).filter((g) => g <= current - GENERATIONS)) {
@@ -200,7 +214,7 @@ export function diskBlobCache(dir = defaultBlobCacheDir(), { maxBytes = DEFAULT_
                 if (!st || st.size + total > genBytes) await rotate();
             }
             const buf = Buffer.concat(batch.map((r) => r.record));
-            const fh = await fs.open(genPath(current), 'a');
+            const fh = await fs.open(genPath(current), 'a', FILE_MODE);
             let base;
             try {
                 await fh.write(buf);
@@ -267,12 +281,13 @@ export function diskBlobCache(dir = defaultBlobCacheDir(), { maxBytes = DEFAULT_
             const file = fileOf(key);
             return track((async () => {
                 if (bytes.byteLength > maxBytes) return;
-                await fs.mkdir(path.dirname(file), { recursive: true });
+                await makeRootPrivate();
+                await fs.mkdir(path.dirname(file), { recursive: true, mode: DIR_MODE });
                 // Write-then-rename, so a reader in another process sees
                 // either no entry or a whole one.
                 const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
                 try {
-                    await fs.writeFile(tmp, bytes);
+                    await fs.writeFile(tmp, bytes, { mode: FILE_MODE });
                     await fs.rename(tmp, file);
                 } catch (err) {
                     await fs.rm(tmp, { force: true });

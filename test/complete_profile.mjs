@@ -1112,6 +1112,31 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
         await off.put(smallKey(1), filled(1, 100)); await off.flush();
         check('diskBlobCache: smallMaxBytes 0 stores no small entries', await off.get(smallKey(1)) === null);
         await off.close();
+        if (process.platform !== 'win32') {
+            // Entries can be record text from a private pack: owner-only,
+            // whatever the umask, and a root an older store left at 0755 is
+            // tightened (which also closes off the 0644 entries it holds).
+            const modeOf = (p) => fs.statSync(p).mode & 0o777;
+            const privDir = path.join(tmp, 'blobs-private');
+            fs.mkdirSync(privDir, { mode: 0o755 });
+            fs.chmodSync(privDir, 0o755);
+            const oldMask = process.umask(0o022);
+            try {
+                const priv = diskBlobCache(privDir);
+                priv.put(smallKey(1), filled(1, 100));
+                priv.put(keyOf(1), new Uint8Array(BIG));
+                await priv.close();
+            } finally {
+                process.umask(oldMask);
+            }
+            const genName = fs.readdirSync(path.join(privDir, 'small'))[0];
+            check('diskBlobCache: directories are 0700 and entries 0600 under umask 022, and an existing root is tightened',
+                modeOf(privDir) === 0o700 && modeOf(path.join(privDir, 'small')) === 0o700
+                && modeOf(path.join(privDir, 'small', genName)) === 0o600
+                && modeOf(path.join(privDir, '00')) === 0o700 && modeOf(path.join(privDir, '00', keyOf(1))) === 0o600,
+                [privDir, path.join(privDir, 'small'), path.join(privDir, 'small', genName), path.join(privDir, '00'), path.join(privDir, '00', keyOf(1))]
+                    .map((p) => modeOf(p).toString(8)).join(' '));
+        }
         check('defaultBlobCacheDir honors PIKELET_CACHE_DIR, then XDG_CACHE_HOME',
             defaultBlobCacheDir({ PIKELET_CACHE_DIR: '/x' }) === path.resolve('/x', 'blobs')
             && defaultBlobCacheDir({ XDG_CACHE_HOME: '/y' }) === path.join(path.resolve('/y'), 'pikelet', 'blobs'));

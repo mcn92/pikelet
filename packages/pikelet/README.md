@@ -219,6 +219,9 @@ question an earlier process already asked transferred 178 KiB instead of
 reads are never cached: nothing verifies them per read. Every hit is hashed
 against its digest before use, so a corrupt entry is just a refetch.
 Because the keys are content digests, an entry never goes stale.
+Entries include record text, so the store is owner-only (directories
+0700, files 0600) whatever the umask, and its root is tightened to 0700 if
+an earlier version left it open.
 `--no-cache` turns it off; local files never use it. Library callers pass `diskBlobCache()` (from
 `pikelet-wasm/complete` under Node) as `openPikeletFile`'s `blobCache`.
 

@@ -26,6 +26,17 @@ first.
   asked transferred 178 KiB in 11 requests instead of 1.3 MiB in 29, and
   answered in 0.65 s instead of 1.45 s; a new question costs what it did.
 
+### Security
+
+- **The disk cache is private to its owner.** `diskBlobCache()` stored
+  entries with the process umask, so under the usual 022 its directories
+  were 0755 and its files 0644: readable by other local users wherever
+  the parent directories allowed it. Entries hold record text, which for a
+  pack of a private repository, a journal, or conversation history is the
+  source itself. Directories are now created 0700 and files 0600, and the
+  first write tightens the store's root to 0700, which also closes off
+  entries a 0.13.0 cache already wrote.
+
 ## pikelet-wasm 0.13.0 / pikelet 0.13.0 — 2026-11-01
 
 Mounting a pack over HTTP is much cheaper the second time: `pikelet mcp`
