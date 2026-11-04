@@ -8,7 +8,37 @@ Through 0.6.0 these were published as `pancake-wasm` and
 packages are pre-1.0: a minor bump may carry breaking changes, and each entry lists them
 first.
 
-## Unreleased
+## pikelet-wasm 0.14.0 / pikelet 0.14.0 — 2026-11-04
+
+Asking a URL pack a question an earlier process already asked is now
+mostly local too: `pikelet mcp` keeps the verified rows, records and digest
+pages a query reads in its disk cache, so on the Wikipedia pack over R2 a
+repeated question transferred 178 KiB instead of 1.3 MiB and answered in
+0.65 s instead of 1.45 s. The cache is now private to its owner (0.13.0
+left it readable by other local users under the usual umask), and two
+processes sharing it no longer mis-index each other's writes. Upgrade if
+you mount packs by URL, and especially if other people have accounts on
+the machine. Packs compiled before this release still verify and serve,
+and compiling the same inputs gives the same identities as 0.13.0. Both
+packages move to 0.14.0 together, and `pikelet` requires `pikelet-wasm`
+^0.14.0.
+
+### Compatibility
+
+- **The cache also holds query reads.** On top of the mount entries (up
+  to 2 GiB), URL packs now store what queries read in append-only logs
+  under `~/.cache/pikelet/blobs/small`, up to 64 MiB. `--no-cache` still
+  turns all of it off, and local packs still never use it.
+- **The cache root becomes 0700.** The first write tightens the store's
+  directory to owner-only, including a `$PIKELET_CACHE_DIR/blobs` or a
+  directory passed to `diskBlobCache(dir)` that was opened up on purpose.
+  Nothing above that directory is touched.
+- **Library callers: close a `diskBlobCache()` you are done with.** A store
+  that has served a query entry holds read handles on its log until
+  `close()`. Node 26 treats a file handle left to garbage collection as a
+  fatal error, so a store dropped without `close()` can end the process
+  there. The CLI keeps its store for the life of the process and is not
+  affected.
 
 ### Added
 
@@ -28,6 +58,11 @@ first.
 
 ### Fixed
 
+- **Generated configs point at a schema that exists.** The configs the
+  CLI generates carried a `$schema` URL from before the repository moved
+  to `packages/`, which returned 404; it and the schema's own `$id` now name
+  `packages/pikelet/schemas/v1/pikelet.config.schema.json`. Configs
+  generated earlier keep the old URL until it is edited.
 - **Two processes sharing a disk cache no longer mis-index each other's
   appends.** A store computed a log batch's offset as the file size after
   its append, so another process appending in between left its index
