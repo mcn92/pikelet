@@ -26,6 +26,18 @@ first.
   asked transferred 178 KiB in 11 requests instead of 1.3 MiB in 29, and
   answered in 0.65 s instead of 1.45 s; a new question costs what it did.
 
+### Fixed
+
+- **Two processes sharing a disk cache no longer mis-index each other's
+  appends.** A store computed a log batch's offset as the file size after
+  its append, so another process appending in between left its index
+  pointing at the wrong record: about a third of each writer's own
+  lookups across three processes. Every hit is hash-checked, so this cost
+  refetches, never a wrong byte, and a fresh process re-indexed the log
+  correctly. A batch is now read back at its offset before it is indexed,
+  and if the end moved, the generation is rescanned to find where it
+  landed.
+
 ### Security
 
 - **The disk cache is private to its owner.** `diskBlobCache()` stored

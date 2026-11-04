@@ -214,17 +214,32 @@ export function diskBlobCache(dir = defaultBlobCacheDir(), { maxBytes = DEFAULT_
                 if (!st || st.size + total > genBytes) await rotate();
             }
             const buf = Buffer.concat(batch.map((r) => r.record));
-            const fh = await fs.open(genPath(current), 'a', FILE_MODE);
+            const fh = await fs.open(genPath(current), 'a+', FILE_MODE);
             let base;
             try {
                 await fh.write(buf);
                 // O_APPEND puts the batch at the end; its offset is the size
-                // now minus its length. Another process appending in between
-                // would make these offsets wrong, which costs only misses:
-                // every hit is verified against its key.
+                // now minus its length, unless another process appended
+                // between the write and the stat. So the batch is read back
+                // there before it is indexed: records are content-addressed,
+                // so wherever these exact bytes sit is a right offset.
                 base = (await fh.stat()).size - buf.length;
+                if (base >= 0) {
+                    const back = Buffer.alloc(buf.length);
+                    const { bytesRead } = await fh.read(back, 0, buf.length, base);
+                    if (bytesRead !== buf.length || !back.equals(buf)) base = -1;
+                }
             } finally {
                 await fh.close();
+            }
+            if (base < 0) {
+                // The end moved: find where the batch landed by scanning the
+                // generation, which indexes the other writer's records too.
+                // A record still being written stops the scan; whatever lies
+                // past it is a miss, not a wrong offset.
+                const bytes = await fs.readFile(genPath(current)).catch(() => null);
+                if (bytes) scan(current, bytes);
+                continue;
             }
             let at = base;
             for (const r of batch) {

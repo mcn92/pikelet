@@ -1105,6 +1105,30 @@ console.log('\nC. kind-1 student-inline artifact compiled from encoder-conforman
             fs.readdirSync(path.join(logDir, 'small')).length === 4 && await torn.get(smallKey(1)) === null
             && (await torn.get(smallKey(29)))?.[0] === 29);
         await torn.close();
+        // Two stores on one directory, as two processes would be, appending
+        // at once: another writer's append between a batch's write and its
+        // stat used to leave offsets pointing at the wrong record (about a
+        // third of lookups). Each store must read back its own entries.
+        let raceWrong = 0;
+        for (let trial = 0; trial < 4; trial++) {
+            const raceDir = path.join(tmp, `blobs-race-${trial}`);
+            const writers = [diskBlobCache(raceDir), diskBlobCache(raceDir)];
+            const raceKey = (w, n) => (w * 100000 + n).toString(16).padStart(32, '0');
+            const raceVal = (w, n) => new Uint8Array(200 + (n % 50)).fill((w * 31 + n) & 255);
+            for (let round = 0; round < 10; round++) {
+                for (let n = round * 10; n < round * 10 + 10; n++) writers.forEach((s, w) => s.put(raceKey(w, n), raceVal(w, n)));
+                await Promise.all(writers.map((s) => s.flush()));
+            }
+            for (const [w, s] of writers.entries()) {
+                for (let n = 0; n < 100; n++) {
+                    const got = await s.get(raceKey(w, n));
+                    if (!got || !Buffer.from(got).equals(Buffer.from(raceVal(w, n)))) raceWrong++;
+                }
+                await s.close();
+            }
+        }
+        check('diskBlobCache: concurrent writers on one log each index their own entries correctly',
+            raceWrong === 0, `${raceWrong}/800 wrong or missing`);
         let shortKey = null;
         try { await torn.get('ab'.repeat(15)); } catch (err) { shortKey = err; }
         check('diskBlobCache: a key under 128 bits is refused', /32-64 hex digits/.test(shortKey?.message || ''));
