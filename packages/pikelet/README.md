@@ -37,7 +37,8 @@ the CLI and `pikelet-wasm` are its only two packages, with no native code and
 no transitive dependencies. The CLI requires Node 22.23.4+, 24.22.1+ or 26.12.1+: earlier releases ship a
 fetch that decompresses any response a server labels with a
 `Content-Encoding`, and 18.x, 20.x, 23.x and 25.x are end-of-life with no
-fix. The CLI warns on start under any other version. `npx pikelet --help` lists every command and flag; a
+fix. The CLI warns on start under any other version. `npx pikelet` lists the commands, and
+`npx pikelet <command> --help` gives one command's options; a
 flag the CLI does not know is refused (`Unknown flag --x`) rather than
 silently ignored.
 

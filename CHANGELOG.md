@@ -19,6 +19,19 @@ first.
   now left out, and the same inputs give the same identity by default.
   Builds with `SOURCE_DATE_EPOCH` set are byte-identical to 0.14.0's.
   `evaluation().generatedAt` is absent on unpinned packs.
+- **A bare `pikelet` prints the commands instead of starting `create`.**
+  The interactive scaffold is `pikelet create`; `pikelet` with flags but
+  no command still scaffolds, as the old `npm create` flow did.
+
+### Changed
+
+- **Shorter help.** `pikelet --help` is a one-screen overview that leads
+  with `compile` and `mcp install`. Each command has its own:
+  `pikelet <command> --help`, `-h`, or `pikelet help <command>`. `mcp
+  --help` used to fail with "mcp requires at least one --pack", and every
+  command's `--help` printed all 176 lines. `compile --help` now also
+  lists `--license`, `--calibration`, `--calibration-queries` and
+  `--skip-calibration`.
 
 ### Fixed
 

@@ -2174,6 +2174,19 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
             '--assert-ingest', path.join(tmp, 'ingest-other.json'), '--out', path.join(tmp, 'legacy.0002b.pikelet')]);
     } catch (error) { changed = String(error.stderr); }
     check('a later append may not change the asserted declaration', /may not change it/.test(changed), changed.slice(0, 200));
+
+    // Help is answered before a command runs, per command, and a bare
+    // `pikelet` prints the overview rather than starting the scaffold.
+    console.log('help: an overview, and one page per command');
+    const overview = cli([]);
+    check('a bare pikelet prints the overview, leading with compile and mcp install',
+        /Get started:\n  pikelet compile[^\n]*\n  pikelet mcp install/.test(overview) && !/Project name/.test(overview), overview.slice(0, 200));
+    check('--help prints the same overview', cli(['--help']) === overview);
+    check('mcp --help prints mcp\'s help instead of asking for a pack', /pikelet mcp --pack/.test(cli(['mcp', '--help'])));
+    check('-h and help <command> reach a command\'s help',
+        /pikelet append --parent/.test(cli(['append', '-h'])) && cli(['help', 'append']) === cli(['append', '--help']));
+    check('compile --help lists the flags compile takes', ['--license', '--calibration-queries', '--skip-calibration', '--sentence-windows']
+        .every((flag) => cli(['compile', '--help']).includes(flag)));
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });
