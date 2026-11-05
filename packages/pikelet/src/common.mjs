@@ -270,12 +270,10 @@ class CliError extends Error {
     this.exitCode = exitCode;
   }
 }
-// The time stamped into build metadata (the evaluation segment's
-// generatedAt, the project manifest). Those bytes are inside the artifact's
-// identity, so a wall-clock stamp gives every rebuild of identical inputs a
-// new identity. SOURCE_DATE_EPOCH (reproducible-builds.org: integer seconds
-// since the epoch) pins it, making the build byte-for-byte reproducible;
-// unset, it is the current time as before.
+// The time stamped into a scaffolded project's manifest. SOURCE_DATE_EPOCH
+// (reproducible-builds.org: integer seconds since the epoch) pins it,
+// making the build byte-for-byte reproducible; unset, it is the current
+// time. A .pikelet goes through packBuildTimestamp below instead.
 function buildTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
   if (raw === undefined || raw === '') return new Date().toISOString();
@@ -285,6 +283,14 @@ function buildTimestamp() {
     throw new CliError(`SOURCE_DATE_EPOCH must be a whole number of seconds since 1970-01-01, got ${JSON.stringify(raw)}`, 1);
   }
   return new Date(seconds * 1000).toISOString();
+}
+// The build time a pack records, or null for none. A .pikelet records one
+// only when SOURCE_DATE_EPOCH pins it: a wall-clock stamp would give every
+// build of the same inputs a different identity, and a pack's identity is
+// what callers pin and cite.
+function packBuildTimestamp() {
+  const raw = process.env.SOURCE_DATE_EPOCH;
+  return raw === undefined || raw === '' ? null : buildTimestamp();
 }
 async function loadArtifactContract() {
   let mod;
@@ -323,6 +329,7 @@ export {
   MODEL_MAP,
   CliError,
   buildTimestamp,
+  packBuildTimestamp,
   loadArtifactContract,
   loadPikelet,
 };

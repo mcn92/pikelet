@@ -147,12 +147,12 @@ to 47.2 MiB, an HTTP mount from 1.3 to 4.5 MiB, and a query from about
 grows with the row count. A windowed pack cannot be extended with
 `append` yet.
 
-A build is deterministic apart from the time it records, and that time
-is part of the pack's identity, so two builds of the same inputs differ
-only by it. Set `SOURCE_DATE_EPOCH` (whole seconds since 1970, the
+A build is deterministic: the same inputs, encoder and CLI version give
+the same bytes and the same identity. A pack records no build time
+unless you set `SOURCE_DATE_EPOCH` (whole seconds since 1970, the
 [reproducible-builds](https://reproducible-builds.org/docs/source-date-epoch/)
-convention) to pin it: the same inputs, encoder and CLI version then give
-the same bytes and the same identity.
+convention); then it records that time as the evaluation's
+`generatedAt`, and the build is still reproducible.
 
 Match quality is calibrated from the corpus at build time, so queries
 the artifact does not cover return `matchQuality: "none"` (or `"weak"`,

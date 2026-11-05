@@ -4,7 +4,7 @@
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
 import path from 'node:path';
-import { sha256, loadCompleteModules, CliError, buildTimestamp, loadArtifactContract } from './common.mjs';
+import { sha256, loadCompleteModules, CliError, packBuildTimestamp, loadArtifactContract } from './common.mjs';
 import { publicChunk, ingestDeclaration, SENTENCE_WINDOWS_KIND } from './ingest.mjs';
 import { calibrateRetrievalAbstention } from './calibrate.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
@@ -87,10 +87,12 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
     recommendedRerank: rerankSweep.recommendedRerank,
   });
   const records = chunks.map((chunk) => Buffer.from(JSON.stringify(publicChunk(chunk)), 'utf8'));
-  const generatedAt = buildTimestamp();
+  // Absent unless SOURCE_DATE_EPOCH pins it, so the same inputs give the
+  // same identity by default; pinned, the bytes are as they always were.
+  const generatedAt = packBuildTimestamp();
   const evaluationBytes = (goldens) => Buffer.from(JSON.stringify({
     kind: 'docs-site-build-v1',
-    generatedAt,
+    ...(generatedAt ? { generatedAt } : {}),
     querySet: runtime.evaluation?.queries || [],
     // Each verified at build time to retrieve its source — first by
     // calibration, through the uncalibrated artifact's own retrieval, then

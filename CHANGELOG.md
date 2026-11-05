@@ -8,6 +8,18 @@ Through 0.6.0 these were published as `pancake-wasm` and
 packages are pre-1.0: a minor bump may carry breaking changes, and each entry lists them
 first.
 
+## Unreleased
+
+### Compatibility
+
+- **A pack records no build time unless `SOURCE_DATE_EPOCH` is set.**
+  `compile` stamped the wall-clock time into the evaluation segment's
+  `generatedAt`, so two builds of the same inputs had different
+  identities unless `SOURCE_DATE_EPOCH` pinned it. Unpinned, the field is
+  now left out, and the same inputs give the same identity by default.
+  Builds with `SOURCE_DATE_EPOCH` set are byte-identical to 0.14.0's.
+  `evaluation().generatedAt` is absent on unpinned packs.
+
 ## pikelet-wasm 0.14.0 / pikelet 0.14.0 — 2026-11-04
 
 Asking a URL pack a question an earlier process already asked is now

@@ -2058,6 +2058,24 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     check('generatedAt is the pinned time', (await stamped.evaluation()).generatedAt === '2023-11-14T22:13:20.000Z',
         String((await stamped.evaluation()).generatedAt));
     await stamped.close();
+    // Unpinned, a pack records no build time at all, so the same inputs
+    // give the same identity without any environment setting.
+    const compileUnpinned = (outPath) => {
+        const env = { ...process.env };
+        delete env.SOURCE_DATE_EPOCH;
+        execFileSync(process.execPath, [path.join(ROOT, 'packages', 'pikelet', 'bin', 'pikelet.mjs'),
+            'compile', '--source', docs, '--out', outPath], { stdio: ['ignore', 'pipe', 'pipe'], env });
+    };
+    const plainA = path.join(tmp, 'reproducible-plain-a.pikelet');
+    const plainB = path.join(tmp, 'reproducible-plain-b.pikelet');
+    compileUnpinned(plainA);
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    compileUnpinned(plainB);
+    check('two builds without SOURCE_DATE_EPOCH, a second apart, are byte-identical',
+        Buffer.compare(fs.readFileSync(plainA), fs.readFileSync(plainB)) === 0);
+    const unstamped = await openPikeletFile(plainA);
+    check('an unpinned build records no generatedAt', !('generatedAt' in (await unstamped.evaluation())));
+    await unstamped.close();
     let refused = null;
     try { compileAt(path.join(tmp, 'reproducible-bad.pikelet'), 'yesterday'); } catch (error) { refused = String(error.stderr); }
     check('a malformed SOURCE_DATE_EPOCH is refused', /SOURCE_DATE_EPOCH must be a whole number/.test(refused || ''), refused);
