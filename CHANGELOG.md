@@ -20,6 +20,15 @@ first.
   Builds with `SOURCE_DATE_EPOCH` set are byte-identical to 0.14.0's.
   `evaluation().generatedAt` is absent on unpinned packs.
 
+### Fixed
+
+- **`append` asks for `--assert-ingest` only once per chain.** On a chain
+  whose base predates `corpus.ingest`, the depth-1 layer records the
+  operator's assertion and every later layer repeats it (6.1), but each
+  later `append` still refused without `--assert-ingest`. It now uses
+  the chain's declaration, and refuses an `--assert-ingest` that differs
+  from it, since a later layer may not change it.
+
 ## pikelet-wasm 0.14.0 / pikelet 0.14.0 — 2026-11-04
 
 Asking a URL pack a question an earlier process already asked is now

@@ -101,7 +101,7 @@ export async function appendLayer(flags, options = {}) {
 
   const { reader } = await loadCompleteModules();
   const {
-    planAppendability, planLayer, buildLayerSegments, checkAppendDrift,
+    planAppendability, planLayer, buildLayerSegments, checkAppendDrift, canonicalJson,
   } = await import('pikelet-wasm/complete/layer-append.mjs');
   const { openPikeletChain } = await import('pikelet-wasm/complete/layer-reader.mjs');
 
@@ -126,9 +126,22 @@ export async function appendLayer(flags, options = {}) {
     }
 
     // --- 2. Appendability and the ingestion declaration (6.1) ----------------
-    const assertIngest = flags['assert-ingest']
+    const givenAssertion = flags['assert-ingest']
       ? JSON.parse(await fs.readFile(path.resolve(process.cwd(), flags['assert-ingest']), 'utf8'))
       : null;
+    // A chain whose depth-1 layer asserted the declaration already carries
+    // it (validated at mount), and every later layer repeats it (4.1), so
+    // only the first append onto such a base needs --assert-ingest. One
+    // given again must be the same declaration: a later layer may not
+    // change it.
+    const chainAssertion = head.corpusIngest == null && head.chainIngest?.asserted
+      ? JSON.parse(head.chainIngest.canonical)
+      : null;
+    if (chainAssertion && givenAssertion && canonicalJson(givenAssertion) !== head.chainIngest.canonical) {
+      throw new CliError('--assert-ingest differs from the declaration this chain already asserted at depth 1; '
+        + 'a later layer may not change it (6.1). Drop --assert-ingest to append under the chain\'s declaration.');
+    }
+    const assertIngest = givenAssertion ?? chainAssertion;
     if (head.corpusIngest == null && !assertIngest) {
       // A base compiled before compile recorded corpus.ingest. Say what to
       // assert rather than only that something must be: this CLI's own

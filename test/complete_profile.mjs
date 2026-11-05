@@ -2131,6 +2131,49 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     let appendRefusal = '';
     try { cli(['append', '--parent', windowedOut, '--source', more, '--out', path.join(tmp, 'windowed.0001.pikelet')]); } catch (error) { appendRefusal = String(error.stderr); }
     check('append refuses a windowed pack rather than misreading its rows', /sentence windows/.test(appendRefusal), appendRefusal.slice(0, 200));
+
+    // A base from before compile recorded corpus.ingest: the first append
+    // asserts the declaration (6.1), and later appends inherit it from the
+    // chain instead of asking again. The legacy base is the calibrated pack
+    // with corpus.ingest renamed to a key of the same length, so every
+    // offset holds, and the header's manifest hash recomputed.
+    console.log('append: an asserted chain keeps its declaration');
+    const legacyBase = path.join(tmp, 'legacy.pikelet');
+    {
+        const bytes = Buffer.from(fs.readFileSync(out));
+        const manifestBytes = bytes.readUInt32LE(8);
+        const manifestText = bytes.subarray(64, 64 + manifestBytes).toString('utf8');
+        check('the fixture manifest names corpus.ingest once', manifestText.split('"ingest":').length === 2);
+        bytes.write(manifestText.replace('"ingest":', '"ingesx":'), 64, 'utf8');
+        sha256(bytes.subarray(64, 64 + manifestBytes)).copy(bytes, 24);
+        fs.writeFileSync(legacyBase, bytes);
+    }
+    const declaration = JSON.parse(fs.readFileSync(out).subarray(64, 64 + fs.readFileSync(out).readUInt32LE(8)).toString('utf8')).corpus.ingest;
+    const assertFile = path.join(tmp, 'ingest.json');
+    fs.writeFileSync(assertFile, JSON.stringify(declaration));
+    let unasserted = '';
+    try { cli(['append', '--parent', legacyBase, '--source', more, '--out', path.join(tmp, 'legacy.unasserted.pikelet')]); } catch (error) { unasserted = String(error.stderr); }
+    check('the first append onto a base without corpus.ingest asks for an assertion', /--assert-ingest/.test(unasserted), unasserted.slice(0, 200));
+    const legacy1 = path.join(tmp, 'legacy.0001.pikelet');
+    cli(['append', '--parent', legacyBase, '--source', more, '--assert-ingest', assertFile, '--out', legacy1]);
+    const more2 = path.join(tmp, 'calibration-more-2');
+    fs.mkdirSync(more2);
+    fs.writeFileSync(path.join(more2, 'meteors.md'), '# Meteors\n\nA meteor is the streak of light a grain of dust makes as it burns up high in the atmosphere.\n\n'
+        + 'Meteor showers come when the earth crosses the trail of dust a comet left along its orbit.\n');
+    const legacy2 = path.join(tmp, 'legacy.0002.pikelet');
+    // The fixture is small enough that two new documents drift calibration
+    // past the limit; drift is not what this checks.
+    cli(['append', '--parent', legacyBase, '--parent', legacy1, '--source', more2, '--allow-drift', '--out', legacy2]);
+    const legacy2Manifest = layoutOf(fs.readFileSync(legacy2)).manifest;
+    check('a later append inherits the asserted declaration without --assert-ingest',
+        legacy2Manifest.layer?.ingestAsserted === true && canonicalJson(legacy2Manifest.layer?.ingest) === canonicalJson(declaration));
+    let changed = '';
+    fs.writeFileSync(path.join(tmp, 'ingest-other.json'), JSON.stringify({ ...declaration, targetTokens: 128 }));
+    try {
+        cli(['append', '--parent', legacyBase, '--parent', legacy1, '--source', more2,
+            '--assert-ingest', path.join(tmp, 'ingest-other.json'), '--out', path.join(tmp, 'legacy.0002b.pikelet')]);
+    } catch (error) { changed = String(error.stderr); }
+    check('a later append may not change the asserted declaration', /may not change it/.test(changed), changed.slice(0, 200));
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });
