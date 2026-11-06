@@ -75,7 +75,7 @@ export function httpRangeSource(url, options = {}) {
                     }
                     if (probe.type === 'opaqueredirect' || probe.status === 0) {
                         // Browser CORS: the chain is invisible; let fetch
-                        // auto-follow per read as before.
+                        // auto-follow per read.
                         target = url;
                         viaRedirect = false;
                     } else if (probe.ok) {
@@ -193,12 +193,9 @@ export function httpRangeSource(url, options = {}) {
                 throw new Error(`range read returned Content-Encoding: ${encoding}; a .pikelet must be served unencoded`);
             }
             if (response.status === 206) {
-                // A 206 must be the range we asked for, and must say so: a
-                // host (or cache) answering with a different slice would
-                // otherwise be caught only downstream, by the digest on
-                // whatever that slice happens to be part of — and the lazy
-                // sketch rows have no per-row digest yet. RFC 9110 requires
-                // Content-Range on a 206, so its absence fails closed too.
+                // A 206 must be the range we asked for and say so (RFC 9110 requires
+                // Content-Range): a wrong slice would otherwise be caught only by a
+                // downstream digest, and format-1 sketch rows have no per-row digest.
                 const contentRange = response.headers.get('content-range');
                 const m = contentRange && /^bytes (\d+)-(\d+)\//.exec(contentRange);
                 if (!m || Number(m[1]) !== offset || Number(m[2]) > end) {
@@ -211,15 +208,11 @@ export function httpRangeSource(url, options = {}) {
                 return body;
             }
             if (response.status === 200) {
-                // If-Range has a defined meaning: a 200 instead of the
-                // requested 206 means either the host ignores Range, or the
-                // pinned ETag no longer matches (the artifact was replaced).
-                // Those need different handling — slices of a replaced file
-                // don't match what the manifest describes, and format-2's
-                // lexical segment above 8 MiB carries only a whole-segment
-                // digest, so postings read from it would go unverified.
-                // Only fall back when the ETag still matches (or neither
-                // side has one to compare).
+                // Under If-Range, a 200 instead of 206 means the host ignores Range or the
+                // pinned ETag no longer matches (the artifact was replaced). Only the first
+                // may fall back to a full download: slices of a replaced file don't match
+                // the manifest, and a large lexical segment has only a whole-segment digest.
+                // So fall back only when the ETag still matches (or neither side has one).
                 if (stats.etag) {
                     const responseEtag = response.headers.get('etag');
                     if (responseEtag !== stats.etag) {

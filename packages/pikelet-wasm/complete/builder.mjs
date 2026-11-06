@@ -20,10 +20,8 @@ export const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).diges
 export const align16 = (n) => Math.ceil(n / 16) * 16;
 
 // Canonical form = JSON.stringify semantics with sorted object keys:
-// undefined / functions / symbols are omitted as object properties and
-// become null as array elements, exactly as JSON.stringify treats them —
-// previously they leaked through as the literal text `undefined`, producing
-// output JSON.parse rejects.
+// undefined / functions / symbols are omitted as properties and become null
+// as array elements.
 export function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map((v) => canonicalJson(v) ?? 'null').join(',')}]`;
@@ -51,16 +49,11 @@ export function buildQueryInterpSegment(kind, encoderBytes, calibrationBytes) {
 }
 
 // Lexical index segment (kind 5, OPTIONAL), layout bm25-v1: a static
-// inverted index over the corpus records for hybrid retrieval. Terms are
-// addressed by a 64-bit hash (two fnv1a-32 passes, seeds 0 and 0x9e3779b9)
-// in a fixed-width table sorted by (hashHi, hashLo), so a reader can binary
-// search without materializing term strings — lazy-friendly by
-// construction, even though the phase-1 reader loads the segment eagerly.
-// Postings are (docIdDelta, tf) varint pairs. Document length (indexed
-// tokens per record) and the corpus token total ship for BM25
-// normalization. Hash collisions merge two terms' postings; at 64 bits over
-// realistic vocabularies the probability is negligible and the failure mode
-// is one slightly-wrong lexical score, not corruption.
+// inverted index for hybrid retrieval. Terms are addressed by a 64-bit hash
+// (two fnv1a-32 passes, seeds 0 and 0x9e3779b9) in a table sorted by
+// (hashHi, hashLo), so a reader can binary search, or read lazily, without
+// term strings. A hash collision merges two terms' postings: at 64 bits the
+// odds are negligible and the cost is one slightly wrong score.
 //
 //   [0,4)   u32 version = 1
 //   [4,8)   u32 docCount
@@ -79,25 +72,14 @@ export function buildQueryInterpSegment(kind, encoderBytes, calibrationBytes) {
 //             varint tf, repeated df times
 //
 // Indexing tokenizes on [a-z0-9']+ lowercased, keeps tokens of 2..32 chars,
-// and skips a small function-word stopword list — readers need no
-// coordination with the list, because an unindexed query token simply finds
-// no postings.
+// and skips a small stopword list; readers need no copy of it, since an
+// unindexed query token just finds no postings.
 //
-// Interrogative words (how/does/what/who/why/where/when/which/do/did) are
-// deliberately in this list, not just the base one: without them, a
-// natural-language question's own scaffolding becomes real, indexable BM25
-// content — a passage containing literal dialogue like "How does Georgiana
-// get on, Darcy?" then wins a high lexical score against the query "How
-// does Elizabeth initially react to Mr. Darcy?" purely from "how does" and
-// "darcy" co-occurring, with zero topical relevance. Confirmed live: this
-// pushed a genuinely correct chunk (ranked #2 by the vector search alone)
-// completely out of the fused top-10, replaced by RRF-boosted noise. Not
-// borrowed wholesale from calibrate.mjs's COVERAGE_STOPWORDS, which also
-// excludes domain words ("tell", "explain", "overview", "history",
-// "definition") that are legitimate lexical CONTENT on many real corpora
-// (a docs site literally titled "History") — this list only adds the
-// unambiguous interrogative set, since the lexical index (unlike coverage)
-// also indexes passage text, not just the query.
+// Interrogatives (how/does/what/...) are stopped here too: otherwise a
+// question's scaffolding scores BM25 matches against literal dialogue ("How
+// does Georgiana get on, Darcy?") and pushes correct chunks out of the fused
+// top-10. calibrate.mjs's COVERAGE_STOPWORDS is not reused: it also stops
+// words ("history", "overview") that are real content in passage text.
 const LEXICAL_LAYOUT = 'bm25-v1';
 const LEXICAL_STOPWORDS = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'of', 'to', 'in', 'on', 'at', 'by', 'for', 'with', 'from', 'into', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'it', 'its', 'this', 'that', 'these', 'those', 'as', 'their', 'they', 'them', 'his', 'her', 'has', 'have', 'had', 'not', 'can', 'will', 'if', 'we', 'you', 'your', 'i',
   'how', 'does', 'did', 'do', 'what', 'who', 'why', 'where', 'when', 'which']);
@@ -125,14 +107,11 @@ function varintBytes(n) {
   return out;
 }
 
-// Counting-sort construction over typed arrays: the obvious
-// Map-of-Maps build dies around tens of millions of posting entries
-// (a 456k-chunk wiki corpus has ~30M), so terms are interned to dense
-// indexes on a first tokenize pass (df counted per term), entry arrays
-// are preallocated exactly, and a second tokenize pass scatters
-// (docId, tf) pairs into per-term slots. Entries land doc-ascending per
-// term by construction, which is what the delta varints need. Output
-// bytes are identical to the original builder's.
+// Counting-sort construction over typed arrays: a Map-of-Maps build dies
+// around tens of millions of postings (the 456k-chunk wiki corpus has ~30M).
+// Terms are interned and df counted on a first pass, entry arrays are
+// preallocated, and a second pass scatters (docId, tf) pairs into per-term
+// slots, doc-ascending as the delta varints need.
 export function buildLexicalSegment(texts) {
   const docCount = texts.length;
   const doclens = new Uint32Array(docCount);
@@ -345,19 +324,14 @@ export function buildInlineTransformerEncoderSegment({ declaration, vocabBytes, 
   return out;
 }
 
-// The spec's measured operating point (SKETCH_PROFILE.md section 5, mandatory
-// in the complete profile's evaluation segment): open the just-built sketch
-// bytes in memory, replay a query set at increasing rerank C against the
-// exact full-rerank top-k, and return the smallest C whose recall reaches
-// targetRecall — plus the whole curve for the evaluation segment. Queries
-// are the corpus's own float embeddings when the caller has them, else rows
-// dequantized out of the snapshot.
-//
-// The sweep stops at the reader's default ceiling (MAX_RECOMMENDED_RERANK):
-// it used to fall back to the full row count, a depth readers no longer
-// honor by default, so a pack could record a recall it would not be served
-// at. The last rung is the ceiling, measured like any other, and
-// targetReached says whether the target was met below it.
+// The measured operating point (SKETCH_PROFILE.md section 5, mandatory in
+// the evaluation segment): replay a query set against the just-built sketch
+// at increasing rerank C and return the smallest C whose recall against the
+// exact full-rerank top-k reaches targetRecall, plus the curve. Queries are
+// the corpus's float embeddings when given, else rows dequantized from the
+// snapshot. The sweep stops at the reader's default ceiling
+// (MAX_RECOMMENDED_RERANK), so a pack never records a recall it would not be
+// served at; targetReached says whether the target was met below it.
 export async function measureRecommendedRerank({
   artifactModule,
   sketchBytes,

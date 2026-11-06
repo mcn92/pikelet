@@ -54,11 +54,9 @@ export {
 
 // Supported container formats: header formatVersion -> manifest profile.
 export const SUPPORTED_PROFILES = Object.freeze({ 1: 'pikelet-complete-v1', 2: 'pikelet-complete-v2' });
-// Pre-rename profile strings (2026-09): every .pikelet published before this
-// date — including live GitHub release assets — carries "pancake-complete-
-// vN" in its manifest. Readers accept both spellings indefinitely so an
-// already-published pack does not go dark on a reader upgrade; only
-// SUPPORTED_PROFILES (above) is what a fresh build ever writes.
+// Pre-rename profile strings: every pack published before 2026-09-12
+// (including live release assets) says "pancake-complete-vN". Readers accept
+// both spellings indefinitely; builds only write SUPPORTED_PROFILES.
 const LEGACY_PROFILES = Object.freeze({ 1: 'pancake-complete-v1', 2: 'pancake-complete-v2' });
 export const CORPUS_LAYOUT_V2 = 'records-v2';
 
@@ -82,24 +80,14 @@ const SKETCH_HEADER_BYTES = 256;
 // query; the fusion rule and its constants live in fusion.mjs, shared with
 // the calibrator so fit-time rankings match what is served.
 export const LEXICAL_CANDIDATES = 24;
-// scoreQuality's coverage term hydrates the fused top passagesNeeded
-// records (asset.coverage.topK, 5 by default — see calibrate.mjs's
-// COVERAGE_TOP_PASSAGES) once retrieval returns. The scorer that knows
-// the real number is created inside retrievalScorer()'s own closure, not
-// reachable from here, so this is a fixed approximation used to decide
-// how many of fusedFull's records to include in the batched hydration
-// below, alongside phrase-pinning's own candidates — hydrating a couple
-// more than coverage strictly needs just costs a little extra bandwidth
-// on a cache entry that goes unread; hydrating fewer only narrows how
-// much of coverage's later hydration hits warm cache. Either way is
-// harmless: it's a batch-sizing choice, not a correctness one.
+// How many fused top records to hydrate in the shared batch so the coverage
+// term hits warm cache (asset.coverage.topK, 5 by default). A batch-sizing
+// choice only: too many costs a little bandwidth, too few a later fetch.
 const COVERAGE_BATCH_COUNT = 5;
-// Only BM25 hits within this fraction of the top lexical score join fusion.
-// Common query terms give every matching document a near-tied score (idf
-// collapses them flat); a wide cutoff let that tied mass ride into fusion on
-// a technicality. Calibration (pikelet/src/calibrate.mjs) gathers its
-// evidence through this reader's own retrieval, so it is fit against the
-// same cutoff and fusion the reader serves.
+// Only BM25 hits scoring at least top / LEXICAL_CUTOFF join fusion:
+// common terms give every matching document a near-tied score that carries
+// no ranking information. Calibration retrieves through this reader, so it
+// is fit against the same cutoff.
 export const LEXICAL_CUTOFF = 1.5;
 // Query-interpretation segments above this size open lazily (kind 3's
 // inline encoder is ~25 MiB); smaller ones keep the one-read eager path.
@@ -140,14 +128,10 @@ function toHex(bytes) {
 
 const isSha256Hex = (value) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
 
-// SHA-256 via WebCrypto (browser, workerd, Node 18+); node:crypto fallback
-// for older Node, gated on an actual Node runtime check rather than just
-// "WebCrypto is missing" — a browser can lack crypto.subtle too (privacy
-// settings, a hardened build), and a bare dynamic import('node:crypto')
-// there isn't a Node module resolution failure, it's a cross-origin module
-// fetch a browser refuses outright, surfacing as an opaque module-loading
-// error instead of the clear message below. Fails closed either way:
-// verification is not optional in this reader.
+// SHA-256 via WebCrypto, with a node:crypto fallback gated on an actual Node
+// runtime check: a browser can lack crypto.subtle too, and importing
+// node:crypto there fails with an opaque module error instead of the clear
+// one below. Fails closed either way.
 async function sha256hex(bytes) {
     if (globalThis.crypto?.subtle) {
         return toHex(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes)));
@@ -459,10 +443,8 @@ export async function readChainMemberShell(input, options = {}) {
         if (!Array.isArray(manifest.segments) || manifest.segments.length !== segmentCount) {
             throw new Error('.pikelet manifest segment list disagrees with the header segment count');
         }
-        // The same table checks as the full open. This path used to keep only
-        // length and digest shape: it never compared the table's kind with the
-        // manifest's and let a later duplicate overwrite an earlier one, so
-        // whoever controls the table bytes (a mirror) could relabel another
+        // The same table checks as the full open (kind, order, no duplicates):
+        // otherwise whoever controls the table bytes could relabel another
         // committed segment as the tombstone mask without changing identity.
         const table = await readChecked(source, HEADER_BYTES + manifestBytes, segmentCount * TABLE_ENTRY_BYTES, 'segment table', maxReadBytes, fileBytes);
         const segments = parseSegmentTable(table, manifest, segmentCount, manifestBytes, fileBytes);
@@ -606,11 +588,8 @@ export async function openPikeletFile(input, options = {}) {
 
         const table = await readChecked(source, HEADER_BYTES + manifestBytes, tableBytes, 'segment table', maxReadBytes, fileBytes);
         const segments = parseSegmentTable(table, manifest, segmentCount, manifestBytes, fileBytes);
-        // The evaluation segment, read and hash-verified. Named so both the
-        // reader's own evaluation() and the __chainTier seam can reach it: a
-        // chain has no evaluation segment of its own, and `verify_pack` called
-        // `search.evaluation()` on a chain reader that had no such method,
-        // which threw a TypeError instead of reporting the base's goldens.
+        // The evaluation segment, read and hash-verified. Shared by evaluation()
+        // and the __chainTier seam, since a chain surfaces its base's (6.2).
         const readEvaluationSegment = async () => {
             const ev = segments.get('evaluation');
             if (!ev) return null;
@@ -627,16 +606,10 @@ export async function openPikeletFile(input, options = {}) {
             }
             return parsed;
         };
-        // The lineage segment (kind 7, LAYERED_PROFILE.md 6.3), parsed and
-        // validated on first use. Present only on a base compacted from a
-        // chain. buildLineageSegment wrote it and parseLineageSegment validated
-        // it, but nothing on the read side ever reached either: a real
-        // compacted pack could not translate a citation, which is the whole
-        // point of the segment ("what lets a consumer treat a translated
-        // citation as evidence rather than as a hint").
-        //
-        // Cached because the validation is not free and the segment is
-        // immutable; the cache holds the parse, never a translation.
+        // The lineage segment (kind 7, LAYERED_PROFILE.md 6.3), present only on a
+        // base compacted from a chain; it is what lets citation() translate old ids.
+        // Parsed and validated on first use and cached (the parse, never a
+        // translation).
         let lineageCache;
         const readLineageSegment = async () => {
             if (lineageCache !== undefined) return lineageCache;
@@ -654,11 +627,9 @@ export async function openPikeletFile(input, options = {}) {
             return lineageCache;
         };
 
-        // oldId -> new dense id, by 6.3's rule: a surviving id loses one
-        // position per tombstone below it. The per-byte prefix table is built
-        // once and reused, because the naive form rescans the bitset from zero
-        // on every call -- O(id) per citation, quadratic over a run of them on
-        // a large pack.
+        // oldId -> new dense id (6.3): a surviving id loses one position per
+        // tombstone below it. A per-byte prefix table keeps this O(1) per citation
+        // instead of rescanning the bitset.
         let compactPrefix;
         const compactMapFor = (lineage) => {
             if (compactPrefix === undefined) {
@@ -683,12 +654,9 @@ export async function openPikeletFile(input, options = {}) {
         };
 
         // Required segments are per-profile (layered profile 4.3). A layer with
-        // records carries a tombstones segment on top of the complete set; a
-        // TOMBSTONE-ONLY layer has neither an index nor a corpus segment and is
-        // therefore not opened through this function at all — the chain reader
-        // reads its two segments directly (see openPikeletChain), because
-        // threading "no index, no corpus" through the whole of this open would
-        // put a branch on every step of the single-file path.
+        // records adds a tombstones segment; a tombstone-only layer has no index or
+        // corpus and is read directly by the chain reader (see openPikeletChain),
+        // never through this open.
         if (acceptLayer && manifest.layer?.records === 0) {
             throw new Error('a tombstone-only layer is read by the chain reader, not opened as a member');
         }
@@ -755,21 +723,15 @@ export async function openPikeletFile(input, options = {}) {
             throw new Error('.pikelet manifest carries no index header commitment (index.headerSha256)');
         }
 
-        // After the segment table, every remaining open-path extent is known,
-        // so the query-interp segment, the embedded sketch (two dependent
-        // reads of its own), and the corpus tables fetch as one concurrent
-        // wave instead of dependent rounds — at 100 ms/request that is most
-        // of the open time.
-        // A large query-interpretation segment (kind 3's inline encoder is
-        // ~25 MiB) is not read at open: only its 16-byte header joins the
-        // wave, the calibration region follows as one small dependent read,
-        // and the encoder bytes arrive lazily — prefetched in the background
-        // by default, awaited by the first query. The whole-segment digest
-        // is verified when those bytes arrive, and the header/calibration
-        // slices used at open are byte-compared against the verified
-        // segment before any query can complete, so nothing unverified ever
-        // influences a returned result. Small segments (kinds 1/2) keep the
-        // one-read eager path unchanged.
+        // After the segment table every open-path extent is known, so the
+        // query-interp segment, the embedded sketch and the corpus tables fetch as
+        // one concurrent wave instead of dependent rounds.
+        // A large query-interp segment (kind 3's ~25 MiB encoder) is not read at
+        // open: its header joins the wave, the calibration region follows, and the
+        // encoder bytes arrive lazily (prefetched in the background, awaited by the
+        // first query). The header and calibration slices are byte-compared against
+        // the digest-verified segment before any query can complete, so nothing
+        // unverified influences a result.
         const qiDeferrable = qi.length > LAZY_QI_BYTES;
         const [qiFirst, sketch, tables, lexicalBytes, rowMapBytes] = await Promise.all([
             (async () => {
@@ -892,30 +854,16 @@ export async function openPikeletFile(input, options = {}) {
             const VERDICTS = { answer: 'strong', weak: 'weak', abstain: 'none' };
             return async (hits, context, fusedHits, scoreOptions) => {
                 if (!scorer) return { match_quality: 'unscored' };
-                // The coverage term grounds the verdict in the top passages'
-                // text, so those records hydrate before scoring. Hydrated
-                // from the fused (RRF) order when hybrid retrieval produced
-                // one — calibrate.mjs fits coverage against the same fused
-                // ranking, and a chunk BM25 ranks first but the embedding
-                // ranks far down is exactly the case coverage exists to
-                // catch; scoring it against vector-only order would miss it
-                // again. Falls back to vector order (hits) when there is no
-                // lexical segment or fusion did not change anything. When
-                // the query is answered the pages are already hot for
-                // result hydration; an abstained query costs these extra
-                // reads. Hydration failures propagate — on format 2 a
-                // record that fails its digest must fail the query, not
-                // skew its verdict.
+                // The coverage term grounds the verdict in the top passages' text, so they
+                // hydrate before scoring, from the fused order when there is one (as
+                // calibrate.mjs fits it) and from vector order otherwise. Hydration failures
+                // propagate: on format 2 a record that fails its digest must fail the query,
+                // not skew its verdict.
                 const passageSource = fusedHits?.length ? fusedHits : hits;
-                // A record's text starts with its own heading echoed as the
-                // first line (ingest.mjs's section-to-chunk join). A
-                // heading match still grounds the query but at reduced
-                // credit — see retrieval-abstention.mjs's coverageFrac and
-                // calibrate.mjs's HEADING_COVERAGE_WEIGHT, which this split
-                // must match exactly (build-time and serve-time coverage
-                // must agree, or the fitted thresholds are scoring a
-                // different signal than the one they were calibrated
-                // against).
+                // A record's text starts with its heading (ingest.mjs). Coverage gives a
+                // heading match reduced credit, and this split must match
+                // retrieval-abstention.mjs's coverageFrac and calibrate.mjs exactly, or the
+                // thresholds score a different signal than the one they were fit on.
                 const splitHeadingBody = (text) => {
                     const nl = String(text || '').indexOf('\n');
                     return nl === -1 ? { heading: text, body: '' } : { heading: text.slice(0, nl), body: text.slice(nl + 1) };
@@ -1108,19 +1056,14 @@ export async function openPikeletFile(input, options = {}) {
         }
 
         // Resident-scan acceleration. options.sketchScanner:
-        //   false      — pure JS scan always (the pre-0.7 behavior);
-        //   an object  — a ready scanner (createSketchScanner's shape),
-        //                caller-owned, used as-is;
-        //   a function — async factory (sketchArtifact) => scanner, invoked
-        //                in the background once the sketch is fully resident
-        //                (the injection point for browser bundles, which
-        //                cannot load the Node engine entrypoint);
-        //   undefined  — auto: in Node, when the corpus is large enough
-        //                that the JS scan dominates query time, stage the
-        //                engine's SIMD scan kernel in the background.
-        // Staging failures are silent by design: every query the scanner
-        // would have served is answered identically (and identically
-        // correctly) by the JS scan, just slower.
+        //   false      - pure JS scan always;
+        //   an object  - a ready scanner (createSketchScanner's shape), caller-owned;
+        //   a function - async factory (sketchArtifact) => scanner, run in the
+        //                background once the sketch is resident (the injection point
+        //                for browser bundles, which cannot load the Node engine);
+        //   undefined  - auto: in Node, stage the engine's SIMD scan kernel when the
+        //                corpus is large enough for the JS scan to dominate.
+        // Staging failures are silent: the JS scan answers identically, only slower.
         const scannerOption = options.sketchScanner;
         if (scannerOption !== undefined && scannerOption !== false
             && typeof scannerOption !== 'object' && typeof scannerOption !== 'function') {
@@ -1294,57 +1237,32 @@ export async function openPikeletFile(input, options = {}) {
             if (closed) throw new Error('.pikelet reader is closed');
         };
 
-        // The rerank's default coalescing gap. The identity-verified manifest
-        // may carry a fetch hint: cluster-ordered layouts only coalesce at a
-        // gap at least matched to their cluster geometry (the wiki pack's
-        // k-means layout needs ~16 KiB; a 2 KiB gap squanders it — measured
-        // 440 vs 200 requests/query at C=600). The hint is a floor: a wider
-        // gap merges a superset of the same runs, so a source that prefers
-        // more (HTTP's 256 KiB) keeps its own. undefined leaves the sketch
-        // reader on the source's preference. A chain reads it per tier
-        // through __chainTier.
+        // The rerank's default coalescing gap. A manifest fetch hint sets a floor
+        // matched to cluster-ordered layouts (the wiki pack's k-means layout needs
+        // ~16 KiB: 440 vs 200 requests/query at C=600 with a 2 KiB gap); a source
+        // that prefers a wider gap (HTTP's 256 KiB) keeps its own. A chain reads it
+        // per tier through __chainTier.
         const rerankGapHint = Number.isFinite(manifest.recommendedGap)
             ? Math.max(manifest.recommendedGap, Number(source.preferredGapBytes) || 0)
             : undefined;
 
-        // The one retrieval path behind query(): resident sketch scan plus
-        // BM25 candidates, exact rerank, rank fusion and phrase pinning.
-        // Compile-time calibration fits on exactly this (through
-        // __calibrationEvidence below), so the evidence a verdict was fit on
-        // is the evidence query() scores. excludeIds removes records from
-        // both candidate sources before either is cut to size — calibration
-        // ablations use it; query() never does.
+        // The one retrieval path behind query(): resident sketch scan plus BM25
+        // candidates, exact rerank, rank fusion and phrase pinning. Calibration fits
+        // on exactly this through __calibrationEvidence. excludeIds removes records
+        // from both candidate sources before either is cut to size (calibration
+        // ablations only).
         const retrieveCandidates = async (trimmed, context, k, queryOptions, excludeIds = null) => {
             let fusedFull = null;
-            // Hybrid retrieval when the artifact carries a lexical
-            // segment: the BM25 top matches join the sketch's exact
-            // rerank as extra candidates (scored by true vector
-            // distance like any candidate — this is what recovers
-            // known-item lookups the sketch scan's top-C missed),
-            // and the final ordering fuses the distance ranking
-            // with the BM25 ranking by reciprocal rank (RRF, k=60,
-            // untuned). Abstention still scores the distance-sorted
-            // top-k exactly as calibrated; fusion affects result
-            // order only. fullRerankOutput returns every reranked
-            // candidate (all already fetched and exactly scored) so
-            // fusion sees the true distance of every lexical match.
-            // Common query terms give every matching document a
-            // small, near-tied BM25 score (idf collapses them);
-            // that flat mass carries no ranking information and
-            // dilutes rank fusion. Keep only hits within a factor
-            // of the best lexical score — for a known-item lookup
-            // that is typically the one document holding the rare
-            // terms.
-            // retrieval: 'hybrid' (default when the artifact
-            // carries a lexical segment) | 'vector' | 'lexical' —
-            // the last two exist for measurement and debugging
-            // (retrieval-quality bakeoffs run all three on one
-            // artifact). Abstention scores the distance-sorted
-            // top-k identically in every mode.
-            // 'augmented' unions the lexical candidates into the
-            // exact rerank but keeps pure distance order — the mode
-            // for workloads scored against exact nearest neighbors,
-            // where RRF's reordering reads as loss by definition.
+            // retrieval: 'hybrid' (default with a lexical segment) - BM25 top matches
+            // join the exact rerank as extra candidates (recovering known items the
+            // sketch's top-C missed), and the final order fuses distance and BM25 ranks
+            // (fuseCandidates, fusion.mjs); near-tied low BM25 scores are cut first
+            // (LEXICAL_CUTOFF).
+            // 'augmented' - lexical candidates join the rerank but order stays by pure
+            // distance, for workloads scored against exact nearest neighbors.
+            // 'vector' | 'lexical' - for measurement and debugging.
+            // Abstention scores the distance-sorted window identically in every mode;
+            // fusion changes result order only.
             const retrieval = queryOptions.retrieval ?? 'hybrid';
             if (!['hybrid', 'vector', 'lexical', 'augmented'].includes(retrieval)) {
                 throw new Error(`query() retrieval must be hybrid, vector, lexical, or augmented, got ${retrieval}`);
@@ -1387,12 +1305,8 @@ export async function openPikeletFile(input, options = {}) {
                 ...(scanner ? { scanner } : {}),
                 ...(extraRows.length ? { extraCandidates: extraRows } : {}),
                 ...(excludeBits ? { exclude: excludeBits } : {}),
-                // Always return the full reranked candidate list
-                // (already fetched and exactly scored) rather than
-                // truncating to k: abstention is fit at a fixed
-                // top-10 window (calibrate.mjs) independent of the
-                // caller's k, and needs that full window to score
-                // consistently — see retrieval-abstention.mjs.
+                // Return the full reranked list, not k: abstention is fit at a fixed
+                // top-10 window independent of the caller's k (retrieval-abstention.mjs).
                 fullRerankOutput: true,
             })).results;
             // The rerank output is distance-ordered, so a record's first row
@@ -1408,38 +1322,19 @@ export async function openPikeletFile(input, options = {}) {
                 }
             }
             const hits = searched.slice(0, k);
-            // Full-window fused order (not k-truncated) for scoring:
-            // coverage grounds its verdict in the passage fusion
-            // actually ranks first, and calibrate.mjs fits it the
-            // same way — a k-truncated fused list would silently
-            // drop the fused top hit for callers requesting a small k.
+            // Full-window fused order for scoring: a k-truncated list would drop the
+            // fused top hit that coverage grades for callers asking for a small k.
             if (retrieval === 'lexical') {
                 const byId = new Map(searched.map((hit) => [hit.id, hit]));
                 fusedFull = lexicalHits.map((h) => byId.get(h.id)).filter(Boolean);
             } else if (retrieval !== 'augmented' && lexicalHits.length) {
                 const lexRank = new Map(lexicalHits.map((h, i) => [h.id, i]));
                 fusedFull = fuseCandidates(searched, lexicalHits.map((h) => h.id));
-                // One batched hydration for everything this block and
-                // scoreQuality's coverage term (below) will need, in
-                // place of two separate staged fetches (phrase-pin's
-                // own, then a later cold start for coverage): over a
-                // remote range-read source each hydrate() a caller
-                // hasn't already paid for is its own network round
-                // trip, and sequential/staged awaits pay that cost
-                // once per stage instead of once per query. The
-                // union of phrase-pin's candidates (top lexical
-                // hits) and coverage's (fusedFull's top few — phrase
-                // pinning only ever reorders that window, never
-                // changes its membership) is known right here, so
-                // both stages can share one round trip. A record
-                // that fails to hydrate here does not fail the
-                // query: the id is just missing from the map, and
-                // each site below falls through exactly as it would
-                // on a cold cache miss (recs[i] undefined; coverage
-                // sees fewer usable passages) — hydrate() raising
-                // for a bad id is still a real failure, but only
-                // once a site actually needs that specific record,
-                // not speculatively for every candidate touched here.
+                // One batched hydration for phrase pinning's candidates (top lexical hits)
+                // and coverage's (fusedFull's top few): over a range-read source each
+                // uncached hydrate() is a round trip, so the two stages share one. A record
+                // that fails here does not fail the query; it is just missing from the map,
+                // and a site that actually needs it hydrates (and fails) itself.
                 const phraseCandidates = lexicalHits.slice(0, 3);
                 const coverageCandidates = fusedFull.slice(0, COVERAGE_BATCH_COUNT);
                 const batchIds = [...new Set([...phraseCandidates, ...coverageCandidates].map((h) => h.id))];
@@ -1474,11 +1369,8 @@ export async function openPikeletFile(input, options = {}) {
                     identity,
                     formatVersion,
                     profile,
-                    // 6.3: present when this base was compacted from a chain,
-                    // and the key to whether citation() can say anything. It
-                    // was in the manifest all along and reported nowhere, so a
-                    // compacted pack looked indistinguishable from a freshly
-                    // compiled one.
+                    // 6.3: present when this base was compacted from a chain, and the key to
+                    // whether citation() can say anything.
                     compactedFrom: manifest.compactedFrom
                         && typeof manifest.compactedFrom === 'object'
                         && !Array.isArray(manifest.compactedFrom)
@@ -1569,17 +1461,11 @@ export async function openPikeletFile(input, options = {}) {
                 let searched = null;
                 let fusedFull = null;
                 if (!pre) ({ hits, fused, searched, fusedFull } = await retrieveCandidates(trimmed, context, k, queryOptions));
-                // Abstention scores the full reranked candidate window
-                // (searched), not the k-truncated hits: calibrate.mjs fits
-                // its signals at a fixed top-10 (top-5 for coverage)
-                // regardless of how many results a caller ultimately
-                // requests, so scoring must use the same window to match.
-                // preScore (kind 1) runs before search and has no window to
-                // fix, so it is unaffected. fusedFull (RRF over the same
-                // full window, not k-truncated) is threaded through
-                // separately so coverage grades the passage fusion actually
-                // ranks first, while d0/margin/mean10 still read vector
-                // order (searched) exactly as calibrated.
+                // Abstention scores the full reranked window (searched), not the
+                // k-truncated hits, because calibration fits at a fixed top-10 (top-5 for
+                // coverage). fusedFull lets coverage grade the passage fusion ranks first,
+                // while d0/margin/mean10 read vector order as calibrated. preScore (kind 1)
+                // runs before search and is unaffected.
                 const quality = pre || await scoreQuality(searched ?? hits, context, fusedFull);
                 // A 'none' verdict withholds results by default — the
                 // calibrated abstention signal is doing its job, and most
@@ -1733,29 +1619,20 @@ export async function openPikeletFile(input, options = {}) {
                     // This member's own evaluation segment, hash-verified.
                     // A chain surfaces the base's through it (6.2).
                     evaluation: readEvaluationSegment,
-                    // The tier's staged WASM scan kernel, or null before
-                    // background staging resolves. A chain queries
-                    // sketch.search directly, so without passing this through
-                    // every tier fell back to the JS scan: on the 456k-record
-                    // wiki base that is ~450 ms a query against ~50 ms with
-                    // the kernel. A getter, not a captured value, because
+                    // The tier's staged WASM scan kernel, or null until staging resolves. A
+                    // chain calls sketch.search directly, so it needs this to avoid the JS scan
+                    // (~450 vs ~50 ms a query on the 456k-record wiki base). A getter because
                     // staging completes after open() returns.
                     get scanner() { return scanner; },
                     // The rerank's default coalescing gap for this member
                     // (manifest hint as a floor under the source's own), so
                     // a chain fetches each tier's rows as this member would.
                     rerankGap: rerankGapHint,
-                    // The base's OWN encoder, for `append` (6.1): "a kind-3
-                    // base carries the teacher, and append loads it from the
-                    // base's own query-interp segment — no model download, no
-                    // external dependency: a pack is sufficient to compile its
-                    // own successors." Resolving it here rather than letting a
-                    // producer construct one is what makes substituting a
-                    // different encoder impossible.
-                    //
-                    // Returns null for kinds that cannot embed passages: kind 1
-                    // carries a query encoder only (6.1 refuses it), and kind 4
-                    // is a layer, which inherits.
+                    // The base's own encoder, for `append` (6.1): a kind-3 base carries the
+                    // teacher, so a pack can compile its own successors with no download.
+                    // Resolving it here, not in the producer, makes substituting a different
+                    // encoder impossible. Null for kinds that cannot embed passages: kind 1
+                    // (query encoder only) and kind 4 (a layer, which inherits).
                     async passageEmbedder() {
                         assertOpen();
                         if (qiKind !== 3 || !resolveEmbedder) return null;
