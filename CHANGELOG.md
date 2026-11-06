@@ -35,6 +35,10 @@ first.
 
 ### Fixed
 
+- **`pikelet mcp` survives a `null` message.** A line of valid JSON that is
+  not a request object (`null`, a number, an array) ended the server's
+  read loop, so nothing after it was answered. It now gets an `invalid
+  request` error and the server carries on.
 - **A NUL byte in a source document can no longer corrupt record text.**
   Markdown stripping marks protected code with NUL-delimited indexes, so a
   document containing that pattern could pull code from elsewhere into

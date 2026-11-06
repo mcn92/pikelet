@@ -1115,6 +1115,12 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
       replyError(null, -32700, 'parse error');
       continue;
     }
+    // Valid JSON that is not a request object (null, a number, a batch
+    // array) is answered and skipped; destructuring null would end the loop.
+    if (message === null || typeof message !== 'object' || Array.isArray(message)) {
+      replyError(null, -32600, 'invalid request');
+      continue;
+    }
     const { id, method, params } = message;
     // Notifications (no id) get no response, per JSON-RPC.
     const isRequest = id !== undefined && id !== null;

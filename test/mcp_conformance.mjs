@@ -375,5 +375,21 @@ console.log('blob cache wiring');
     check('a local mount opens without it', seen.some((s) => !s.remote && s.cache === undefined));
 }
 
+console.log('non-object frames');
+{
+    // null used to be destructured outside the try and end the read loop,
+    // so the ping after it was never answered.
+    const frames = [null, 42, 'text', [{ jsonrpc: '2.0', id: 9, method: 'ping' }]];
+    await withServer(async ({ send, waitFor, replies }) => {
+        for (const frame of frames) send(frame);
+        send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+        const pong = await waitFor(1);
+        check('a ping after non-object frames is answered', pong.result !== undefined, JSON.stringify(pong));
+        const invalid = replies.filter((r) => r.id === null && r.error?.code === -32600);
+        check('each non-object frame gets an invalid-request error', invalid.length === frames.length, JSON.stringify(replies));
+        check('a batch array is not executed', !replies.some((r) => r.id === 9));
+    });
+}
+
 console.log(`\nMCP protocol conformance: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
