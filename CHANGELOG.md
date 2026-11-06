@@ -35,6 +35,14 @@ first.
 
 ### Fixed
 
+- **`compile` downloads the encoder weights to the user cache.** An
+  installed `pikelet` fetched the 24 MiB MiniLM blob into its own package
+  directory. Under `npx` that is a cache npm purges, and under a global
+  install with a root-owned prefix the write failed with only "the download
+  failed". The blob now goes to `~/.cache/pikelet/models/all-MiniLM-L6-v2/`
+  (`$PIKELET_MODEL_CACHE` or `$XDG_CACHE_HOME` moves it), next to `create`'s
+  build encoder. A repo checkout still uses the copy in
+  `src/inline-encoder/`.
 - **`pikelet mcp` survives a `null` message.** A line of valid JSON that is
   not a request object (`null`, a number, an array) ended the server's
   read loop, so nothing after it was answered. It now gets an `invalid

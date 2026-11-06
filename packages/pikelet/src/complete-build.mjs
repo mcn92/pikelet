@@ -338,8 +338,9 @@ function inlineEncoderDeclaration(config, encoder = {}) {
 
 // The 24.3 MiB weight blob is excluded from published tarballs
 // (src/inline-encoder/.npmignore), so npm consumers fetch it once, pinned by
-// digest, from the release asset. A repo checkout carries the file in git,
-// so this path never runs in-tree.
+// digest, from the release asset into the user model cache (see
+// defaultInlineWeightsPath in cli.mjs). A repo checkout carries the file in
+// git, so this path never runs in-tree.
 const INLINE_WEIGHTS_URL = 'https://github.com/mcn92/pikelet/releases/download/inline-encoder-v1/encoder-weights.bin';
 const INLINE_WEIGHTS_SHA256 = '3b14685a73bd7f30477be8dad89902b6e4bb55e49ec325c9e071c462cf89089b';
 

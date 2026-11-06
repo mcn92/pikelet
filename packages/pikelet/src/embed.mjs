@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { sha256, loadCompleteModules, STUDENT_TRAINER, MODEL_MAP, CliError } from './common.mjs';
+import { sha256, loadCompleteModules, STUDENT_TRAINER, MODEL_MAP, CliError, modelCacheDir } from './common.mjs';
 import { tokenize, publicChunk } from './ingest.mjs';
 import { inlineEncoderDeclaration, resolveInlineEncoderInputs, fetchInlineEncoderWeights } from './complete-build.mjs';
 
@@ -44,14 +44,6 @@ async function embedChunks(chunks, config, log, projectDir) {
     return embedChunksWithInlineTransformer(chunks, config, log, projectDir);
   }
   return embedChunksForWorkersAi(chunks, config, log);
-}
-
-// Where create's build-time encoder weights are cached between builds. The
-// generated project's reindex workflow caches ~/.cache/pikelet/models.
-function modelCacheDir() {
-  if (process.env.PIKELET_MODEL_CACHE) return path.resolve(process.env.PIKELET_MODEL_CACHE);
-  const base = process.env.XDG_CACHE_HOME ? path.resolve(process.env.XDG_CACHE_HOME) : path.join(os.homedir(), '.cache');
-  return path.join(base, 'pikelet', 'models');
 }
 
 // The cached blob is checked against its pin on every build (a few hundred

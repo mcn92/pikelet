@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { CONFIG_SCHEMA_URL, DEFAULT_CONFIG, MODEL_MAP, CliError } from './common.mjs';
+import { CONFIG_SCHEMA_URL, DEFAULT_CONFIG, MODEL_MAP, CliError, modelCacheDir } from './common.mjs';
 import { writeProject, writeRuntimeModules, stageStudentInputs, wranglerToml, deployProject } from './scaffold.mjs';
 import { buildAssets, validateConfig } from './build.mjs';
 import { gitRepoName } from './git-source.mjs';
@@ -644,10 +644,18 @@ function makeConfig(options) {
   };
 }
 
-// The packaged inline MiniLM encoder inputs. vocab.txt ships in the tarball;
-// the weight blob is npmignored and auto-fetched into this directory on first
-// use, digest-pinned (resolveInlineEncoderInputs in complete-build.mjs).
+// The packaged inline MiniLM encoder inputs. vocab.txt ships in the tarball.
+// The weight blob is npmignored: a repo checkout has it in this directory,
+// and an installed package fetches it, digest-pinned, into the user model
+// cache on first use (resolveInlineEncoderInputs in complete-build.mjs). The
+// install directory may be read-only or purged (npx), so nothing is written
+// there.
 const INLINE_ENCODER_DIR = fileURLToPath(new URL('./inline-encoder/', import.meta.url));
+function defaultInlineWeightsPath() {
+  const packaged = path.join(INLINE_ENCODER_DIR, 'encoder-weights.bin');
+  if (fssync.existsSync(packaged)) return packaged;
+  return path.join(modelCacheDir(), 'all-MiniLM-L6-v2', 'encoder-weights.bin');
+}
 
 export async function compileArtifact(flags) {
   const sources = ['source', 'git', 'conversations'].filter((f) => flags[f] !== undefined);
@@ -771,7 +779,7 @@ export async function compileArtifact(flags) {
           : path.join(INLINE_ENCODER_DIR, 'vocab.txt'),
         weightsPath: flags['encoder-weights']
           ? path.resolve(process.cwd(), flags['encoder-weights'])
-          : path.join(INLINE_ENCODER_DIR, 'encoder-weights.bin'),
+          : defaultInlineWeightsPath(),
         model: flags['encoder-model'] || 'sentence-transformers/all-MiniLM-L6-v2',
         maxTokens: 512,
         ...(flags.calibration ? { calibrationPath: path.resolve(process.cwd(), flags.calibration) } : {}),

@@ -6,6 +6,7 @@
 
 import crypto from 'node:crypto';
 import fssync from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
@@ -333,3 +334,12 @@ export {
   loadArtifactContract,
   loadPikelet,
 };
+
+// Where downloaded encoder weights are cached: create's build-time encoder
+// and compile's default MiniLM blob. The generated project's reindex workflow
+// caches ~/.cache/pikelet/models.
+export function modelCacheDir() {
+  if (process.env.PIKELET_MODEL_CACHE) return path.resolve(process.env.PIKELET_MODEL_CACHE);
+  const base = process.env.XDG_CACHE_HOME ? path.resolve(process.env.XDG_CACHE_HOME) : path.join(os.homedir(), '.cache');
+  return path.join(base, 'pikelet', 'models');
+}
