@@ -37,9 +37,7 @@ async function ingestFolder(root, source, log) {
   return docs;
 }
 
-// log defaults to a no-op: walk(root) is the documented one-argument form and
-// the symlink branch below calls log() unconditionally, so an external caller
-// using it would crash on the first link encountered.
+// log defaults to a no-op so the documented one-argument walk(root) works.
 async function walk(root, log = () => {}, dir = root) {
   const out = [];
   let entries;
@@ -146,14 +144,11 @@ function metaRefreshTarget(html, baseHref) {
   try { return new URL(url[1], baseHref); } catch { return null; }
 }
 
-// The seed the user typed is followed through redirects (bounded) before
-// the crawl starts — both HTTP redirects and meta-refresh pages: sites
-// routinely send their root to a canonical host or a localized landing page
-// (docs.astro.build -> /en/getting-started/ via meta refresh), and a crawl
-// seeded on the pre-redirect URL discovers one empty page, then fails with
-// an error that blames the content. The final URL defines the crawl origin.
-// Every other fetch keeps the strict redirect-skip: mid-crawl redirects are
-// moved or aliased pages whose targets the crawl discovers through links.
+// The seed URL is followed through redirects (HTTP and meta refresh,
+// bounded) before the crawl starts, and the final URL defines the crawl
+// origin: sites often send their root to a canonical host or localized
+// landing page. Mid-crawl redirects are still skipped; the crawl finds
+// their targets through links.
 async function resolveSeedUrl(seed, log) {
   let current = seed;
   for (let hop = 0; hop < 5; hop++) {
@@ -324,15 +319,11 @@ function extractByExtension(text, file) {
 }
 
 // GitHub-style heading slugs, deduplicated per document with -1/-2
-// suffixes. Mirrors github-slugger — what Docusaurus and GitHub render —
-// so Pikelet's anchors match the framework's actual rendered ids: trim,
-// lowercase, strip everything that is not a letter/number/space/hyphen/
-// underscore (Unicode letters survive: "Über uns" -> "über-uns"), then
-// replace EACH space with a dash without collapsing runs ("C++ & C#" ->
-// "c--c", exactly as github-slugger emits). Inline code and link syntax
-// are unwrapped first, approximating the rendered heading text the
-// framework slugs. Verified against the real github-slugger by
-// test/ingestion/anchors.test.mjs.
+// suffixes, mirroring github-slugger (what Docusaurus and GitHub render):
+// trim, lowercase, keep letters/numbers/space/hyphen/underscore (Unicode
+// letters included), and replace EACH space with a dash without collapsing
+// runs. Inline code and links are unwrapped first. Checked against the real
+// github-slugger by test/ingestion/anchors.test.mjs.
 function makeSlugger() {
   const used = new Map();
   return (heading) => {
@@ -435,11 +426,9 @@ function sectionize(rawSections, title, textOf) {
   return out;
 }
 
-// Extracts a single `key: value` line from a YAML frontmatter block. The
-// value may be double-quoted, single-quoted (each with its own backslash
-// escapes, and free to contain the other quote character literally — a
-// plain [^"'\n]+ character class cannot tell "it's" from the string's own
-// closing quote), or bare/unquoted.
+// Extracts a single `key: value` line from YAML frontmatter. The value may
+// be double-quoted, single-quoted (each with its own escapes, free to hold
+// the other quote), or bare.
 function frontmatterValue(frontmatter, key) {
   const re = new RegExp(`^${key}:\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|'((?:[^'\\\\]|\\\\.)*)'|(.+?))\\s*$`, 'm');
   const m = frontmatter.match(re);
@@ -539,13 +528,9 @@ function fenceRun(line) {
   return { ch, len, rest: line.slice(p + len) };
 }
 
-// Fenced code blocks, CommonMark-style: an opening fence line is closed by
-// the first later line holding only a fence of the same character at least
-// as long; an unclosed fence runs to the end of the document. Each line is
-// visited once, so the cost is linear. The regex this replaces
-// (`^(\`{3,}|~{3,})[^\n]*\n([\s\S]*?)\n\2$`) re-scanned the rest of the
-// document for every candidate fence length, which on a line of N backticks
-// with no closer cost N full passes.
+// Fenced code blocks, CommonMark-style: an opening fence is closed by the
+// first later line holding only a fence of the same character at least as
+// long; an unclosed fence runs to the end. Linear: each line is visited once.
 function protectFences(src, keep) {
   const lines = src.split('\n');
   const out = [];
@@ -567,12 +552,8 @@ function protectFences(src, keep) {
 }
 
 // Inline code spans, CommonMark-style: a run of N backticks is closed by
-// the next run of exactly N backticks on the same line, and the body may
-// hold runs of other lengths (``a ` b`` is how a backtick is quoted). A run
-// with no such closer is literal text and scanning resumes right after it.
-// The regex this replaces (`(\`+)([^\`\n]+?)\1`) backtracked through every
-// suffix of a long backtick run, which was quadratic; here a run is
-// scanned at most once as an opener and once as a candidate closer.
+// the next run of exactly N on the same line; a run with no closer is
+// literal text. Linear: each run is scanned at most twice.
 function protectInlineCode(src, keep) {
   let out = '';
   let i = 0;
@@ -771,25 +752,15 @@ function chunkDocs(docs, options) {
     }
     const docStart = chunks.length;
     const keepMax = Math.floor(target * 1.6);
-    // A section contributes provenance only if it is both headed (not a
-    // depth-0 preamble — sectionize() gives those no `heading` at all) and
-    // has a body beyond that heading (not a title-only H1 with nothing
-    // under it before the next heading). Either kind still contributes its
-    // *text* to a merge; neither gets a say in *where* the merge is
-    // attributed, since neither names a location a reader could actually
-    // be pointed at.
+    // A section contributes provenance only if it is headed (not a depth-0
+    // preamble) and has a body beyond its heading. Either kind still
+    // contributes its text to a merge.
     const hasProvenance = (section) => section.heading
       && normalizeText(section.text) !== normalizeText(section.heading);
-    // Attribute a merge of several sections to the most specific location
-    // that is still true of everything merged in: the longest common
-    // prefix of their heading paths, owned by whichever contributing
-    // section's own path equals that prefix (its anchor); '' (page-level)
-    // if no section owns it, or if no contributor has provenance at all.
-    // Wrong-but-precise (a sibling section that doesn't contain the text)
-    // is worse than coarse-but-correct (the page) for a project whose
-    // result is "here is the exact evidence" — so provenance for a merged
-    // chunk must never point at a location that not every part of the
-    // merged text belongs under.
+    // Attribute a merge to the most specific location true of everything
+    // merged: the longest common prefix of their heading paths, with the anchor
+    // of the contributing section that owns that prefix, else '' (page level).
+    // Coarse-but-correct beats precise-but-wrong for provenance.
     const attributeMerge = (contributors) => {
       const real = contributors.filter(hasProvenance);
       if (!real.length) return { headingPath: [], anchor: '' };
@@ -810,29 +781,13 @@ function chunkDocs(docs, options) {
       text: normalizeText(text),
       contributors,
     });
-    // An undersized section merges into the previous chunk (its content is
-    // preserved; provenance is re-attributed across everything merged so
-    // far via attributeMerge, not simply inherited from either side). A
-    // section at the very start of the document — most commonly a
-    // title-only H1 with no intro paragraph — has no previous chunk to
-    // merge into, so it must merge forward instead: carry it here, before
-    // the main loop, rather than let it fall through to becoming its own
-    // title-only chunk (which then also swallows whatever comes after it,
-    // since every later undersized section merges backward into that stub
-    // instead of the real section it belongs under).
-    // A child heading is a true continuation of its undersized parent
-    // section — "6. The C ABI" with a 12-token intro, followed by
-    // "6.1 Handle Lifecycle", is one topic split across two headings, not
-    // two unrelated sections. Forward-merging into that child keeps the
-    // parent's own words attributed under the child's (more specific, still
-    // correct) path instead of destroying both the parent's exact anchor
-    // and the child's when the main loop's LCP-based backward merge below
-    // collides them with whatever unrelated section came before the
-    // parent. isChildOf only recognizes a genuine parent/child pair (the
-    // next heading's path extends this one's, one level deeper) — an
-    // unrelated sibling next (same or shallower depth) gets no special
-    // treatment and falls through to the backward merge, which is already
-    // correct for that case.
+    // Undersized sections merge into the previous chunk, with provenance
+    // re-attributed by attributeMerge. Two cases merge forward instead:
+    // - an undersized section followed by its own child heading ("6. The C ABI"
+    //   with a short intro, then "6.1 Handle Lifecycle") carries onto the child;
+    // - a leading undersized section (often a title-only H1) has nothing before
+    //   it, so it carries onto whatever comes next rather than becoming a stub
+    //   that swallows the sections after it.
     const isChildOf = (parentPath, childPath) => childPath.length === parentPath.length + 1
       && parentPath.every((h, i) => h === childPath[i]);
     const sections = [];
@@ -842,21 +797,13 @@ function chunkDocs(docs, options) {
       const next = doc.sections[i + 1];
       const undersized = tokenize(raw.text).length < MIN_CHUNK_TOKENS;
       if (undersized && next && isChildOf(raw.headingPath, next.headingPath)) {
-        // Carry onto the child next iteration rather than falling into the
-        // backward-merge branch below. Works whether or not a previous
-        // chunk exists yet — the leading-H1-title case (no previous chunk)
-        // is one instance of this, not a separate rule.
+        // Carry onto the child; this also covers the leading-H1 case.
         carry.push(raw);
         continue;
       }
       if (sections.length === 0 && carry.length === 0 && undersized) {
-        // A leading undersized section with no child next and no previous
-        // chunk to merge backward into: carry it forward onto whatever
-        // comes next — sized or not — same as before. It does not keep
-        // absorbing further sections itself: if the next section is also
-        // undersized (and not its child), the main loop's backward merge
-        // (LCP-aware) picks up from there once this first merged section
-        // exists to merge into.
+        // Leading undersized section with no child next: carry it onto the next
+        // section. Later undersized sections merge backward as usual.
         carry = [raw];
         continue;
       }

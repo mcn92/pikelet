@@ -243,10 +243,8 @@ function provenanced(packName, identity, result) {
     distance: result.distance,
     text: result.text ?? result.preview ?? null,
     // Chain-only fields (LAYERED_PROFILE.md 3.4, 3.5). This shape is a
-    // whitelist, so anything not named here is dropped -- which silently
-    // turned a tombstoned record into an ordinary live one on its way to the
-    // model. A single-file pack has no layers and no tombstones, so these
-    // stay absent there rather than reporting a false `tombstoned: false`.
+    // whitelist, so a field not named here is dropped; a tombstoned record must
+    // not reach the model looking live. Single-file packs leave them absent.
     ...(result.tombstoned === undefined ? {} : { tombstoned: result.tombstoned === true }),
     ...(result.layer === undefined ? {} : { layer: result.layer }),
     ...(result.supersededBy === undefined || result.supersededBy === null
@@ -295,14 +293,10 @@ async function callSearch(packs, args) {
   if (args.showAbstained !== undefined && typeof args.showAbstained !== 'boolean') {
     throw new Error('search: showAbstained must be a boolean');
   }
-  // Defaults to showing results under a 'none' verdict: the calibrator can
-  // misjudge paraphrases (word-form mismatches it has no data to weigh
-  // correctly), and a caller that receives zero results plus "no answer"
-  // has no signal that retrying with showAbstained would recover anything.
-  // matchQuality and confidence still carry the calibrator's real verdict,
-  // so a caller that wants strict withholding gets it with showAbstained:
-  // false — the risk moves from "silently hides a real answer" to "shows a
-  // result that needs weighing", which a model reading matchQuality can do.
+  // Results ship under a 'none' verdict by default: the calibrator can
+  // misjudge paraphrases, and zero results gives a caller no reason to retry.
+  // matchQuality still carries the real verdict; showAbstained: false
+  // withholds.
   const showAbstained = args.showAbstained !== false;
   const names = resolvePack(packs, args.pack, 'search');
   const sections = [];
@@ -330,15 +324,9 @@ async function callSearch(packs, args) {
   // "answered" has to read matchQuality — not just whether results shipped.
   const answered = sections.filter((s) => s.matchQuality !== 'none' && s.matchQuality !== 'unscored');
   const noneSections = sections.filter((s) => s.matchQuality === 'none');
-  // Unscored packs have no fitted calibrator at all (asset: null — the
-  // corpus failed calibration's gates, or shipped with calibration
-  // skipped): there is no matchQuality/confidence signal whatsoever, not
-  // just a low one. Results still ship (there is nothing to withhold
-  // against — showAbstained has no effect here), but silently, a caller
-  // could mistake them for the same confidence as a "strong" verdict.
-  // Every unscored section gets a warning, independent of whether other
-  // packs answered, since it is a per-pack property a caller citing that
-  // specific pack's results needs to know.
+  // Unscored packs (asset: null: calibration failed its gates or was
+  // skipped) have no confidence signal at all. Results still ship, so each
+  // unscored section gets a warning, lest a caller read them as "strong".
   // The journal is unscored by design, and labelled as agent-written instead.
   const unscoredSections = sections.filter((s) => s.matchQuality === 'unscored' && !s.journal);
   const journalSections = sections.filter((s) => s.journal);
@@ -469,20 +457,13 @@ export async function callVerifyPack(packs, args) {
       ...(skipped.length ? { skipped } : {}),
     },
     abstentionProbes: { total: probeResults.length, passed: probesPassed, results: probeResults },
-    // method/target say what matchQuality measures: self-templates-v6
-    // packs score relevance (target 'relevance'), fit against off-topic
-    // queries; earlier packs carry no target and were fit against
-    // in-domain-unanswerable ones. fitAuc is in-sample and near-
-    // uninformative on its own; cvAuc is the held-out AUC of the fit's own
-    // target; cvAucHard is answerable vs. in-domain-unanswerable (the fit
-    // target before v6, a diagnostic since). realQueryAuc/
-    // realQueryAbstentionRate — human-written calibration queries, held out
-    // of the fit entirely — is the only real validation this pack's
-    // calibrator can have; humanCalibrationQueries: 0 means the corpus
-    // shipped none (see pikelet/src/calibrate.mjs's design note on why
-    // there is no synthetic substitute for real held-out queries). null
-    // means the pack shipped without a fitted calibrator (calibration
-    // skipped, or a pre-audit build without this field).
+    // method/target say what matchQuality measures: self-templates-v6 packs
+    // (target 'relevance') are fit against off-topic queries; older packs have
+    // no target. fitAuc is in-sample; cvAuc is held out; cvAucHard is answerable
+    // vs. in-domain-unanswerable, a diagnostic. realQueryAuc and
+    // realQueryAbstentionRate come from held-out human-written questions, the
+    // only real validation (humanCalibrationQueries: 0 means none shipped). null
+    // means no fitted calibrator.
     calibration: calibration ? {
       method: calibration.method ?? null,
       target: calibration.target ?? null,
@@ -531,13 +512,10 @@ function callListPacks(packs, mountFailures = []) {
     ...(mountFailures.length ? { unavailable: mountFailures.map((f) => ({ location: f.location, error: f.error })) } : {}),
     packs: [...packs.entries()].map(([name, mounted]) => {
       const info = mounted.search.info();
-      // A chain reports `records` as the cumulative row total across every
-      // layer, so a pack that had 100 records, appended 10 and tombstoned 40
-      // used to advertise 110 when 70 are live. `liveRecords` is what a
-      // searchable-count means to a caller, and a chain's own shape (depth,
-      // tombstones, whether the inherited fit still applies) is not
-      // derivable from a single-file pack's fields, so it is named here
-      // rather than left for the model to infer.
+      // A chain's `records` is the cumulative row total across layers, which
+      // counts tombstoned rows; `liveRecords` is what is searchable. The chain's
+      // own shape (depth, tombstones, inherited fit) is named rather than left for
+      // the model to infer.
       const isChain = Number.isInteger(info.layers) && info.layers > 1;
       return {
         name,
@@ -635,10 +613,8 @@ async function mountChain(packs, spec, { httpRangeSource, log, head = null, blob
     },
     record: (id) => chain.record(id),
     // A chain has no evaluation segment of its own; the reader surfaces the
-    // base's, tagged evaluationScope 'base'. Reporting none made verify_pack
-    // say "no tests" and drop the calibration figures of a fit the chain was
-    // actually serving with. verify_pack labels the scope and skips goldens
-    // whose expected record a layer has since removed.
+    // base's, tagged evaluationScope 'base', and verify_pack labels the scope
+    // and skips goldens whose record a layer has since removed.
     evaluation: () => chain.evaluation(),
     close: () => chain.close(),
   };
@@ -1063,20 +1039,13 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
     const hash = /^(.*)#([0-9a-f]{64})$/i.exec(raw);
     specs.push(hash ? { location: hash[1], identity: hash[2].toLowerCase() } : { location: raw });
   }
-  // Mounting runs CONCURRENTLY with the protocol loop below, not before it.
-  // A URL mount fetches the pack's resident prefix: ~5.6 s for the rust-book
-  // pack and ~9.2 s for the 649 MiB Wikipedia one, and a shelf of three took
-  // 10.2 s before `initialize` was answered — past the point most MCP clients
-  // give up. The handshake needs no pack to be ready, so it no longer waits.
+  // Mounting runs CONCURRENTLY with the protocol loop: a URL mount fetches
+  // the pack's resident prefix (seconds on large packs), and MCP clients give
+  // up on a slow `initialize`. Tool calls await `mountsReady` instead.
   //
-  // Tool calls DO need them, so each awaits `mountsReady` first. A client sees
-  // a fast handshake and pays the mount cost on its first real call, the same
-  // trade the warmup below already makes for encoder staging.
-  //
-  // Each mount is isolated: one unreachable shelf host, refused pin or
-  // unsupported pack must not take down the packs listed after it. Failures
-  // are recorded per location, reported by list_packs, and still make the
-  // process exit non-zero once the protocol loop drains.
+  // Each mount is isolated: one unreachable host, refused pin or unsupported
+  // pack must not take down the others. Failures are recorded per location,
+  // reported by list_packs, and make the process exit non-zero at the end.
   const mountFailures = [];
   const mountsReady = (async () => {
     const attempt = async (location, fn) => {
