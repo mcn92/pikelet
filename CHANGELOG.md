@@ -35,6 +35,12 @@ first.
 
 ### Fixed
 
+- **A NUL byte in a source document can no longer corrupt record text.**
+  Markdown stripping marks protected code with NUL-delimited indexes, so a
+  document containing that pattern could pull code from elsewhere into
+  the record. NULs are now dropped from the input first. The markers are
+  written as `\u0000` escapes rather than raw bytes, so `ingest.mjs` no
+  longer reads as a binary file to git, grep and editors.
 - **`append` asks for `--assert-ingest` only once per chain.** On a chain
   whose base predates `corpus.ingest`, the depth-1 layer records the
   operator's assertion and every later layer repeats it (6.1), but each

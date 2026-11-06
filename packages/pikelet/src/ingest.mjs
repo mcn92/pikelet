@@ -606,9 +606,11 @@ function protectInlineCode(src, keep) {
 // delimiters); prose loses only heading hashes, blockquote/list prefixes,
 // rules, boundary emphasis, table scaffolding, and link/image wrappers.
 function stripMarkdown(text) {
-  const src = String(text || '');
+  const src = String(text || '').replace(/\u0000/g, '');
   const stash = [];
-  const keep = (s) => ` ${stash.push(s) - 1} `;
+  // NUL brackets each stash index; NULs in the input are dropped first so a
+  // document cannot forge a marker.
+  const keep = (s) => `\u0000${stash.push(s) - 1}\u0000`;
 
   // 1. Protect code first, with the linear scanners below. Fenced blocks
   //    keep their body byte-for-byte; inline spans keep their contents.
@@ -640,7 +642,7 @@ function stripMarkdown(text) {
   // Tidy prose lines, then restore protected code verbatim (after the
   // trim, so code indentation survives).
   out = out.replace(/^[ \t]+|[ \t]+$/gm, '').replace(/[ \t]+/g, ' ');
-  out = out.replace(/ (\d+) /g, (_, i) => stash[Number(i)]);
+  out = out.replace(/\u0000(\d+)\u0000/g, (_, i) => stash[Number(i)]);
   return String(out).replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 

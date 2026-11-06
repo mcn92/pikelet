@@ -54,6 +54,8 @@ const fences = [
   ['a shorter closing run does not close a longer opener', 'x ```a` y', 'x ```a` y'],
   ['a span does not cross a line break', 'a ` b\n` c', 'a ` b\n` c'],
   ['prose numbers between spaces are not stash markers', 'take 7 of `x` and 0 more', 'take 7 of x and 0 more'],
+  ['a NUL-bracketed number in the input is not a stash marker', 'a `x` b \u00000\u0000 c', 'a x b 0 c'],
+  ['NULs in the input are dropped', 'one\u0000two', 'onetwo'],
 ];
 for (const [label, input, want] of fences) {
   const got = stripMarkdown(input);
