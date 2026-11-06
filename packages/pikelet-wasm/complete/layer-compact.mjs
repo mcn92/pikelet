@@ -64,12 +64,10 @@ export function planCompaction({ rowTotal, headBitset }) {
  * Build a `lineage-v1` segment (kind 7), REQUIRED for a base compacted from a
  * chain.
  *
- * The HEAD TABLE is what lets a citation against any head of the compacted
- * chain translate — not only the last one. Draft 2's segment named only the old
- * head, so once layers were retired a citation made while H3 was published was
- * unresolvable, and a chain compacted twice could not recognize the intermediate
- * base. The previous compacted base is this table's depth-0 entry, so retaining
- * intermediate compacted bases gives multi-hop translation with nothing further.
+ * The HEAD TABLE lets a citation against any head of the compacted chain
+ * translate, not only the last one. The previous compacted base is its
+ * depth-0 entry, so retaining intermediate compacted bases gives multi-hop
+ * translation with nothing further.
  *
  * @param {{heads: Array<{identity: string, rowTotal: number, depth: number}>,
  *          headBitset: Uint8Array, oldRowTotal: number,

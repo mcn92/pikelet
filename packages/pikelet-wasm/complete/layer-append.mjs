@@ -117,14 +117,10 @@ export function planLayer({
     };
     for (const id of remove) setOne(id, '--remove');
 
-    // Each pair is [oldId, target]. `target` is the CALLER's way of naming
-    // which new record supersedes oldId: a number is a resolved local index
-    // into this layer's own records, which the producer computed by matching
-    // the --supersede path against the chunks that path produced. A
-    // non-numeric target (a raw path the producer could not resolve) falls
-    // back to positional assignment, which is what this did for every pair —
-    // so `--supersede 5=a.md --supersede 9=b.md` bound 5 to whichever chunk
-    // happened to land first, regardless of which file produced it.
+    // Each pair is [oldId, target]. A numeric target is a local index into
+    // this layer's records, resolved by the producer from the chunks the
+    // --supersede path produced. A non-numeric target (a path the producer
+    // could not resolve) falls back to positional assignment.
     const supersessions = [];
     let nextNewId = rowBase;
     const claimed = new Set();

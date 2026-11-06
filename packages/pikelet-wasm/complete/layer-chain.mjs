@@ -17,8 +17,7 @@ import { testBit, bitsetBytesFor } from './tombstones.mjs';
  * tiers, and take no part in id resolution.
  *
  * Every per-tier construction in section 5 ranges over search tiers, so the
- * base is always included — "for every layer" would literally have excluded it,
- * which is the bug the term exists to prevent.
+ * base is always included ("for every layer" would exclude it).
  */
 export function buildIntervalTable(members) {
     if (!Array.isArray(members) || members.length === 0) {

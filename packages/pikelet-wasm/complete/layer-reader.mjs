@@ -18,12 +18,8 @@
 // supplied lineage map (section 7), then each layer's confined
 // `parent.locator`, then a host resolver. The lineage map is the cheaper path
 // when available, since every location is known up front and members open in
-// one wave; the locator walk is sequential by nature, because each hop's
-// location is only known once its child's manifest has been read.
-//
-// This comment used to claim locator following "is wired". It was not: this
-// module did not import layer-locator.mjs at all, so every ancestor had to be
-// named by the caller and a published chain could not be mounted from its head.
+// one wave; the locator walk is sequential, because each hop's location is
+// only known once its child's manifest has been read.
 
 import { openPikeletFile, readChainMemberShell, readMemberManifest, base64Bytes, LEXICAL_CANDIDATES, LEXICAL_CUTOFF } from './index.mjs';
 import { resolveParentLocation, assertConfined } from './layer-locator.mjs';
@@ -43,10 +39,9 @@ import {
 // can name the budget it hit.
 export const CHAIN_DEFAULTS = Object.freeze({
     maxDepth: MAX_DEPTH,
-    // 5.5: the reader's limit MUST be finite and MUST be declared. 13.1
-    // measured the inherited fit out to 40% drift with no degradation, so 0.20
-    // is conservative rather than a guess — but it stays a reader policy, not a
-    // format constant, so it can be revisited without a format change.
+    // 5.5: the reader's limit MUST be finite and declared. 0.20 is
+    // conservative (13.1 measured no degradation out to 40% drift), and it is
+    // a reader policy, not a format constant.
     readerDriftLimit: 0.20,
 });
 
@@ -88,8 +83,7 @@ async function walkToBase(head, options) {
         if (!peek.isLayer) return chain;          // reached the base
         if (!peek.parent) throw new Error('a layer manifest carries no layer.parent (3.2)');
         // A child is a URL whether it arrived as a range source or, one hop
-        // up, as the URL string a locator resolved to. Classifying every
-        // string as a file path sent that second hop to fileSource.
+        // up, as the URL string a locator resolved to.
         const childLocation = typeof cursor === 'string' ? cursor : (cursor.url ?? cursor.location ?? null);
         const childIsFile = typeof cursor === 'string' && !isHttpUrl(cursor);
         if (typeof cursor === 'object' && typeof cursor?.fetch === 'function') childFetch = cursor.fetch;
@@ -228,9 +222,7 @@ export async function openPikeletChain(members, options = {}) {
         const layerBlooms = [];
         let everyLayerShipsBloom = true;
         // 4.5: every layer's bloom MUST use the base asset's geometry, so the
-        // union is an exact OR. The geometry is right here in the base's fit;
-        // it used to come only from options.baseBloom, which no caller set, so
-        // the check never ran and a layer with foreign hashes was OR'd in.
+        // union is an exact OR. The geometry comes from the base's fit.
         const baseVocabBloom = base.calibrationJson?.asset?.vocabBloom;
         const baseBloomGeometry = options.baseBloom
             || (baseVocabBloom ? { bits: baseVocabBloom.bits, hashes: baseVocabBloom.hashes } : null);
@@ -269,8 +261,7 @@ export async function openPikeletChain(members, options = {}) {
             // A missing bloom degrades the chain because it hides a layer's
             // vocabulary from known_frac (4.5). A tombstone-only layer has no
             // records and so no vocabulary to hide: its `none` region is the
-            // empty bloom, not a gap. Counting it took a chain that deleted 3
-            // of 3,255 records to drift-exceeded, unscoring every query.
+            // empty bloom, not a gap.
             if (inherited.bloomBytes) layerBlooms.push(inherited.bloomBytes);
             else if (!rel.tombstoneOnly) everyLayerShipsBloom = false;
 
@@ -295,8 +286,8 @@ export async function openPikeletChain(members, options = {}) {
                 throw new Error(`layer at depth ${rel.depth} clears inherited tombstone for id ${violation}: a child's mask must be a superset of its parent's (3.4)`);
             }
             // 4.3: a tombstone-only layer exists only to delete, so its
-            // cumulative count MUST exceed its parent's. The producer checked
-            // this; a reader accepted a no-op layer from anyone else.
+            // cumulative count MUST exceed its parent's. Checked here too, not
+            // only by the producer.
             if (rel.tombstoneOnly && countBits(tomb.bitset) <= countBits(headBitset)) {
                 throw new Error(`tombstone-only layer at depth ${rel.depth} deletes nothing its parent had not already deleted (4.3)`);
             }
@@ -333,8 +324,7 @@ export async function openPikeletChain(members, options = {}) {
             ? calibrationDrift(chainMembers, headTombstoneCount) : 0;
         // 5.5: "the base carries no fit" is status `none`. The fit lives in the
         // base's query-interp calibration region (`asset`), never in the
-        // manifest; an earlier draft of this file read manifest.calibration,
-        // which does not exist.
+        // manifest.
         const baseCal = base.calibrationJson || null;
         const baseHasFit = !!(baseCal && baseCal.asset);
         const calibration = calibrationStatus({
@@ -370,8 +360,7 @@ export async function openPikeletChain(members, options = {}) {
                     identity: chainMembers[chainMembers.length - 1].identity,
                     baseIdentity: base.identity,
                     // The pack's name is the base's: layers add records, not a
-                    // new name. Without it a host fell back to naming the
-                    // chain after its newest layer's file.
+                    // new name.
                     name: opened[0].info().name ?? null,
                     layers: chainMembers.length,
                     searchTiers: searchTiers.length,
@@ -382,11 +371,7 @@ export async function openPikeletChain(members, options = {}) {
                     dim: base.dim,
                     metric: base.manifest.metric,
                     // 4.5: a chain's encoder IS the base's — a layer carries no
-                    // encoder bytes and inherits by commitment. Omitting it here
-                    // made every consumer that reads info().encoder report null
-                    // on a chain: `list_packs` advertised "encoder": null for a
-                    // pack whose base is MiniLM, so a model asking what embedded
-                    // the corpus got nothing.
+                    // encoder bytes and inherits by commitment.
                     encoder: base.encoderInfo ?? null,
                     calibrationDrift: calibration.drift,
                     calibrationStatus: calibration.status,
@@ -411,9 +396,7 @@ export async function openPikeletChain(members, options = {}) {
                     }),
                     // The chain encodes with the base's encoder (4.5), so the
                     // base's verification is the chain's. Chain-level integrity
-                    // is the members' when they agree, else 'mixed'. Without
-                    // these, verify_pack on a chain reported no encoder or
-                    // integrity state at all.
+                    // is the members' when they agree, else 'mixed'.
                     encoderVerified: opened[0].info().encoderVerified,
                     ...memberIntegritySummary(opened),
                 };
@@ -433,13 +416,12 @@ export async function openPikeletChain(members, options = {}) {
                 }
 
                 // --- 2. Lexical candidates (5.3 step 2, 5.4) -------------------
-                // df is summed across tiers per query term, so a term common in
-                // the base and rare in a layer scores with one idf everywhere;
-                // each tier scoring with its own df made layer records outrank
-                // base records on the same term. With comparable scores every
-                // tier's own top LEXICAL_CANDIDATES contains its share of the
-                // merged top LEXICAL_CANDIDATES, so the cutoff and cap below are
-                // exact over the merged, live-only list.
+                // df is summed across tiers per query term, so a term scores
+                // with one idf everywhere (per-tier df would let layer records
+                // outrank base records on the same term). With comparable
+                // scores, each tier's own top LEXICAL_CANDIDATES contains its
+                // share of the merged top LEXICAL_CANDIDATES, so the cutoff
+                // and cap below are exact over the merged, live-only list.
                 let lexicalHits = [];
                 const lexTiers = searchTiers.map((t, j) => ({ lex: t.reader.lexicalIndex, j }))
                     .filter((x) => x.lex);
@@ -499,8 +481,7 @@ export async function openPikeletChain(members, options = {}) {
                         ...(extra.length ? { extraCandidates: extra } : {}),
                         // Every reranked candidate, not the top k: abstention is
                         // fit at a fixed top-10 window whatever the caller's k,
-                        // and a k-sized window biased mean10 and could flip the
-                        // verdict (the single-file reader's k-mismatch fix).
+                        // as in the single-file reader.
                         fullRerankOutput: true,
                     });
                     return out.results.map((r) => ({
@@ -546,18 +527,15 @@ export async function openPikeletChain(members, options = {}) {
                 // 5.5: under `inherited` the base's scorer runs unchanged over
                 // the merged window. Under `drift-exceeded` matchQuality is
                 // `unscored`, confidence is omitted, results still ship, and the
-                // response says which input bound it — so a consumer can tell
-                // "no fit" from "fit outgrown". A reader MUST NOT apply an
-                // outgrown fit silently, and MUST NOT omit the verdict either:
-                // omitting it makes "the fit said no" indistinguishable from
-                // "nothing scored", which is exactly the confusion 5.5 exists
-                // to prevent.
+                // response says which input bound it, so a consumer can tell
+                // "no fit" from "fit outgrown". The verdict is never applied
+                // silently or omitted.
                 let matchQuality = 'unscored';
                 let confidence;
                 let grounding = null;
                 if (calibration.status === 'inherited' && base.scoreQuality) {
                     // Coverage reads the fit's passagesNeeded from the FULL
-                    // fused window; top.slice(0, 3) gave it one passage at k=1.
+                    // fused window, not the k-truncated results.
                     const passagesNeeded = baseCal?.asset?.coverage?.topK || 5;
                     const passageOrder = fusedFull?.length ? fusedFull : searched;
                     const passages = await Promise.all(passageOrder.slice(0, passagesNeeded).map(async (hit) => {
@@ -565,12 +543,9 @@ export async function openPikeletChain(members, options = {}) {
                         const rec = await searchTiers[owner.tier.tier].reader.hydrate(owner.localId);
                         return rec?.text ?? '';
                     }));
-                    // 4.5 is normative: "A reader MUST compute the union
-                    // before scoring." The union was computed at mount and
-                    // then never reached the scorer, so known_frac was
-                    // measured against the base's vocabulary alone and
-                    // under-read every query about a layer's content —
-                    // exactly the records a layer is published to add.
+                        // 4.5: "A reader MUST compute the union before
+                    // scoring", so known_frac counts every layer's
+                    // vocabulary, not only the base's.
                     const scored = await base.scoreQuality(
                         searched,
                         { text: queryOptions.text ?? '', vector, passages },
@@ -641,9 +616,6 @@ export async function openPikeletChain(members, options = {}) {
              * base may legitimately fail here, because a layer can tombstone
              * or supersede the record it expects, so `evaluationScope` says
              * the material is the base's and not the chain's.
-             *
-             * Before this existed `verify_pack` called `search.evaluation()`
-             * on a chain and got a TypeError.
              */
             async evaluation() {
                 assertOpen();
@@ -674,16 +646,10 @@ export async function openPikeletChain(members, options = {}) {
             /**
              * 6.3's verbatim row copy: the quantized bytes and per-row
              * scale/offset for a set of chain ids, read back from whichever
-             * tier owns each one. Producer seam, like __head.
-             *
-             * `compact` re-embedded every live record with the base's own
-             * encoder instead, on the stated grounds that the engine exposed
-             * no row readback. It does: the sketch reader's fetchRows()
-             * (format 2 verifies each row's digest as it reads) plus the
-             * resident scales/offsets arrays. Re-embedding costs a forward
-             * pass per record and only reproduces the same bytes when the
-             * encoder is bit-identical, which is a stronger assumption than
-             * the spec's copy makes.
+             * tier owns each one, via the sketch reader's fetchRows() (format 2
+             * verifies each row's digest) and the resident scales/offsets.
+             * Producer seam, like __head. Copying, rather than re-embedding,
+             * keeps the bytes without assuming a bit-identical encoder.
              *
              * Returns rows in the order ids were given. Throws if an id is
              * outside every tier, which callers should read as a planning bug

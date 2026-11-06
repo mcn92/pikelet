@@ -6,7 +6,7 @@
 // re-embedded, local ids do not change), and its rowBase, bitset, supersessions
 // and evaluation material are recomputed.
 //
-// The correctness rule the spec was revised twice to get right:
+// The correctness rule:
 //
 //   A rebase replays what the layer ITSELF did -- its delta over its old
 //   parent, and the edges physically in its own segment -- and NEVER its
