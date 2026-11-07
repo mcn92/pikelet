@@ -10,6 +10,9 @@
 //   base-NNNN.pikelet   the current base (NNNN counts compactions)
 //   base-NNNN.LLLL.pikelet  its layers, one note each
 //   .lock               held while a write or compaction runs
+//
+// The directory is kept 0700 and its files 0600 whatever the umask: notes
+// can hold conversation-derived and internal material.
 
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
@@ -37,6 +40,8 @@ const STALE_LOCK_MS = 10 * 60 * 1000;
 const LOCK_WAIT_MS = 30 * 1000;
 // A breaker holds .lock.break for one read and one unlink.
 const BREAK_STALE_MS = 10 * 1000;
+const DIR_MODE = 0o700;
+const FILE_MODE = 0o600;
 
 const quietLog = () => {};
 
@@ -90,7 +95,7 @@ async function readState(dir) {
 
 async function writeState(dir, state) {
   const tmp = path.join(dir, `journal.json.${process.pid}.tmp`);
-  await fs.writeFile(tmp, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  await fs.writeFile(tmp, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: FILE_MODE });
   await fs.rename(tmp, path.join(dir, 'journal.json'));
 }
 
@@ -117,7 +122,7 @@ async function withLock(dir, fn, { waitMs = LOCK_WAIT_MS } = {}) {
   const mine = path.join(dir, `.lock.${process.pid}.${token}`);
   const deadline = Date.now() + waitMs;
   let pause = 20;
-  await fs.writeFile(mine, body);
+  await fs.writeFile(mine, body, { mode: FILE_MODE });
   try {
     for (;;) {
       try {
@@ -189,7 +194,7 @@ async function breakStaleLock(dir, lockPath, raw, token) {
   const breakPath = path.join(dir, '.lock.break');
   const breakBody = JSON.stringify({ pid: process.pid, at: Date.now(), token });
   const mine = path.join(dir, `.lock.break.${process.pid}.${token}`);
-  await fs.writeFile(mine, breakBody);
+  await fs.writeFile(mine, breakBody, { mode: FILE_MODE });
   try {
     try {
       await fs.link(mine, breakPath);
@@ -213,6 +218,27 @@ async function breakStaleLock(dir, lockPath, raw, token) {
 // A chain file: a base or one of its layers.
 const CHAIN_FILE = /^base-\d{4}(\.\d{4})?\.pikelet$/;
 
+// Tighten the journal directory to 0700 and its chain files and journal.json
+// to 0600. Run before a write, so a journal made before modes were enforced
+// is closed off before anything new lands in it, and after, because compile,
+// append and compact create their outputs under the umask. Filesystems
+// without Unix modes (FAT, some mounted Windows drives) accept the chmod and
+// keep the old mode; that is reported once per directory, not fatal.
+// Windows has no such modes.
+const warnedOpen = new Set();
+async function makePrivate(dir, log) {
+  if (process.platform === 'win32') return;
+  await fs.chmod(dir, DIR_MODE);
+  for (const f of await fs.readdir(dir)) {
+    if (f === 'journal.json' || CHAIN_FILE.test(f)) await fs.chmod(path.join(dir, f), FILE_MODE);
+  }
+  const mode = (await fs.stat(dir)).mode & 0o777;
+  if ((mode & 0o077) && !warnedOpen.has(dir)) {
+    warnedOpen.add(dir);
+    log(`warning: ${dir} stays mode ${mode.toString(8)} after chmod ${DIR_MODE.toString(8)}; this filesystem does not enforce Unix permissions, so other local users may be able to read the journal`);
+  }
+}
+
 /**
  * Create an empty journal: a base holding one seed record (append needs a
  * base with at least one record), compiled without calibration.
@@ -227,7 +253,8 @@ export async function initJournal({ nameOrPath, force = false, log = (l) => cons
     log(`warning: ${dir} is inside the git repository ${repo}. A journal is private by default;`);
     log(`  keep it out of version control, e.g. add "${path.relative(repo, dir) || '.'}/" to ${path.join(repo, '.gitignore')}`);
   }
-  await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(dir, { recursive: true, mode: DIR_MODE });
+  await makePrivate(dir, log);
   // Replacing a journal holds the lock, so it cannot interleave with a
   // write, and removes the old chain files: a layer left on disk would
   // otherwise collide with the new journal's first append.
@@ -261,6 +288,7 @@ async function createJournalFiles(dir, log) {
       generation: 1,
       members: [baseFile],
     });
+    await makePrivate(dir, log);
     log(`Created journal ${name} at ${dir}`);
     return { dir, name };
   } finally {
@@ -360,12 +388,14 @@ async function compactLocked(dir, state, log) {
 export async function compactJournal(nameOrPath, { log = (l) => console.log(l), lockWaitMs } = {}) {
   const dir = resolveJournalDir(nameOrPath);
   return withLock(dir, async () => {
+    await makePrivate(dir, log);
     const state = await readState(dir);
     if (state.members.length === 1) {
       log('The journal is already a single base; nothing to compact');
       return { dir, members: state.members };
     }
     const { state: next } = await compactLocked(dir, state, log);
+    await makePrivate(dir, log);
     return { dir, members: next.members };
   }, { waitMs: lockWaitMs });
 }
@@ -378,6 +408,7 @@ export async function compactJournal(nameOrPath, { log = (l) => console.log(l), 
 export async function appendNote(nameOrPath, record, { log = quietLog, lockWaitMs } = {}) {
   const dir = resolveJournalDir(nameOrPath);
   return withLock(dir, async () => {
+    await makePrivate(dir, log);
     let state = await readState(dir);
     if (state.members.length - 1 >= MAX_DEPTH) {
       log(`Journal at depth ${state.members.length - 1}: compacting before the next note`);
@@ -401,6 +432,7 @@ export async function appendNote(nameOrPath, record, { log = quietLog, lockWaitM
       'allow-drift': true,
     }, { chunks: [record], log });
     await writeState(dir, { ...state, members: [...state.members, layerFile] });
+    await makePrivate(dir, log);
     return { id: written.rowBase, identity: written.identity, dir };
   }, { waitMs: lockWaitMs });
 }

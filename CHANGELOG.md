@@ -35,6 +35,16 @@ first.
 
 ### Fixed
 
+- **A journal is private to its owner.** `journal init`, `write_note` and
+  `journal compact` created the journal under the process umask, so under
+  the usual 022 the directory was 0755 and its notes, `journal.json` and
+  chain files 0644: readable by every local user, although the journal is
+  documented as private and can hold conversation-derived notes. The
+  directory is now 0700 and its files 0600 whatever the umask. Each write
+  re-applies the modes before and after it runs, so a journal created by
+  an earlier release is closed off by its next note. On a filesystem that
+  keeps the old mode after chmod (FAT, a Windows drive mounted in WSL),
+  `pikelet` warns once instead of failing. Windows is unchanged.
 - **`compile` downloads the encoder weights to the user cache.** An
   installed `pikelet` fetched the 24 MiB MiniLM blob into its own package
   directory. Under `npx` that is a cache npm purges, and under a global

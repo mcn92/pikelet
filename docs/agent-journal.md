@@ -118,7 +118,10 @@ easiest to orient by. They are the shape a journal should produce natively.
   No tool takes a path; the model cannot choose what it writes to.
 - **Private by default.** The default location is outside any project tree, so
   it cannot be committed by accident. If the journal path is inside a git
-  repository, `journal init` warns and offers a `.gitignore` entry. Sharing is
+  repository, `journal init` warns and offers a `.gitignore` entry. The
+  directory is 0700 and its files 0600 whatever the umask; every write
+  re-applies those modes, and a filesystem that ignores them gets a warning
+  rather than a silent claim of privacy. Sharing is
   an explicit user command (`journal export`), never a tool. The journal can
   hold sensitive material (conversation-derived notes, internal decisions),
   which is why sharing waits until the feature has been proven in private use.

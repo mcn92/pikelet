@@ -328,7 +328,9 @@ note is the MCP client's own name from the protocol, never something the
 model claims.
 
 A journal lives outside your project by default and is never published
-unless you move it. It is unscored by design (no calibration), each note is
+unless you move it. Its directory is kept 0700 and its files 0600 whatever
+the umask, and every write tightens them again; on a filesystem without Unix
+permissions (FAT, a mounted Windows drive) `pikelet` warns instead. It is unscored by design (no calibration), each note is
 an immutable layer, and it folds itself back into one file every 8 notes.
 See [`docs/agent-journal.md`](https://github.com/mcn92/pikelet/blob/main/docs/agent-journal.md) for the design and
 what is still to come.

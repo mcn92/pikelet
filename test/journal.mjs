@@ -175,6 +175,45 @@ console.log('journal: recovery and concurrent writers');
     check('init --force on a journal with layers leaves it writable', fresh.id === 1, `id ${fresh.id}`);
 }
 
+console.log('journal: private file modes');
+if (process.platform === 'win32') {
+    console.log('  skip: Windows has no Unix modes');
+} else {
+    // Under a permissive umask, init, append and compact still leave the
+    // directory 0700 and every file 0600; a journal loosened from outside
+    // is tightened again by the next write.
+    const prevUmask = process.umask(0o022);
+    try {
+        const pdir = path.join(tmp, 'private');
+        const modes = () => {
+            const out = { dir: fs.statSync(pdir).mode & 0o777 };
+            for (const f of fs.readdirSync(pdir)) out[f] = fs.statSync(path.join(pdir, f)).mode & 0o777;
+            return out;
+        };
+        const allPrivate = (m) => m.dir === 0o700 && Object.entries(m).every(([k, v]) => k === 'dir' || v === 0o600);
+        const show = (m) => JSON.stringify(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.toString(8)])));
+        await initJournal({ nameOrPath: pdir, log: quiet });
+        let m = modes();
+        check('init leaves the directory 0700 and its files 0600', allPrivate(m), show(m));
+        await appendNote(pdir, shapeNote({ kind: 'todo', title: 'Private', text: 'Mode check.' }, meta(70)));
+        m = modes();
+        check('a note leaves every file 0600', allPrivate(m) && Object.keys(m).length === 4, show(m));
+        await compactJournal(pdir, { log: quiet });
+        m = modes();
+        check('compaction leaves every file 0600', allPrivate(m), show(m));
+        fs.chmodSync(pdir, 0o755);
+        for (const f of fs.readdirSync(pdir)) fs.chmodSync(path.join(pdir, f), 0o644);
+        await appendNote(pdir, shapeNote({ kind: 'todo', title: 'Tightened', text: 'Loosened from outside.' }, meta(71)));
+        m = modes();
+        check('a write tightens a loosened journal', allPrivate(m), show(m));
+        const lines = [];
+        await initJournal({ nameOrPath: path.join(tmp, 'private-2'), log: (l) => lines.push(l) });
+        check('no permissions warning where modes are enforced', !lines.some((l) => /does not enforce/.test(l)), lines.join(' | '));
+    } finally {
+        process.umask(prevUmask);
+    }
+}
+
 console.log('journal: alongside a single corpus pack');
 {
     // --journal added to a one-pack server: get_record and verify_pack
