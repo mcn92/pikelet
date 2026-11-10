@@ -36,10 +36,7 @@ export const NOTE_LIMITS = Object.freeze({
 // limit append enforces, LAYERED_PROFILE.md 6.1): at this depth the journal
 // compacts before writing the next note.
 const MAX_DEPTH = 8;
-const STALE_LOCK_MS = 10 * 60 * 1000;
 const LOCK_WAIT_MS = 30 * 1000;
-// A breaker holds .lock.break for one read and one unlink.
-const BREAK_STALE_MS = 10 * 1000;
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
 
@@ -109,7 +106,10 @@ export async function journalMembers(dir) {
 // would otherwise fork the chain. A writer that finds the lock held by a live
 // process waits for it, up to LOCK_WAIT_MS: agents finishing a session at the
 // same moment each get their note in rather than a refusal. A lock left by a
-// dead process, or older than STALE_LOCK_MS, is broken.
+// dead process is broken; a lock held by a live one never is, however old,
+// so a holder cannot lose the lock between checking it and committing (a
+// suspended laptop resumes still owning it). A live holder that never
+// finishes is reported by pid when the wait runs out.
 //
 // The holder record is written whole under a private name and hard-linked
 // into place: link fails with EEXIST when .lock exists, and a contender never
@@ -135,13 +135,14 @@ async function withLock(dir, fn, { waitMs = LOCK_WAIT_MS } = {}) {
       // Released between our link and our read: try again.
       if (raw === null) continue;
       const holder = parseLock(raw);
-      if (isStaleLock(holder, STALE_LOCK_MS)) {
+      if (isStaleLock(holder)) {
         // Broken under .lock.break, so this cannot remove a lock some other
         // contender took after breaking the same stale one.
         if (await breakStaleLock(dir, lockPath, raw, token)) continue;
       }
       if (Date.now() >= deadline) {
-        throw new CliError(`journal ${dir} is locked by process ${holder?.pid ?? '?'}; another session has been writing to it for over ${Math.round(waitMs / 1000)}s`);
+        throw new CliError(`journal ${dir} is locked by process ${holder?.pid ?? '?'}; another session has been writing to it for over ${Math.round(waitMs / 1000)}s. `
+          + `If that process is not a pikelet writer (its pid was reused), remove ${lockPath}`);
       }
       // Jittered backoff so waiting writers do not retry in lockstep.
       await new Promise((r) => setTimeout(r, Math.min(pause * (0.5 + Math.random()), Math.max(0, deadline - Date.now()))));
@@ -150,8 +151,16 @@ async function withLock(dir, fn, { waitMs = LOCK_WAIT_MS } = {}) {
   } finally {
     await fs.rm(mine, { force: true });
   }
+  // Only a dead holder's lock is broken, so a live writer keeps it to the
+  // end. fn still checks before committing, in case .lock was removed by
+  // hand while it ran, and aborts rather than commit unlocked.
+  const assertOwned = async () => {
+    if (await readLockFile(lockPath).catch(() => null) !== body) {
+      throw new CliError(`lost the lock on journal ${dir} (.lock was removed or replaced while this write ran); this write was abandoned and the journal is unchanged`);
+    }
+  };
   try {
-    return await fn();
+    return await fn({ assertOwned, token });
   } finally {
     // Release only our own lock: one broken as stale is not ours to remove.
     if (await readLockFile(lockPath).catch(() => null) === body) await fs.rm(lockPath, { force: true });
@@ -173,21 +182,18 @@ function parseLock(raw) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
-// Unparseable, held by a process that no longer exists, or older than maxAgeMs.
-function isStaleLock(holder, maxAgeMs) {
+// Unparseable, or held by a process that no longer exists. Age is not a
+// test: a live holder past any age could still be about to commit.
+function isStaleLock(holder) {
   if (!holder || !Number.isSafeInteger(holder.pid)) return true;
-  let alive;
-  try { process.kill(holder.pid, 0); alive = true; } catch (e) { alive = e.code === 'EPERM'; }
-  return !alive || Date.now() - (holder.at || 0) > maxAgeMs;
+  try { process.kill(holder.pid, 0); return false; } catch (e) { return e.code !== 'EPERM'; }
 }
 
 // Remove the stale lock `raw`, if .lock still holds it. Breakers take
 // .lock.break first, so between the check and the removal no other breaker
-// can free .lock for a new holder; a dead holder cannot release it either
-// (a live one past STALE_LOCK_MS could, which is why that age is far beyond
-// any write).
+// can free .lock for a new holder, and a dead holder cannot release it.
 // Returns false when another breaker is at work (the caller waits and looks
-// again). A .lock.break left by a crashed breaker is itself broken; two
+// again). A .lock.break left by a dead breaker is itself broken; two
 // breakers judging it stale at once is the one window left, and it needs a
 // breaker to have died mid-break.
 async function breakStaleLock(dir, lockPath, raw, token) {
@@ -201,7 +207,7 @@ async function breakStaleLock(dir, lockPath, raw, token) {
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
       const other = await readLockFile(breakPath);
-      if (other !== null && isStaleLock(parseLock(other), BREAK_STALE_MS)) await fs.rm(breakPath, { force: true });
+      if (other !== null && isStaleLock(parseLock(other))) await fs.rm(breakPath, { force: true });
       return false;
     }
   } finally {
@@ -218,9 +224,37 @@ async function breakStaleLock(dir, lockPath, raw, token) {
 // A chain file: a base or one of its layers.
 const CHAIN_FILE = /^base-\d{4}(\.\d{4})?\.pikelet$/;
 // Files a journal directory can hold without journal.json: chain files, a
-// journal.json write, and lock files, all left by an interrupted init or
-// write.
-const JOURNAL_LEFTOVER = /^(base-\d{4}(\.\d{4})?\.pikelet|journal\.json\.\d+\.tmp|\.lock(\.break)?(\.\d+\.[0-9a-f]+)?)$/;
+// staged build or journal.json write, and lock files, all left by an
+// interrupted init or write.
+const JOURNAL_LEFTOVER = /^(base-\d{4}(\.\d{4})?\.pikelet(\.[0-9a-f]+\.tmp)?|journal\.json\.\d+\.tmp|\.lock(\.break)?(\.\d+\.[0-9a-f]+)?)$/;
+
+// Checked immediately before a write is committed: this writer still holds
+// the lock, and journal.json still lists the chain it read. Either failing
+// means another writer has changed the journal since, and committing would
+// overwrite it.
+async function assertUnchanged(dir, expected, assertOwned) {
+  await assertOwned();
+  const now = await readState(dir);
+  if (now.generation !== expected.generation || JSON.stringify(now.members) !== JSON.stringify(expected.members)) {
+    throw new CliError(`journal ${dir} changed while this write was in progress; it was abandoned and the other write kept`);
+  }
+}
+
+// Build a chain file under a private name, check the journal is still ours
+// and unchanged, then move it into place. A writer that lost the lock
+// therefore never overwrites a file another writer committed, and an
+// abandoned build leaves only its own temporary file, which is removed.
+async function buildInPlace(dir, finalName, token, build, beforeCommit) {
+  const staged = path.join(dir, `${finalName}.${token}.tmp`);
+  try {
+    const result = await build(staged);
+    await beforeCommit();
+    await fs.rename(staged, path.join(dir, finalName));
+    return result;
+  } finally {
+    await fs.rm(staged, { force: true });
+  }
+}
 
 // Tighten the journal directory to 0700 and its chain files and journal.json
 // to 0600. Run before a write, so a journal made before modes were enforced
@@ -252,16 +286,17 @@ export async function initJournal({ nameOrPath, force = false, log = (l) => cons
   const statePath = path.join(dir, 'journal.json');
   // A journal.json that is not a Pikelet journal's (a project's own config,
   // say) makes the directory foreign: --force replaces journals, nothing else.
-  let existing = false;
-  if (fssync.existsSync(statePath)) {
+  const isJournal = async () => {
+    if (!fssync.existsSync(statePath)) return false;
     try {
       await readState(dir);
-      existing = true;
+      return true;
     } catch {
       throw new CliError(`${dir} holds a journal.json that is not a ${JOURNAL_FORMAT} journal; journal init will not replace it, even with --force. `
         + 'Name a new directory, or a bare name for one under ~/.pikelet/journals');
     }
-  }
+  };
+  const existing = await isJournal();
   if (existing && !force) throw new CliError(`${dir} already holds a journal; pass --force to replace it`);
   // init makes its directory 0700, so it only takes a directory that is, or
   // is becoming, a journal: a new or empty one, an existing journal, or one
@@ -284,21 +319,34 @@ export async function initJournal({ nameOrPath, force = false, log = (l) => cons
   }
   await fs.mkdir(dir, { recursive: true, mode: DIR_MODE });
   await makePrivate(dir, log);
-  // Replacing a journal holds the lock, so it cannot interleave with a
-  // write, and removes the old chain files: a layer left on disk would
-  // otherwise collide with the new journal's first append.
-  if (existing) {
-    return withLock(dir, async () => {
-      for (const f of await fs.readdir(dir)) {
-        if (CHAIN_FILE.test(f)) await fs.rm(path.join(dir, f), { force: true });
-      }
-      return createJournalFiles(dir, log);
-    });
-  }
-  return createJournalFiles(dir, log);
+  // Creating or replacing a journal holds the lock, so it cannot interleave
+  // with a write or another init. Whether a journal exists is decided again
+  // under the lock: of two inits racing on a new directory, the second finds
+  // the first's journal and refuses without --force.
+  return withLock(dir, async ({ assertOwned, token }) => {
+    if (!await isJournal()) {
+      const { dir: created, name } = await createJournalFiles(dir, log, { token, beforeCommit: assertOwned });
+      return { dir: created, name };
+    }
+    if (!force) throw new CliError(`${dir} already holds a journal; pass --force to replace it`);
+    // The new base gets a generation no file in the directory uses, so it is
+    // built beside the old chain; journal.json switches to it only once it is
+    // complete, and the old chain files are removed after that. A failed
+    // replacement leaves the old journal as it was.
+    let generation = 1;
+    for (const f of await fs.readdir(dir)) {
+      const m = CHAIN_FILE.test(f) && /^base-(\d{4})/.exec(f);
+      if (m) generation = Math.max(generation, Number(m[1]) + 1);
+    }
+    const result = await createJournalFiles(dir, log, { generation, token, beforeCommit: assertOwned });
+    for (const f of await fs.readdir(dir)) {
+      if (CHAIN_FILE.test(f) && f !== result.baseFile) await fs.rm(path.join(dir, f), { force: true });
+    }
+    return { dir: result.dir, name: result.name };
+  });
 }
 
-async function createJournalFiles(dir, log) {
+async function createJournalFiles(dir, log, { generation = 1, token, beforeCommit }) {
   const name = path.basename(dir);
   const seedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pikelet-journal-seed-'));
   try {
@@ -308,18 +356,20 @@ async function createJournalFiles(dir, log) {
       + 'Every note is agent-written and unverified; read it as a colleague\'s working notes, not as a '
       + 'published source.\n', 'utf8');
     const { compileArtifact } = await import('./cli.mjs');
-    const baseFile = 'base-0001.pikelet';
-    await compileArtifact({ source: seedDir, out: path.join(dir, baseFile), 'skip-calibration': true, force: true });
+    const baseFile = `base-${String(generation).padStart(4, '0')}.pikelet`;
+    await buildInPlace(dir, baseFile, token,
+      (staged) => compileArtifact({ source: seedDir, out: staged, 'skip-calibration': true, force: true }),
+      beforeCommit);
     await writeState(dir, {
       format: JOURNAL_FORMAT,
       name,
       created: new Date().toISOString(),
-      generation: 1,
+      generation,
       members: [baseFile],
     });
     await makePrivate(dir, log);
     log(`Created journal ${name} at ${dir}`);
-    return { dir, name };
+    return { dir, name, baseFile };
   } finally {
     await fs.rm(seedDir, { recursive: true, force: true });
   }
@@ -400,12 +450,13 @@ export function shapeNote(args, { created, authoredBy, session }) {
   };
 }
 
-async function compactLocked(dir, state, log) {
+async function compactLocked(dir, state, log, { assertOwned, token }) {
   const { compactChain } = await import('./compact.mjs');
   const generation = (state.generation || 1) + 1;
   const baseFile = `base-${String(generation).padStart(4, '0')}.pikelet`;
-  const out = path.join(dir, baseFile);
-  const written = await compactChain({ head: state.members.map((m) => path.join(dir, m)), out, 'no-refit': true, force: true }, { log });
+  const written = await buildInPlace(dir, baseFile, token,
+    (staged) => compactChain({ head: state.members.map((m) => path.join(dir, m)), out: staged, 'no-refit': true, force: true }, { log }),
+    () => assertUnchanged(dir, state, assertOwned));
   const old = state.members;
   const next = { ...state, generation, members: [baseFile], lastCompacted: new Date().toISOString() };
   await writeState(dir, next);
@@ -420,14 +471,14 @@ export async function compactJournal(nameOrPath, { log = (l) => console.log(l), 
   // the wrong directory, it must fail without writing a lock file into it or
   // changing its mode.
   await readState(dir);
-  return withLock(dir, async () => {
+  return withLock(dir, async (owner) => {
     const state = await readState(dir);
     await makePrivate(dir, log);
     if (state.members.length === 1) {
       log('The journal is already a single base; nothing to compact');
       return { dir, members: state.members };
     }
-    const { state: next } = await compactLocked(dir, state, log);
+    const { state: next } = await compactLocked(dir, state, log, owner);
     await makePrivate(dir, log);
     return { dir, members: next.members };
   }, { waitMs: lockWaitMs });
@@ -442,30 +493,30 @@ export async function appendNote(nameOrPath, record, { log = quietLog, lockWaitM
   const dir = resolveJournalDir(nameOrPath);
   // As in compactJournal: not a journal means no lock file and no chmod.
   await readState(dir);
-  return withLock(dir, async () => {
+  return withLock(dir, async (owner) => {
     let state = await readState(dir);
     await makePrivate(dir, log);
     if (state.members.length - 1 >= MAX_DEPTH) {
       log(`Journal at depth ${state.members.length - 1}: compacting before the next note`);
-      ({ state } = await compactLocked(dir, state, log));
+      ({ state } = await compactLocked(dir, state, log, owner));
     }
     const base = state.members[0].replace(/\.pikelet$/, '');
     const layerFile = `${base}.${String(state.members.length).padStart(4, '0')}.pikelet`;
-    // A file by this name is not in the chain (members.length indexes past
-    // its last layer): a write that died between the layer and journal.json.
-    // Holding the lock, it is ours to clear; left alone it blocks every
-    // later append with "Output file already exists".
-    if (fssync.existsSync(path.join(dir, layerFile))) {
-      log(`Removing ${layerFile}: left by an interrupted write, not part of the chain`);
-      await fs.rm(path.join(dir, layerFile), { force: true });
-    }
     const { appendLayer } = await import('./append.mjs');
-    const written = await appendLayer({
-      parent: state.members.map((m) => path.join(dir, m)),
-      out: path.join(dir, layerFile),
-      // Unscored by design: drift has no fit to outgrow.
-      'allow-drift': true,
-    }, { chunks: [record], log });
+    // The layer is built under a private name and moved into place only after
+    // checking that the journal is still ours and unchanged. A file already
+    // at layerFile is not in the chain (members.length indexes past its last
+    // layer): a write that died between the layer and journal.json. The
+    // rename replaces it, but only once the check has passed, so a writer
+    // that lost the lock cannot mistake a committed layer for debris.
+    const written = await buildInPlace(dir, layerFile, owner.token,
+      (staged) => appendLayer({
+        parent: state.members.map((m) => path.join(dir, m)),
+        out: staged,
+        // Unscored by design: drift has no fit to outgrow.
+        'allow-drift': true,
+      }, { chunks: [record], log }),
+      () => assertUnchanged(dir, state, owner.assertOwned));
     await writeState(dir, { ...state, members: [...state.members, layerFile] });
     await makePrivate(dir, log);
     return { id: written.rowBase, identity: written.identity, dir };

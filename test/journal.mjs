@@ -173,6 +173,112 @@ console.log('journal: recovery and concurrent writers');
     await initJournal({ nameOrPath: re, force: true, log: quiet });
     const fresh = await appendNote(re, shapeNote({ kind: 'todo', title: 'New', text: 'After re-init.' }, meta(52)));
     check('init --force on a journal with layers leaves it writable', fresh.id === 1, `id ${fresh.id}`);
+
+    // A replacement that fails partway leaves the old journal as it was:
+    // with the temp directory unavailable the new base cannot be built, and
+    // the old chain must still be there and readable.
+    await appendNote(re, shapeNote({ kind: 'todo', title: 'Kept', text: 'Must survive a failed re-init.' }, meta(53)));
+    const before = fs.readFileSync(path.join(re, 'journal.json'), 'utf8');
+    const savedTmp = process.env.TMPDIR;
+    process.env.TMPDIR = path.join(tmp, 'no-such-dir');
+    try {
+        await rejectsLike('init --force fails when the replacement cannot be built',
+            () => initJournal({ nameOrPath: re, force: true, log: quiet }), /ENOENT|no such file/);
+    } finally {
+        if (savedTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = savedTmp;
+    }
+    check('a failed init --force leaves journal.json untouched', fs.readFileSync(path.join(re, 'journal.json'), 'utf8') === before);
+    const kept = JSON.parse(before).members.every((m) => fs.existsSync(path.join(re, m)));
+    check('a failed init --force keeps every chain file', kept);
+    const { chain: keptChain } = await openJournalChain(re);
+    const keptTitles = (await latestNotes(keptChain, { limit: 10 })).map((n) => n.title);
+    await keptChain.close();
+    check('notes written before a failed init --force are still readable', keptTitles.includes('Kept') && keptTitles.includes('New'), keptTitles.join(', '));
+    check('a failed init --force leaves no temporary files', !fs.readdirSync(re).some((f) => f.endsWith('.tmp')));
+}
+
+console.log('journal: concurrent init');
+{
+    // Two inits race on a new directory. One creates the journal; the other
+    // must refuse without --force, never reset the journal (and any note
+    // already written to it) by committing a second base over it.
+    const race = path.join(tmp, 'init-race');
+    const results = await Promise.allSettled([
+        initJournal({ nameOrPath: race, log: quiet }),
+        initJournal({ nameOrPath: race, log: quiet }),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    const refused = results.filter((r) => r.status === 'rejected' && /already holds a journal/.test(r.reason?.message));
+    check('of two racing inits, one creates and one refuses', ok === 1 && refused.length === 1,
+        results.map((r) => r.status === 'rejected' ? r.reason?.message : 'ok').join(' | '));
+    // The same with a note landing between them: the refused init cannot
+    // have replaced the chain the note went into.
+    const race2 = path.join(tmp, 'init-race-2');
+    await initJournal({ nameOrPath: race2, log: quiet });
+    const note = await appendNote(race2, shapeNote({ kind: 'todo', title: 'Survives', text: 'Written before a second init.' }, meta(59)));
+    await rejectsLike('a later init without --force refuses', () => initJournal({ nameOrPath: race2, log: quiet }), /already holds a journal/);
+    const { chain: c2 } = await openJournalChain(race2);
+    const t2 = (await latestNotes(c2, { limit: 5 })).map((n) => n.title);
+    await c2.close();
+    check('the note written before the refused init is kept', Number.isSafeInteger(note.id) && t2.includes('Survives'), t2.join(', '));
+}
+
+console.log('journal: a paused writer keeps its lock');
+if (process.platform === 'win32') {
+    console.log('  skip: needs SIGSTOP');
+} else {
+    // Writer A is suspended mid-write (as a sleeping laptop would be), and
+    // writer B's clock says the lock is ten minutes old. A live holder's lock
+    // is never broken by age, so B waits and gives up, and A, on resuming,
+    // commits. Breaking it would let A resume between its ownership check
+    // and its commit and overwrite B.
+    const lj = path.join(tmp, 'lostlock');
+    await initJournal({ nameOrPath: lj, log: quiet });
+    await appendNote(lj, shapeNote({ kind: 'todo', title: 'First', text: 'Before the race.' }, meta(60)));
+    const journalSrc = new URL('../packages/pikelet/src/journal.mjs', import.meta.url).href;
+    const childSrc = `
+        import { appendNote, shapeNote } from ${JSON.stringify(journalSrc)};
+        let told = false;
+        const log = () => { if (!told) { told = true; process.stdout.write('BUILDING\\n'); } };
+        try {
+            await appendNote(${JSON.stringify(lj)}, shapeNote({ kind: 'todo', title: 'Writer A', text: 'Paused mid-write.' },
+                { created: '2026-10-13T12:01:00.000Z', authoredBy: { client: 'test' }, session: 'a' }), { log });
+            process.stdout.write('A-OK\\n');
+        } catch (err) { process.stdout.write('A-ERR ' + err.message + '\\n'); }
+    `;
+    const { spawn } = await import('node:child_process');
+    const child = spawn(process.execPath, ['--input-type=module', '-e', childSrc], { stdio: ['ignore', 'pipe', 'inherit'] });
+    let out = '';
+    const exited = new Promise((r) => child.on('close', r));
+    await new Promise((resolve, reject) => {
+        child.stdout.on('data', (d) => { out += d; if (out.includes('BUILDING')) resolve(); });
+        child.on('close', () => reject(new Error(`writer A exited before building: ${out}`)));
+    });
+    child.kill('SIGSTOP');
+    // Move B's clock well past any lock age while A is suspended.
+    const realNow = Date.now;
+    const skew = 11 * 60 * 1000;
+    Date.now = () => realNow() + skew;
+    try {
+        await rejectsLike('a paused live writer\'s lock is not broken, however old',
+            () => appendNote(lj, shapeNote({ kind: 'todo', title: 'Writer B', text: 'Refused while A was paused.' }, meta(61)), { lockWaitMs: 300 }),
+            /is locked by process/);
+    } finally {
+        Date.now = realNow;
+    }
+    child.kill('SIGCONT');
+    await exited;
+    check('writer A, on resuming, commits its note', /A-OK/.test(out), out.trim());
+    const { chain: raced } = await openJournalChain(lj);
+    const racedTitles = (await latestNotes(raced, { limit: 10 })).map((n) => n.title);
+    await raced.close();
+    check('A\'s note and the earlier one are in the chain', racedTitles.includes('Writer A') && racedTitles.includes('First'), racedTitles.join(', '));
+    check('B\'s refused note is not in the chain', !racedTitles.includes('Writer B'));
+    const st = JSON.parse(fs.readFileSync(path.join(lj, 'journal.json'), 'utf8'));
+    check('every member journal.json lists exists', st.members.every((m) => fs.existsSync(path.join(lj, m))));
+    check('the abandoned write leaves no temporary files', !fs.readdirSync(lj).some((f) => f.endsWith('.tmp')));
+    const next = await appendNote(lj, shapeNote({ kind: 'todo', title: 'After the race', text: 'Still writable.' }, meta(62)));
+    check('the journal stays writable after the race', Number.isSafeInteger(next.id));
 }
 
 console.log('journal: private file modes');
