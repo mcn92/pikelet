@@ -87,7 +87,7 @@ def main() -> None:
         "-mavx2",
         "-mfma",
         *includes,
-        f"-I{PIKELET_ROOT / 'src'}",
+        f"-I{PIKELET_ROOT / 'packages' / 'pikelet-wasm' / 'engine'}",
         str(PIKELET_ROOT / "benchmarks" / "engine" / "vibe" / "pikelet_py.cpp"),
         "-o",
         str(output),
