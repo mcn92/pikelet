@@ -217,6 +217,10 @@ async function breakStaleLock(dir, lockPath, raw, token) {
 
 // A chain file: a base or one of its layers.
 const CHAIN_FILE = /^base-\d{4}(\.\d{4})?\.pikelet$/;
+// Files a journal directory can hold without journal.json: chain files, a
+// journal.json write, and lock files, all left by an interrupted init or
+// write.
+const JOURNAL_LEFTOVER = /^(base-\d{4}(\.\d{4})?\.pikelet|journal\.json\.\d+\.tmp|\.lock(\.break)?(\.\d+\.[0-9a-f]+)?)$/;
 
 // Tighten the journal directory to 0700 and its chain files and journal.json
 // to 0600. Run before a write, so a journal made before modes were enforced
@@ -245,8 +249,33 @@ async function makePrivate(dir, log) {
  */
 export async function initJournal({ nameOrPath, force = false, log = (l) => console.log(l) }) {
   const dir = resolveJournalDir(nameOrPath);
-  if (fssync.existsSync(path.join(dir, 'journal.json')) && !force) {
-    throw new CliError(`${dir} already holds a journal; pass --force to replace it`);
+  const statePath = path.join(dir, 'journal.json');
+  // A journal.json that is not a Pikelet journal's (a project's own config,
+  // say) makes the directory foreign: --force replaces journals, nothing else.
+  let existing = false;
+  if (fssync.existsSync(statePath)) {
+    try {
+      await readState(dir);
+      existing = true;
+    } catch {
+      throw new CliError(`${dir} holds a journal.json that is not a ${JOURNAL_FORMAT} journal; journal init will not replace it, even with --force. `
+        + 'Name a new directory, or a bare name for one under ~/.pikelet/journals');
+    }
+  }
+  if (existing && !force) throw new CliError(`${dir} already holds a journal; pass --force to replace it`);
+  // init makes its directory 0700, so it only takes a directory that is, or
+  // is becoming, a journal: a new or empty one, an existing journal, or one
+  // holding only what an interrupted init or write leaves behind. Pointed at
+  // a shared folder by mistake, it refuses before changing anything.
+  if (!existing) {
+    let entries = [];
+    try { entries = await fs.readdir(dir); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+    const foreign = entries.filter((f) => !JOURNAL_LEFTOVER.test(f));
+    if (foreign.length) {
+      throw new CliError(`${dir} is not empty and is not a journal (it holds ${foreign.slice(0, 3).map((f) => JSON.stringify(f)).join(', ')}${foreign.length > 3 ? ', ...' : ''}); `
+        + 'journal init makes its directory private (0700), so it only creates a journal in a new or empty directory. '
+        + 'Name a new directory, or a bare name for one under ~/.pikelet/journals');
+    }
   }
   const repo = gitRepoContaining(dir);
   if (repo) {
@@ -258,7 +287,7 @@ export async function initJournal({ nameOrPath, force = false, log = (l) => cons
   // Replacing a journal holds the lock, so it cannot interleave with a
   // write, and removes the old chain files: a layer left on disk would
   // otherwise collide with the new journal's first append.
-  if (fssync.existsSync(path.join(dir, 'journal.json'))) {
+  if (existing) {
     return withLock(dir, async () => {
       for (const f of await fs.readdir(dir)) {
         if (CHAIN_FILE.test(f)) await fs.rm(path.join(dir, f), { force: true });
@@ -387,9 +416,13 @@ async function compactLocked(dir, state, log) {
 /** Fold the journal's layers back into one base. */
 export async function compactJournal(nameOrPath, { log = (l) => console.log(l), lockWaitMs } = {}) {
   const dir = resolveJournalDir(nameOrPath);
+  // Confirm this is a journal before locking or tightening anything: run on
+  // the wrong directory, it must fail without writing a lock file into it or
+  // changing its mode.
+  await readState(dir);
   return withLock(dir, async () => {
-    await makePrivate(dir, log);
     const state = await readState(dir);
+    await makePrivate(dir, log);
     if (state.members.length === 1) {
       log('The journal is already a single base; nothing to compact');
       return { dir, members: state.members };
@@ -407,9 +440,11 @@ export async function compactJournal(nameOrPath, { log = (l) => console.log(l), 
  */
 export async function appendNote(nameOrPath, record, { log = quietLog, lockWaitMs } = {}) {
   const dir = resolveJournalDir(nameOrPath);
+  // As in compactJournal: not a journal means no lock file and no chmod.
+  await readState(dir);
   return withLock(dir, async () => {
-    await makePrivate(dir, log);
     let state = await readState(dir);
+    await makePrivate(dir, log);
     if (state.members.length - 1 >= MAX_DEPTH) {
       log(`Journal at depth ${state.members.length - 1}: compacting before the next note`);
       ({ state } = await compactLocked(dir, state, log));

@@ -179,6 +179,43 @@ console.log('journal: private file modes');
 if (process.platform === 'win32') {
     console.log('  skip: Windows has no Unix modes');
 } else {
+    // Pointed at a folder that is not a journal (a shared project folder,
+    // by mistake), compact, append and init fail without changing its mode
+    // or leaving lock files: collaborators keep their access.
+    const shared = path.join(tmp, 'shared-folder');
+    fs.mkdirSync(shared);
+    fs.writeFileSync(path.join(shared, 'README.md'), 'team notes\n');
+    fs.chmodSync(shared, 0o755);
+    const modeOf = (p) => (fs.statSync(p).mode & 0o777).toString(8);
+    await rejectsLike('compact on a folder that is not a journal fails', () => compactJournal(shared, { log: quiet }), /is not a journal/);
+    check('compact on a non-journal folder leaves its mode alone', modeOf(shared) === '755', modeOf(shared));
+    await rejectsLike('append on a folder that is not a journal fails',
+        () => appendNote(shared, shapeNote({ kind: 'todo', title: 'T', text: 'B' }, meta(70))), /is not a journal/);
+    check('append on a non-journal folder leaves its mode alone', modeOf(shared) === '755', modeOf(shared));
+    check('a failed compact or append leaves no lock files', !fs.readdirSync(shared).some((f) => f.startsWith('.lock')));
+    await rejectsLike('init refuses a folder that holds other files', () => initJournal({ nameOrPath: shared, log: quiet }), /not empty and is not a journal/);
+    check('a refused init leaves the folder\'s mode alone', modeOf(shared) === '755', modeOf(shared));
+    check('a refused init writes nothing into the folder', fs.readdirSync(shared).join(',') === 'README.md', fs.readdirSync(shared).join(','));
+    // A journal.json that is not a Pikelet journal's does not make the
+    // folder a journal: init refuses it with or without --force.
+    const foreignJson = path.join(tmp, 'foreign-json');
+    fs.mkdirSync(foreignJson);
+    fs.writeFileSync(path.join(foreignJson, 'journal.json'), '{"entries": []}\n');
+    fs.writeFileSync(path.join(foreignJson, 'base-0001.pikelet'), 'not ours\n');
+    fs.chmodSync(foreignJson, 0o755);
+    await rejectsLike('init --force refuses a foreign journal.json',
+        () => initJournal({ nameOrPath: foreignJson, force: true, log: quiet }), /not a pikelet-journal-v1 journal/);
+    await rejectsLike('init without --force refuses a foreign journal.json the same way',
+        () => initJournal({ nameOrPath: foreignJson, log: quiet }), /not a pikelet-journal-v1 journal/);
+    check('a refused init --force leaves the foreign folder untouched',
+        modeOf(foreignJson) === '755' && fs.readdirSync(foreignJson).sort().join(',') === 'base-0001.pikelet,journal.json'
+        && fs.readFileSync(path.join(foreignJson, 'journal.json'), 'utf8') === '{"entries": []}\n',
+        `${modeOf(foreignJson)} ${fs.readdirSync(foreignJson).join(',')}`);
+    const emptyDir = path.join(tmp, 'empty-existing');
+    fs.mkdirSync(emptyDir);
+    await initJournal({ nameOrPath: emptyDir, log: quiet });
+    check('init still takes an existing empty directory', fs.existsSync(path.join(emptyDir, 'journal.json')));
+
     // Under a permissive umask, init, append and compact still leave the
     // directory 0700 and every file 0600; a journal loosened from outside
     // is tightened again by the next write.
