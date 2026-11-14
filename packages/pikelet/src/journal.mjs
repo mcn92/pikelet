@@ -90,10 +90,33 @@ async function readState(dir) {
   return state;
 }
 
+// A rename is durable only once its directory is flushed. Without this a
+// power loss after compaction can keep the old members' unlinks but lose the
+// renames that replaced them. Platforms that cannot open or fsync a directory
+// (Windows) skip it.
+async function fsyncDir(dir) {
+  let handle;
+  try {
+    handle = await fs.open(dir, 'r');
+    await handle.sync();
+  } catch (error) {
+    if (!['EISDIR', 'EPERM', 'EINVAL', 'EACCES', 'EBADF'].includes(error.code)) throw error;
+  } finally {
+    await handle?.close();
+  }
+}
+
 async function writeState(dir, state) {
   const tmp = path.join(dir, `journal.json.${process.pid}.tmp`);
-  await fs.writeFile(tmp, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: FILE_MODE });
+  const handle = await fs.open(tmp, 'w', FILE_MODE);
+  try {
+    await handle.writeFile(`${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   await fs.rename(tmp, path.join(dir, 'journal.json'));
+  await fsyncDir(dir);
 }
 
 /** The chain's member files, absolute, base first. */
@@ -250,6 +273,7 @@ async function buildInPlace(dir, finalName, token, build, beforeCommit) {
     const result = await build(staged);
     await beforeCommit();
     await fs.rename(staged, path.join(dir, finalName));
+    await fsyncDir(dir);
     return result;
   } finally {
     await fs.rm(staged, { force: true });
@@ -459,6 +483,8 @@ async function compactLocked(dir, state, log, { assertOwned, token }) {
     () => assertUnchanged(dir, state, assertOwned));
   const old = state.members;
   const next = { ...state, generation, members: [baseFile], lastCompacted: new Date().toISOString() };
+  // writeState flushes journal.json and the directory, so the new base and the
+  // state naming it are on disk before the members they replace are removed.
   await writeState(dir, next);
   for (const m of old) await fs.rm(path.join(dir, m), { force: true });
   return { state: next, written };
