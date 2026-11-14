@@ -20,9 +20,14 @@ async function ingestFolder(root, source, log) {
   if (!fssync.existsSync(root)) {
     throw new CliError(`Source folder not found: ${root}\nNext: check --source or source.path in pikelet.config.json.`, 1);
   }
-  const files = await walk(root, log);
-  for (const file of files) {
-    const rel = path.relative(root, file).split(path.sep).join('/');
+  // readdir order is the filesystem's (hash order on ext4, name order on
+  // NTFS), so the same tree on two machines would get different record ids
+  // and a different pack identity. Sort by the forward-slashed relative path,
+  // comparing code units (not localeCompare, which varies with the locale).
+  const files = (await walk(root, log))
+    .map((file) => ({ file, rel: path.relative(root, file).split(path.sep).join('/') }))
+    .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  for (const { file, rel } of files) {
     if (!matchesSource(rel, source)) continue;
     try {
       const { size } = await fs.stat(file);

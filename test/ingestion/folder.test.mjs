@@ -44,3 +44,26 @@ section('ingestFolder: skipped entries are reported');
     await fs.rm(root, { recursive: true, force: true });
   }
 }
+
+section('ingestFolder: files are taken in a fixed order');
+{
+  // readdir order is the filesystem's (hash order on ext4), so record ids and
+  // the pack identity varied between checkouts of the same tree. Files are
+  // sorted by relative path, by code unit: uppercase before lowercase, and
+  // '-' < '.' < '/'.
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'pikelet-ingest-order-'));
+  try {
+    const body = (name) => `# ${name}\n\nA paragraph of content for ${name} that is long enough to keep.\n`;
+    await fs.mkdir(path.join(root, 'a'));
+    for (const rel of ['a/b.md', 'a.md', 'B.md', 'a-b.md', 'z.md', 'a/a.md']) {
+      await fs.writeFile(path.join(root, rel), body(rel));
+    }
+    const docs = await ingestFolder(root, {}, () => {});
+    const order = docs.map((d) => d.sourcePath);
+    const want = ['B.md', 'a-b.md', 'a.md', 'a/a.md', 'a/b.md', 'z.md'];
+    check('files are ingested in code-unit order of their relative paths', JSON.stringify(order) === JSON.stringify(want), JSON.stringify(order));
+    check('record ids follow that order', docs.every((d, i) => d.id === i));
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
