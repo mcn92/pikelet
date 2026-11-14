@@ -39,8 +39,9 @@ export async function compactChain(flags, options = {}) {
   const builder = await import('pikelet-wasm/complete/builder');
   const { loadArtifactContract } = await import('./common.mjs');
 
-  const { resolveChainMembers } = await import('./common.mjs');
+  const { resolveChainMembers, refuseOutputOverInput } = await import('./common.mjs');
   const members = await resolveChainMembers([].concat(flags.head), log);
+  refuseOutputOverInput(outPath, members);
   const chain = await openPikeletChain(members, { fetch: nodeFetch });
   try {
     const info = chain.info();
@@ -286,7 +287,7 @@ export async function rebaseLayer(flags) {
   const onConflict = flags['on-conflict'] || 'refuse';
   const onForeign = flags['on-foreign'] || 'refuse';
 
-  const { loadCompleteModules, resolveChainMembers, parentLocatorFor } = await import('./common.mjs');
+  const { loadCompleteModules, resolveChainMembers, parentLocatorFor, refuseOutputOverInput } = await import('./common.mjs');
   const { builder } = await loadCompleteModules();
   const { openPikeletChain } = await import('pikelet-wasm/complete/layer-reader.mjs');
   const { readMemberManifest } = await import('pikelet-wasm/complete');
@@ -302,6 +303,7 @@ export async function rebaseLayer(flags) {
 
   // --- 1. The layer, read as a manifest only: it is not mountable alone ------
   const layerPath = (await resolveChainMembers([flags.layer], log))[0];
+  refuseOutputOverInput(outPath, [layerPath]);
   const layerPeek = await readMemberManifest(layerPath);
   if (!layerPeek.isLayer) throw new CliError(`${flags.layer} is not a layer (profile ${layerPeek.manifest.profile})`);
   const L = layerPeek.manifest.layer;
@@ -322,6 +324,7 @@ export async function rebaseLayer(flags) {
       + 'pass --old-parent <file> [--old-parent <layer> ...], base-first.');
   }
   const oldChainMembers = await resolveChainMembers(oldParentSpec, log);
+  refuseOutputOverInput(outPath, oldChainMembers);
   let oldParent;
   try {
     oldParent = await openPikeletChain(oldChainMembers, { followParents: false, fetch: nodeFetch });
@@ -349,6 +352,7 @@ export async function rebaseLayer(flags) {
 
     // --- 3. The new head ----------------------------------------------------
     const ontoMembers = await resolveChainMembers([].concat(flags.onto), log);
+    refuseOutputOverInput(outPath, ontoMembers);
     const parentLocator = await parentLocatorFor(flags, ontoMembers[ontoMembers.length - 1], outPath, log);
     head = await openPikeletChain(ontoMembers);
     const headInfo = head.info();

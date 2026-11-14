@@ -119,8 +119,9 @@ export async function appendLayer(flags, options = {}) {
   // --- 1. Mount the parent chain (6.1 step 1) ---------------------------------
   // The parent may itself be a chain; the caller lists its members base-first,
   // which is also what --lineage would supply. A bare --parent is a base.
-  const { resolveChainMembers, parentLocatorFor } = await import('./common.mjs');
+  const { resolveChainMembers, parentLocatorFor, refuseOutputOverInput } = await import('./common.mjs');
   const members = await resolveChainMembers([].concat(flags.parent), log);
+  refuseOutputOverInput(outPath, members);
   // Before the mount and any embedding, so a bad --parent-locator costs nothing.
   const parentLocator = await parentLocatorFor(flags, members[members.length - 1], outPath, log);
   const chain = await openPikeletChain(members, {

@@ -98,6 +98,22 @@ async function resolveChainMembers(locations, log = () => {}) {
 }
 
 /**
+ * Refuse an --out that is one of the packs being read. --force allows
+ * replacing an unrelated file, never an input: the new layer would name its
+ * own path as its parent, and the parent's bytes would be gone.
+ */
+export function refuseOutputOverInput(outPath, inputs, flag = '--out') {
+  const real = (p) => { try { return fssync.realpathSync(p); } catch { return path.resolve(p); } };
+  const out = real(outPath);
+  for (const input of inputs) {
+    if (typeof input !== 'string' || /^https?:\/\//i.test(input)) continue;
+    if (real(input) === out) {
+      throw new CliError(`${flag} ${outPath} is one of this command's input packs; choose a new path`);
+    }
+  }
+}
+
+/**
  * The `parent.locator` a new layer records (LAYERED_PROFILE.md 5.1.1): the
  * explicit --parent-locator, validated here rather than written blind and
  * refused by every reader later; else, when the parent is a local file at or

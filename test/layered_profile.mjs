@@ -2585,6 +2585,24 @@ console.log('locator following: a chain mounts from its head alone (5.1.1)');
     };
 
     const base = mkBase(wt, 'base.pikelet');
+    {
+        // Packs are written to a temp file and renamed over the target.
+        const atomicDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pikelet-atomic-'));
+        try {
+            fs.writeFileSync(path.join(atomicDir, 'out.pikelet'), 'previous pack');
+            const rewritten = mkBase(atomicDir, 'out.pikelet');
+            check('a pack written over an existing file replaces it whole',
+                fs.statSync(rewritten.at).size > 'previous pack'.length
+                && fs.readdirSync(atomicDir).join(',') === 'out.pikelet', fs.readdirSync(atomicDir).join(','));
+            fs.mkdirSync(path.join(atomicDir, 'blocked.pikelet'));
+            let threw = false;
+            try { mkBase(atomicDir, 'blocked.pikelet'); } catch { threw = true; }
+            check('a failed rename throws and leaves no temp file behind',
+                threw && fs.readdirSync(atomicDir).every((n) => !n.endsWith('.tmp')), fs.readdirSync(atomicDir).join(','));
+        } finally {
+            fs.rmSync(atomicDir, { recursive: true, force: true });
+        }
+    }
     const headWith = mkLayer(wt, 'head.pikelet', base, 'base.pikelet');
     const headWithout = mkLayer(wt, 'nolocator.pikelet', base, null);
 
@@ -2679,6 +2697,22 @@ console.log('cli: --remove and --supersede ids parse strictly (6.1)');
         () => appendLayer({ parent: 'nosuch.pikelet', out, supersede: ['2x=a.md'] }), /--supersede oldId must be a non-negative id/);
     await rejectsAsync('a well-formed --remove gets past parsing (fails on the parent instead)',
         () => appendLayer({ parent: 'nosuch.pikelet', out, remove: [' 7 '] }), /^(?!.*--remove takes)/);
+
+    // --force replaces an unrelated file, never an input being read.
+    const selfOut = path.join(os.tmpdir(), `pikelet-self-out-${process.pid}.pikelet`);
+    fs.writeFileSync(selfOut, 'parent bytes');
+    try {
+        await rejectsAsync('append refuses an --out that is its own --parent, even with --force',
+            () => appendLayer({ parent: selfOut, out: selfOut, force: true, remove: ['1'] }), /is one of this command's input packs/);
+        const { compactChain } = await import('../packages/pikelet/src/compact.mjs');
+        if (typeof compactChain === 'function') {
+            await rejectsAsync('compact refuses an --out that is its own --head, even with --force',
+                () => compactChain({ head: selfOut, out: selfOut, force: true }, { log: () => {} }), /is one of this command's input packs/);
+        }
+        check('the refused input is left untouched', fs.readFileSync(selfOut, 'utf8') === 'parent bytes');
+    } finally {
+        fs.rmSync(selfOut, { force: true });
+    }
 }
 
 console.log('rebase: the command, end to end (6.2)');

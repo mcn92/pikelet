@@ -526,17 +526,28 @@ export function assemblePikeletFile(manifestFields, segments, outPath) {
   header.writeBigUInt64LE(BigInt(fileBytes), 16);
   identity.copy(header, 24);
 
-  const fd = fs.openSync(outPath, 'w');
+  // Write beside the target and rename over it: a crash mid-write, or an
+  // output that is also an input still being read, never leaves a truncated
+  // pack where a valid one was.
+  const tmpPath = `${outPath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  const fd = fs.openSync(tmpPath, 'wx');
   try {
-    fs.writeSync(fd, header, 0, header.length, 0);
-    fs.writeSync(fd, manifestBytes, 0, manifestBytes.length, HEADER_BYTES);
-    fs.writeSync(fd, table, 0, table.length, tableOffset);
-    for (const { offset, bytes } of placed) {
-      fs.writeSync(fd, bytes, 0, bytes.length, offset);
+    try {
+      fs.writeSync(fd, header, 0, header.length, 0);
+      fs.writeSync(fd, manifestBytes, 0, manifestBytes.length, HEADER_BYTES);
+      fs.writeSync(fd, table, 0, table.length, tableOffset);
+      for (const { offset, bytes } of placed) {
+        fs.writeSync(fd, bytes, 0, bytes.length, offset);
+      }
+      fs.ftruncateSync(fd, fileBytes);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
     }
-    fs.ftruncateSync(fd, fileBytes);
-  } finally {
-    fs.closeSync(fd);
+    fs.renameSync(tmpPath, outPath);
+  } catch (error) {
+    fs.rmSync(tmpPath, { force: true });
+    throw error;
   }
   return { outPath, fileBytes, formatVersion, identity: identity.toString('hex'), manifest };
 }
