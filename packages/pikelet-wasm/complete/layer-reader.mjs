@@ -414,6 +414,9 @@ export async function openPikeletChain(members, options = {}) {
                 if (!['hybrid', 'vector', 'lexical', 'augmented'].includes(retrieval)) {
                     throw new Error(`query() retrieval must be hybrid, vector, lexical, or augmented, got ${retrieval}`);
                 }
+                // The base's calibration (scorer, union bloom, drift envelope)
+                // was read unverified at open when its encoder is deferred.
+                if (base.calibrationVerified) await base.calibrationVerified();
 
                 // --- 2. Lexical candidates (5.3 step 2, 5.4) -------------------
                 // df is summed across tiers per query term, so a term scores

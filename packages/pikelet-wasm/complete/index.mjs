@@ -1683,6 +1683,16 @@ export async function openPikeletFile(input, options = {}) {
                     // `asset.driftLimit` is the producer's declared validity
                     // envelope when it declared one.
                     calibrationJson,
+                    // A deferred kind-3 base read its calibration region at
+                    // open without a digest check; the region is verified
+                    // only when the full query-interp segment arrives (the
+                    // encoder load). A chain query takes a caller's vector
+                    // and never embeds, so it awaits this before trusting
+                    // calibrationJson. Rejects if the bytes did not verify.
+                    async calibrationVerified() {
+                        assertOpen();
+                        if (qiDeferred && resolveEmbedder) await resolveEmbedder();
+                    },
                     // Raw segment bytes for the chain's structural parsing
                     // (tombstones, kind-4). Bounded and digest-checked exactly
                     // as any other segment read: the digest comes from the
