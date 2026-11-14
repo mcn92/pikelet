@@ -201,15 +201,21 @@ async function resolveSeedUrl(seed, log) {
 
 async function ingestUrl(source, log) {
   const seed = await resolveSeedUrl(new URL(source.url), log);
-  const seen = new Set();
+  // A URL enters `seen` when it is queued, not when it is fetched: a link
+  // repeated on every page (site navigation) is queued once, rather than
+  // once per page with each copy taking a slot of the maxPages budget.
+  const seen = new Set([seed.href]);
   const queue = [seed.href];
   const docs = [];
   const allowed = urlCrawlFilter(source);
   let filtered = 0;
+  const enqueue = (link) => {
+    if (queue.length + docs.length >= (source.maxPages || 500)) return;
+    seen.add(link);
+    queue.push(link);
+  };
   while (queue.length && docs.length < (source.maxPages || 500)) {
     const href = queue.shift();
-    if (seen.has(href)) continue;
-    seen.add(href);
     let response;
     try {
       response = await nodeFetch(href, {
@@ -247,8 +253,8 @@ async function ingestUrl(source, log) {
         if (!allowed(refresh.href)) {
           seen.add(refresh.href);
           filtered++;
-        } else if (queue.length + docs.length < (source.maxPages || 500)) {
-          queue.push(refresh.href);
+        } else {
+          enqueue(refresh.href);
         }
       }
       continue;
@@ -266,7 +272,7 @@ async function ingestUrl(source, log) {
         filtered++;
         continue;
       }
-      if (queue.length + docs.length < (source.maxPages || 500)) queue.push(link);
+      enqueue(link);
     }
   }
   if (filtered > 0) {

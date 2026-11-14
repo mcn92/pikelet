@@ -228,6 +228,24 @@ console.log('crawler');
     check('a Brotli page is skipped with a warning naming the URL and the coding',
         lines.some((l) => l.includes(`${siteBase}/docs/br`) && /Content-Encoding: br/.test(l)), lines.join(' | '));
 }
+{
+    // Every page repeats the same 20-link nav and adds 5 children of its own
+    // (121 pages). Repeated nav links must be queued once, so a 60-page crawl
+    // fills its budget instead of stalling on duplicate queue entries.
+    const words = 'pages share one navigation menu and each adds pages of its own '.repeat(4);
+    const site = http.createServer((req, res) => {
+        const nav = Array.from({ length: 20 }, (_, i) => `<a href="/n${i}">n${i}</a>`).join('');
+        const m = req.url.match(/^\/n(\d+)$/);
+        const kids = m ? Array.from({ length: 5 }, (_, j) => `<a href="/n${m[1]}/c${j}">c</a>`).join('') : '';
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end(`<html><title>${req.url}</title><body>${nav}${kids}<p>${req.url} ${words}</p></body></html>`);
+    });
+    await new Promise((resolve) => site.listen(0, '127.0.0.1', resolve));
+    const docs = await ingestUrl({ url: `http://127.0.0.1:${site.address().port}/`, maxPages: 60 }, () => {});
+    site.close();
+    check('a crawl over repeated nav links fills its maxPages budget', docs.length === 60, String(docs.length));
+    check('a crawl fetches each page once', new Set(docs.map((d) => d.url)).size === docs.length);
+}
 
 console.log('supported Node versions');
 for (const [v, want] of [
