@@ -13,7 +13,7 @@
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
 import path from 'node:path';
-import { CliError, loadCompleteModules, DEFAULT_CONFIG } from './common.mjs';
+import { CliError, loadCompleteModules, DEFAULT_CONFIG, parsePositiveInt, parseFraction } from './common.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
 import { LOCAL_SOURCE_FILE, ingestFolder, ingestUrl, chunkDocs, describeDroppedDocs, MIN_CHUNK_TOKENS, dedupeChunks, ingestDeclaration, INGEST_CHUNKER } from './ingest.mjs';
 
@@ -100,6 +100,11 @@ export async function appendLayer(flags, options = {}) {
   }
 
   const removeIds = toIdList(flags.remove, '--remove');
+  // Numeric flags are parsed here, before any mount, so a bad value costs nothing.
+  const maxPages = flags['max-pages'] !== undefined ? parsePositiveInt(flags['max-pages'], '--max-pages') : 500;
+  const maxDepth = flags['max-depth'] !== undefined ? parsePositiveInt(flags['max-depth'], '--max-depth') : undefined;
+  const readerDriftLimit = flags['reader-drift-limit'] !== undefined
+    ? parseFraction(flags['reader-drift-limit'], '--reader-drift-limit') : undefined;
   const supersedePairs = toSupersedeList(flags.supersede);
   const sources = flags.source ? [].concat(flags.source) : [];
   const givenChunks = Array.isArray(options.chunks) ? options.chunks : null;
@@ -126,7 +131,7 @@ export async function appendLayer(flags, options = {}) {
   const parentLocator = await parentLocatorFor(flags, members[members.length - 1], outPath, log);
   const chain = await openPikeletChain(members, {
     fetch: nodeFetch,
-    ...(flags['reader-drift-limit'] ? { readerDriftLimit: Number(flags['reader-drift-limit']) } : {}),
+    ...(readerDriftLimit !== undefined ? { readerDriftLimit } : {}),
   });
   try {
     const info = chain.info();
@@ -189,7 +194,7 @@ export async function appendLayer(flags, options = {}) {
       for (const src of sources) {
         const isUrl = /^https?:\/\//i.test(src);
         if (isUrl) {
-          docs.push(...await ingestUrl({ type: 'url', url: src, maxPages: Number(flags['max-pages'] || 500) }, log));
+          docs.push(...await ingestUrl({ type: 'url', url: src, maxPages }, log));
         } else {
           docs.push(...await ingestFolder(path.resolve(process.cwd(), src), {
             include: flags.include || ['**/*.{md,mdx,html,txt}'],
@@ -236,7 +241,7 @@ export async function appendLayer(flags, options = {}) {
       newRecordCount: chunks.length,
       remove: removeIds,
       supersede: resolvedSupersede,
-      ...(flags['max-depth'] ? { maxDepth: Number(flags['max-depth']) } : {}),
+      ...(maxDepth !== undefined ? { maxDepth } : {}),
     });
 
     // Drift: append MUST refuse past the effective limit unless --allow-drift.

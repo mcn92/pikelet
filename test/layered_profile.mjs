@@ -2698,6 +2698,23 @@ console.log('cli: --remove and --supersede ids parse strictly (6.1)');
     await rejectsAsync('a well-formed --remove gets past parsing (fails on the parent instead)',
         () => appendLayer({ parent: 'nosuch.pikelet', out, remove: [' 7 '] }), /^(?!.*--remove takes)/);
 
+    // NaN compared false against the depth limit and switched it off; 0 and
+    // 'abc' fell back to defaults without a word. Each is refused before a mount.
+    for (const [flag, bad, msg] of [
+        ['max-depth', 'abc', /--max-depth must be a positive integer/],
+        ['max-depth', '0', /--max-depth must be a positive integer/],
+        ['max-pages', 'abc', /--max-pages must be a positive integer/],
+        ['max-pages', '0', /--max-pages must be a positive integer/],
+        ['max-pages', '12abc', /--max-pages must be a positive integer/],
+        ['reader-drift-limit', 'abc', /--reader-drift-limit must be a number from 0 to 1/],
+        ['reader-drift-limit', '1.5', /--reader-drift-limit must be a number from 0 to 1/],
+    ]) {
+        await rejectsAsync(`--${flag} ${JSON.stringify(bad)} is refused`,
+            () => appendLayer({ parent: 'nosuch.pikelet', out, remove: ['1'], [flag]: bad }), msg);
+    }
+    await rejectsAsync('--reader-drift-limit 0 is accepted (fails on the parent instead)',
+        () => appendLayer({ parent: 'nosuch.pikelet', out, remove: ['1'], 'reader-drift-limit': '0' }), /^(?!.*--reader-drift-limit must)/);
+
     // --force replaces an unrelated file, never an input being read.
     const selfOut = path.join(os.tmpdir(), `pikelet-self-out-${process.pid}.pikelet`);
     fs.writeFileSync(selfOut, 'parent bytes');

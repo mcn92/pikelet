@@ -98,6 +98,28 @@ async function resolveChainMembers(locations, log = () => {}) {
 }
 
 /**
+ * Strict numeric flags. parseInt reads '12abc' as 12 and Number('abc') is
+ * NaN, which compares false against every limit and so switches it off;
+ * either way the value used is not the one named. Refuse instead.
+ */
+export function parsePositiveInt(value, name) {
+  const text = String(value).trim();
+  if (!/^\d+$/.test(text) || Number(text) < 1 || !Number.isSafeInteger(Number(text))) {
+    throw new CliError(`${name} must be a positive integer, got ${JSON.stringify(String(value))}`);
+  }
+  return Number(text);
+}
+
+export function parseFraction(value, name) {
+  const text = String(value).trim();
+  const parsed = /^(\d+(\.\d*)?|\.\d+)$/.test(text) ? Number(text) : NaN;
+  if (!(parsed >= 0 && parsed <= 1)) {
+    throw new CliError(`${name} must be a number from 0 to 1, got ${JSON.stringify(String(value))}`);
+  }
+  return parsed;
+}
+
+/**
  * Refuse an --out that is one of the packs being read. --force allows
  * replacing an unrelated file, never an input: the new layer would name its
  * own path as its parent, and the parent's bytes would be gone.

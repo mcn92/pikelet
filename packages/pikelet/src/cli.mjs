@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { CONFIG_SCHEMA_URL, DEFAULT_CONFIG, MODEL_MAP, CliError, modelCacheDir } from './common.mjs';
+import { CONFIG_SCHEMA_URL, DEFAULT_CONFIG, MODEL_MAP, CliError, modelCacheDir, parsePositiveInt } from './common.mjs';
 import { writeProject, writeRuntimeModules, stageStudentInputs, wranglerToml, deployProject } from './scaffold.mjs';
 import { buildAssets, validateConfig } from './build.mjs';
 import { gitRepoName } from './git-source.mjs';
@@ -841,11 +841,6 @@ function assertSourceFilterFlags(flags, isUrl) {
   if (!isUrl && (flags['include-url'] || flags['exclude-url'])) {
     throw new CliError('--include-url/--exclude-url apply only to a URL source; use --include/--exclude folder globs');
   }
-}
-function parsePositiveInt(value, name) {
-  const parsed = parseInt(String(value), 10);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new CliError(`${name} must be a positive integer`);
-  return parsed;
 }
 
 // Re-exported for consumers that import the package internals (the Docusaurus
