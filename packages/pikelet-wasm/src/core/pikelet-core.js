@@ -331,6 +331,15 @@ class PikeletIndex {
 
         try {
             const written = this._e._pikelet_compact_remap(this._handle, mapPtr, countBefore);
+            if (written === 0) {
+                // The engine returns an empty remap only when its rebuild
+                // failed, and then it keeps the pre-compact graph. Keep the
+                // ID mappings that describe that graph: clearing them would
+                // leave every later search unable to translate a result.
+                throw pikeletError(PIKELET_ERROR_CODES.INVALID_VECTOR,
+                    'compact() could not rebuild the index: a stored vector failed re-insertion '
+                    + '(for example a zero-norm row in an imported cosine snapshot). The index is unchanged and still searchable.');
+            }
             const base = mapPtr >> 2;
             const remapped = [];
             for (let oldInt = 0; oldInt < written; oldInt++) {

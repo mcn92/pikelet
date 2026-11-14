@@ -2347,6 +2347,41 @@ async function testCosineNormOverflowRegression() {
     }
 }
 
+async function testFailedCompactKeepsIndexUsable() {
+    console.log('\n▶ failed compact() keeps the index searchable');
+    // A cosine snapshot whose row is all zeros passes import (values are
+    // finite) but cannot be re-inserted: the rebuild normalizes and rejects a
+    // zero norm. The engine then keeps its old graph; the JS wrapper used to
+    // clear every ID mapping anyway, so each later search threw.
+    const FLOAT_CONFIG = { ...DEFAULT_CONFIG, quantized: false };
+    const idx = await Pikelet.create(FLOAT_CONFIG);
+    const unit = new Float32Array(DIM); unit[0] = 1;
+    const zeroId = idx.add(unit);
+    const ids = [];
+    for (let i = 0; i < 40; i++) ids.push(idx.add(normalizedVec(DIM)));
+    const bytes = new Uint8Array(idx.export());
+    idx.dispose();
+    // Find the stored unit row (1.0f then DIM-1 zero floats) and zero its 1.0f.
+    const one = [0x00, 0x00, 0x80, 0x3f];
+    let at = -1;
+    for (let i = 0; i + DIM * 4 <= bytes.length && at < 0; i++) {
+        if (one.every((b, j) => bytes[i + j] === b) && bytes.subarray(i + 4, i + DIM * 4).every((b) => b === 0)) at = i;
+    }
+    assert(at >= 0, 'the unit row is found in the snapshot');
+    if (at < 0) return;
+    bytes.fill(0, at, at + 4);
+    const idx2 = await Pikelet.create(FLOAT_CONFIG);
+    idx2.import(bytes);
+    for (const id of ids.slice(0, 25)) idx2.delete(id);
+    let err = null;
+    try { idx2.compact(); } catch (e) { err = e; }
+    assert(err && err.code === 'INVALID_VECTOR', `a compact that cannot rebuild throws INVALID_VECTOR (got ${err && err.code})`);
+    const query = idx2.search(normalizedVec(DIM), 5);
+    assert(query.length === 5, 'the index is still searchable after the failed compact');
+    assert(query.every((r) => r.id === zeroId || ids.slice(25).includes(r.id)), 'results carry live external IDs');
+    idx2.dispose();
+}
+
 async function testCompactEntryPointRecovery() {
     section('Compact entry point recovery (all level 0)');
 
@@ -3469,6 +3504,7 @@ async function main() {
     console.log('==================');
 
     const suites = [
+        testFailedCompactKeepsIndexUsable,
         testCreation,
         testAdd,
         testAddBatch,
