@@ -1978,6 +1978,59 @@ console.log('append: id assignment, mask and supersessions (6.1 steps 4-5)');
         // Two roots each holding the same filename: basename matching would
         // silently pick one, which is the wrong edge this refuses to guess.
         const rootB = path.join(os.tmpdir(), 'pikelet-sup-root-b');
+
+        // Exercise real ingestion and chunking: private absolute provenance
+        // must survive dedupe but must not leak into serialized records.
+        const { ingestFolder, chunkDocs, dedupeChunks, LOCAL_SOURCE_FILE } = await import('../packages/pikelet/src/ingest.mjs');
+        const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'pikelet-sup-provenance-'));
+        try {
+            const roots = ['a', 'b'].map((name) => path.join(fixture, name));
+            const docs = [];
+            for (const [i, folder] of roots.entries()) {
+                fs.mkdirSync(folder);
+                fs.writeFileSync(path.join(folder, 'pricing.md'), `# Pricing ${i}\n\n` + `${i} pricing details `.repeat(30));
+                docs.push(...await ingestFolder(folder, { include: ['**/*.md'] }, () => {}));
+            }
+            const actual = dedupeChunks(chunkDocs(docs, { targetTokens: 256 }));
+            check('source provenance survives ingestion, chunking and dedupe',
+                actual.length === 2 && actual.every((c, i) => c[LOCAL_SOURCE_FILE] === path.join(roots[i], 'pricing.md')));
+            for (const [i, folder] of roots.entries()) {
+                const target = path.join(folder, 'pricing.md');
+                check(`absolute supersede picks source ${i} with a duplicate relative filename`,
+                    resolveSupersedeTargets([[2, target]], actual, roots)[0][1] === i);
+                check(`cwd-relative supersede picks source ${i}`,
+                    resolveSupersedeTargets([[2, path.relative(process.cwd(), target)]], actual, roots)[0][1] === i);
+            }
+            rejects('relative supersede remains ambiguous across source roots',
+                () => resolveSupersedeTargets([[2, 'pricing.md']], actual, roots), /matched 2 records/);
+            check('absolute source provenance is absent from serialized chunks',
+                actual.every((c) => !JSON.stringify(c).includes(JSON.stringify(fixture).slice(1, -1))));
+
+            // `v2/pricing.md` names ./v2/pricing.md, which produced no record;
+            // the literal relpath of docs/v2/pricing.md must not stand in for it.
+            const docsRoot = path.join(fixture, 'docs');
+            fs.mkdirSync(path.join(docsRoot, 'v2'), { recursive: true });
+            fs.writeFileSync(path.join(docsRoot, 'v2', 'pricing.md'), '# Docs pricing\n\n' + 'docs pricing details '.repeat(30));
+            fs.mkdirSync(path.join(fixture, 'v2'));
+            fs.writeFileSync(path.join(fixture, 'v2', 'pricing.md'), '# Short\n\ntoo short');
+            const nested = dedupeChunks(chunkDocs([
+                ...await ingestFolder(docsRoot, { include: ['**/*.md'] }, () => {}),
+                ...await ingestFolder(path.join(fixture, 'v2'), { include: ['**/*.md'] }, () => {}),
+            ], { targetTokens: 256 }));
+            const savedCwd = process.cwd();
+            process.chdir(fixture);
+            try {
+                rejects('a cwd file that produced no record is not replaced by a same-relpath record in another root',
+                    () => resolveSupersedeTargets([[2, 'v2/pricing.md']], nested, ['docs', 'v2']), /matched no ingested record/);
+                check('the root-relative path still resolves when no cwd file shadows it',
+                    resolveSupersedeTargets([[2, 'docs/v2/pricing.md']], nested, ['docs', 'v2'])[0][1] === 0);
+            } finally {
+                process.chdir(savedCwd);
+            }
+        } finally {
+            fs.rmSync(fixture, { recursive: true, force: true });
+        }
+
         rejects('an ambiguous path across two source roots is refused, not guessed',
             () => resolveSupersedeTargets([[2, 'pricing.md']],
                 [{ sourcePath: 'pricing.md' }, { sourcePath: 'pricing.md' }], [root, rootB]),

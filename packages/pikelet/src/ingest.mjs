@@ -7,6 +7,9 @@ import path from 'node:path';
 import { CliError } from './common.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
 
+// Internal provenance survives object spreads, but never JSON serialization.
+export const LOCAL_SOURCE_FILE = Symbol('localSourceFile');
+
 const MAX_CRAWL_BODY_BYTES = 2 * 1024 * 1024;
 // Per-file ceiling for folder sources, the counterpart of the crawl cap: a
 // misclassified asset or a generated dump in the source tree is skipped with
@@ -29,7 +32,7 @@ async function ingestFolder(root, source, log) {
       }
       const text = await fs.readFile(file, 'utf8');
       const extracted = extractByExtension(text, file);
-      if (extracted.text.trim()) docs.push({ id: docs.length, sourcePath: rel, title: extracted.title || path.basename(file), slug: extracted.slug || null, text: extracted.text, sections: extracted.sections });
+      if (extracted.text.trim()) docs.push({ [LOCAL_SOURCE_FILE]: path.resolve(file), id: docs.length, sourcePath: rel, title: extracted.title || path.basename(file), slug: extracted.slug || null, text: extracted.text, sections: extracted.sections });
     } catch (error) {
       log(`warn: skipped unreadable file ${rel}: ${error.message}`);
     }
@@ -733,6 +736,7 @@ function chunkDocs(docs, options) {
       url: doc.url || doc.sourcePath,
       anchor: '',
       sourcePath: doc.sourcePath || doc.url,
+      ...(doc[LOCAL_SOURCE_FILE] ? { [LOCAL_SOURCE_FILE]: doc[LOCAL_SOURCE_FILE] } : {}),
       slug: doc.slug || null,
       text: '',
       // A git source's commit (sha, date, author), kept on every chunk of it.

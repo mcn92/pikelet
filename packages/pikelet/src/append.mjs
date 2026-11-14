@@ -15,7 +15,7 @@ import fssync from 'node:fs';
 import path from 'node:path';
 import { CliError, loadCompleteModules, DEFAULT_CONFIG } from './common.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
-import { ingestFolder, ingestUrl, chunkDocs, describeDroppedDocs, MIN_CHUNK_TOKENS, dedupeChunks, ingestDeclaration, INGEST_CHUNKER } from './ingest.mjs';
+import { LOCAL_SOURCE_FILE, ingestFolder, ingestUrl, chunkDocs, describeDroppedDocs, MIN_CHUNK_TOKENS, dedupeChunks, ingestDeclaration, INGEST_CHUNKER } from './ingest.mjs';
 
 const defaultLog = (line) => console.log(line);
 
@@ -35,13 +35,13 @@ const defaultLog = (line) => console.log(line);
  * that plainly existed.
  *
  * Accepts the target as written, as an absolute path, and resolved against
- * each --source root, so `2=pricing.md`, `2=v2/pricing.md` and
+ * the chunk's original source file, so `2=pricing.md`, `2=v2/pricing.md` and
  * `2=/abs/v2/pricing.md` all name the same record. Basename alone is
  * deliberately NOT accepted: two sources can each hold a `pricing.md`, and
  * guessing between them is the silent wrong edge this resolution prevents.
  *
  * @param {Array<[number, string]>} pairs   parsed --supersede pairs
- * @param {Array<{sourcePath?: string}>} chunks  this layer's chunks, in order
+ * @param {Array<{sourcePath?: string}>} chunks  this layer's chunks, with internal LOCAL_SOURCE_FILE provenance
  * @param {string[]} sources                the --source roots
  * @returns {Array<[number, number]>}  [oldId, local chunk index]
  */
@@ -50,16 +50,27 @@ export function resolveSupersedeTargets(pairs, chunks, sources) {
     if (!sources.length) {
       throw new CliError(`--supersede ${oldId}=${target} needs a --source: the path names which new record replaces id ${oldId}`);
     }
-    const candidates = new Set([target, path.resolve(process.cwd(), target)]);
+    const cwdTarget = path.resolve(process.cwd(), target);
+    const candidates = new Set([target, cwdTarget]);
+    // A target that names an existing file from the working directory means
+    // that file: a chunk whose relpath merely equals the text as written is
+    // a different file (`v2/pricing.md` vs `docs/v2/pricing.md`), and taking
+    // it when the named file produced no record is the silent wrong edge.
+    let namesLocalFile = false;
+    try { namesLocalFile = fssync.statSync(cwdTarget).isFile(); } catch { /* not a local file */ }
     const matches = [];
     for (let i = 0; i < chunks.length; i++) {
       const sp = chunks[i].sourcePath;
       if (!sp) continue;
-      if (candidates.has(sp)) { matches.push(i); continue; }
-      const hit = sources.some((src) => {
-        const root = /^https?:\/\//i.test(src) ? null : path.resolve(process.cwd(), src);
-        return root !== null && candidates.has(path.resolve(root, sp));
-      });
+      const origin = chunks[i][LOCAL_SOURCE_FILE];
+      if (candidates.has(sp) && !(origin && namesLocalFile)) { matches.push(i); continue; }
+      // Resolve against the file that actually produced this chunk. Testing
+      // every root invents matches when two roots contain the same relpath.
+      // Legacy programmatic chunks can infer a root only with one source.
+      const root = sources.length === 1 && !/^https?:\/\//i.test(sources[0])
+        ? path.resolve(process.cwd(), sources[0]) : null;
+      const hit = origin ? candidates.has(origin)
+        : root !== null && candidates.has(path.resolve(root, sp));
       if (hit) matches.push(i);
     }
     if (!matches.length) {
