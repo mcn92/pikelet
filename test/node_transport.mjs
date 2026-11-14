@@ -8,6 +8,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import tls from 'node:tls';
 import zlib from 'node:zlib';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -126,7 +127,7 @@ console.log('https downgrade');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pikelet-tls-'));
     let tlsHost = null;
     try {
-        execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=127.0.0.1',
+        execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1',
             '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem')], { stdio: 'ignore' });
         tlsHost = https.createServer({ key: fs.readFileSync(path.join(dir, 'key.pem')), cert: fs.readFileSync(path.join(dir, 'cert.pem')) }, (req, res) => {
             res.writeHead(302, { location: `${base}/plain` });
@@ -134,13 +135,19 @@ console.log('https downgrade');
         });
         await new Promise((resolve) => tlsHost.listen(0, '127.0.0.1', resolve));
         const tlsBase = `https://127.0.0.1:${tlsHost.address().port}`;
-        const prior = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the throwaway self-signed cert above
-        process.removeAllListeners('warning');
-        try {
-            await rejects('nodeFetch refuses an https -> http redirect', () => nodeFetch(`${tlsBase}/pack`), /refused redirect from https to http/);
-        } finally {
-            if (prior === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED; else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prior;
+        if (typeof tls.setDefaultCACertificates !== 'function') {
+            // Every supported Node has it (22.19+); older runtimes skip.
+            console.log('  skip: https downgrade (tls.setDefaultCACertificates needs Node 22.19+)');
+        } else {
+            // Trust the throwaway self-signed cert above for this check only;
+            // certificate validation itself stays on.
+            const priorCAs = tls.getCACertificates('default');
+            tls.setDefaultCACertificates([...priorCAs, fs.readFileSync(path.join(dir, 'cert.pem'), 'utf8')]);
+            try {
+                await rejects('nodeFetch refuses an https -> http redirect', () => nodeFetch(`${tlsBase}/pack`), /refused redirect from https to http/);
+            } finally {
+                tls.setDefaultCACertificates(priorCAs);
+            }
         }
     } catch (err) {
         check('https downgrade test ran (needs openssl)', false, err.message);
@@ -233,12 +240,17 @@ console.log('crawler');
     // (121 pages). Repeated nav links must be queued once, so a 60-page crawl
     // fills its budget instead of stalling on duplicate queue entries.
     const words = 'pages share one navigation menu and each adds pages of its own '.repeat(4);
+    let served = 0;
     const site = http.createServer((req, res) => {
+        // Pages are labelled from numbers, never from req.url, so nothing the
+        // request carries is reflected into the HTML.
         const nav = Array.from({ length: 20 }, (_, i) => `<a href="/n${i}">n${i}</a>`).join('');
-        const m = req.url.match(/^\/n(\d+)$/);
-        const kids = m ? Array.from({ length: 5 }, (_, j) => `<a href="/n${m[1]}/c${j}">c</a>`).join('') : '';
+        const m = /^\/n(\d+)$/.exec(req.url);
+        const section = m ? Number(m[1]) : -1;
+        const kids = section >= 0 ? Array.from({ length: 5 }, (_, j) => `<a href="/n${section}/c${j}">c</a>`).join('') : '';
+        const page = ++served;
         res.writeHead(200, { 'content-type': 'text/html' });
-        res.end(`<html><title>${req.url}</title><body>${nav}${kids}<p>${req.url} ${words}</p></body></html>`);
+        res.end(`<html><title>page ${page}</title><body>${nav}${kids}<p>page ${page} ${words}</p></body></html>`);
     });
     await new Promise((resolve) => site.listen(0, '127.0.0.1', resolve));
     const docs = await ingestUrl({ url: `http://127.0.0.1:${site.address().port}/`, maxPages: 60 }, () => {});
