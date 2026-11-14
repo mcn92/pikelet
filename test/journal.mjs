@@ -179,13 +179,18 @@ console.log('journal: recovery and concurrent writers');
     // the old chain must still be there and readable.
     await appendNote(re, shapeNote({ kind: 'todo', title: 'Kept', text: 'Must survive a failed re-init.' }, meta(53)));
     const before = fs.readFileSync(path.join(re, 'journal.json'), 'utf8');
-    const savedTmp = process.env.TMPDIR;
-    process.env.TMPDIR = path.join(tmp, 'no-such-dir');
+    const tempKeys = process.platform === 'win32' ? ['TEMP', 'TMP'] : ['TMPDIR'];
+    const savedTmp = tempKeys.map((key) => [key, process.env[key]]);
+    const unavailableTmp = path.join(tmp, 'no-such-dir');
+    for (const key of tempKeys) process.env[key] = unavailableTmp;
     try {
+        if (os.tmpdir() !== unavailableTmp) throw new Error('failed to override the temporary directory');
         await rejectsLike('init --force fails when the replacement cannot be built',
             () => initJournal({ nameOrPath: re, force: true, log: quiet }), /ENOENT|no such file/);
     } finally {
-        if (savedTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = savedTmp;
+        for (const [key, value] of savedTmp) {
+            if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
     }
     check('a failed init --force leaves journal.json untouched', fs.readFileSync(path.join(re, 'journal.json'), 'utf8') === before);
     const kept = JSON.parse(before).members.every((m) => fs.existsSync(path.join(re, m)));
