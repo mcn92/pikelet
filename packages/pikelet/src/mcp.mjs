@@ -1124,6 +1124,17 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
     const { id, method, params } = message;
     // Notifications (no id) get no response, per JSON-RPC.
     const isRequest = id !== undefined && id !== null;
+    if (typeof method !== 'string') {
+      // A response to something the server sent carries result or error and
+      // no method: nothing to answer. Anything else without a method is
+      // malformed (-32600), answered only when it has an id to answer to.
+      const isResponse = 'result' in message || 'error' in message;
+      if (isRequest && !isResponse) replyError(id, -32600, 'invalid request');
+      continue;
+    }
+    // A notification is never executed as a request: tools/call without an
+    // id would run (a journal write included) with no response to report it.
+    if (!isRequest && !method.startsWith('notifications/')) continue;
     // Modern requests declare their version per request; server/discover
     // is modern by definition (it is the stdio compatibility probe).
     const metaVersion = typeof params?._meta?.[META_VERSION] === 'string' ? params._meta[META_VERSION] : null;

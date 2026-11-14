@@ -391,5 +391,23 @@ console.log('non-object frames');
     });
 }
 
+console.log('notifications and method-less frames');
+{
+    await withServer(async ({ send, waitFor, replies }) => {
+        // Request methods sent without an id are notifications: not run, not answered.
+        send({ jsonrpc: '2.0', method: 'tools/call', params: { name: 'list_packs', arguments: {} } });
+        send({ jsonrpc: '2.0', method: 'tools/list' });
+        send({ jsonrpc: '2.0', id: 5 });                       // no method: invalid request
+        send({ jsonrpc: '2.0', id: 6, result: {} });           // a client response: no answer
+        send({ jsonrpc: '2.0', id: 7, method: 'ping' });
+        await waitFor(7);
+        check('request methods sent as notifications get no response',
+            !replies.some((r) => r.id === undefined && (r.result !== undefined || r.error !== undefined)), JSON.stringify(replies));
+        check('a frame with an id and no method is an invalid request',
+            replies.some((r) => r.id === 5 && r.error?.code === -32600), JSON.stringify(replies));
+        check('a client response is not answered', !replies.some((r) => r.id === 6), JSON.stringify(replies));
+    });
+}
+
 console.log(`\nMCP protocol conformance: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
