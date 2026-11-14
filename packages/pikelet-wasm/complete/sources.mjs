@@ -14,7 +14,8 @@ export function httpRangeSource(url, options = {}) {
         // GitHub's release CDN answers rate-limited range bursts with 429
         // and a Retry-After of up to a minute; honoring it (capped) beats
         // guessing. Without one, exponential backoff capped at 15 s.
-        const after = Number(response.headers.get('retry-after'));
+        const raw = response.headers.get('retry-after');
+        const after = raw?.trim() ? Number(raw) : NaN;
         if (Number.isFinite(after) && after >= 0 && after <= 90) return after * 1000;
         return Math.min(15000, 250 * 2 ** attempt);
     };
@@ -27,6 +28,14 @@ export function httpRangeSource(url, options = {}) {
         : (options.cacheKeyParam === null || options.cacheKeyParam === false) ? null
             : String(options.cacheKeyParam);
     let full = null;
+    // One full download, shared: every read in flight when the host first
+    // answers 200 would otherwise start its own (rerank runs 32 at once).
+    let fullPending = null;
+    // A body this reader will not consume is cancelled, so the connection
+    // goes back to the pool instead of waiting on an unread stream.
+    const discard = (response) => response?.body?.cancel?.().catch(() => {});
+    // Weak comparison (RFC 9110 8.8.3.2): W/"x" and "x" name the same entity.
+    const sameEtag = (a, b) => a.replace(/^W\//, '') === b.replace(/^W\//, '');
     // A parent reached through a publisher-supplied locator is confined to the
     // child's origin and directory, and 5.1.1 applies that rule to EVERY
     // redirect hop before it is followed. The guard throws to refuse a hop.
@@ -149,6 +158,7 @@ export function httpRangeSource(url, options = {}) {
             // After a one-time full download (host ignored Range) every read
             // is served from memory; no further requests go out.
             if (full) return full.subarray(offset, offset + length);
+            if (fullPending) return (await fullPending).subarray(offset, offset + length);
             stats.requests += 1;
             stats.bytes += length;
             const end = offset + length - 1;
@@ -174,11 +184,14 @@ export function httpRangeSource(url, options = {}) {
                 // and retry. Concurrent reads share the re-resolution.
                 if (resolvedTarget === pinned) resolvedTarget = null;
                 stats.retries += 1;
+                discard(response);
                 response = await fetch(targetFor(await resolveTarget()), readInit(headers));
             }
             for (let attempt = 0; RETRYABLE.has(response.status) && attempt < maxRetries; attempt++) {
                 stats.retries += 1;
-                await new Promise((resolve) => setTimeout(resolve, retryDelayMs(attempt, response)));
+                const delay = retryDelayMs(attempt, response);
+                discard(response);
+                await new Promise((resolve) => setTimeout(resolve, delay));
                 response = await fetch(targetFor(resolvedTarget || pinned), readInit(headers));
             }
 
@@ -193,77 +206,142 @@ export function httpRangeSource(url, options = {}) {
                 throw new Error(`range read returned Content-Encoding: ${encoding}; a .pikelet must be served unencoded`);
             }
             if (response.status === 206) {
+                // A slice of a replaced file must not mix with the pinned one:
+                // If-Range guards this only for a strong pinned ETag on a host
+                // that honors it, and lexical windows and format-1 sketch rows
+                // have no per-read digest. Compare whenever both sides have an
+                // ETag; with none pinned (HEAD failed), the first one seen pins.
+                const responseEtag = response.headers.get('etag');
+                if (responseEtag) {
+                    if (!stats.etag) stats.etag = responseEtag;
+                    else if (!sameEtag(responseEtag, stats.etag)) {
+                        discard(response);
+                        throw pikeletError(
+                            PIKELET_ERROR_CODES.ARTIFACT_CHANGED,
+                            `artifact changed on the host: expected ETag ${stats.etag}, got ${responseEtag} on a range read`,
+                            { expectedEtag: stats.etag, actualEtag: responseEtag },
+                        );
+                    }
+                }
                 // A 206 must be the range we asked for and say so (RFC 9110 requires
                 // Content-Range): a wrong slice would otherwise be caught only by a
                 // downstream digest, and format-1 sketch rows have no per-row digest.
                 const contentRange = response.headers.get('content-range');
                 const m = contentRange && /^bytes (\d+)-(\d+)\//.exec(contentRange);
-                if (!m || Number(m[1]) !== offset || Number(m[2]) > end) {
+                if (!m || Number(m[1]) !== offset || Number(m[2]) < offset || Number(m[2]) > end) {
+                    discard(response);
                     throw new Error(`range read returned Content-Range ${contentRange || '(missing)'}, requested bytes ${offset}-${end}`);
                 }
-                const body = new Uint8Array(await response.arrayBuffer());
-                if (body.length !== Number(m[2]) - Number(m[1]) + 1) {
-                    throw new Error(`range read body is ${body.length} bytes for Content-Range ${contentRange}`);
-                }
-                return body;
-            }
-            if (response.status === 200) {
-                // Under If-Range, a 200 instead of 206 means the host ignores Range or the
-                // pinned ETag no longer matches (the artifact was replaced). Only the first
-                // may fall back to a full download: slices of a replaced file don't match
-                // the manifest, and a large lexical segment has only a whole-segment digest.
-                // So fall back only when the ETag still matches (or neither side has one).
-                if (stats.etag) {
-                    const responseEtag = response.headers.get('etag');
-                    if (responseEtag !== stats.etag) {
-                        throw pikeletError(
-                            PIKELET_ERROR_CODES.ARTIFACT_CHANGED,
-                            `artifact changed on the host: expected ETag ${stats.etag}, got ${responseEtag || '(missing)'}`,
-                            { expectedEtag: stats.etag, actualEtag: responseEtag },
-                        );
-                    }
-                }
-                // An unknown size must refuse, not pass the gate: with no
-                // Content-Length (chunked body) and init() never called,
-                // size would be 0 and the cap check silently vacuous.
-                const size = Number(response.headers.get('content-length')) || this.size || 0;
-                if (size <= 0) {
-                    throw new Error('host ignores Range and reports no size; refusing unbounded full download (call init() first or fix the host)');
-                }
-                if (size > maxFullFallbackBytes) {
-                    throw new Error(`host ignores Range and the file is ${size} bytes; refusing full download`);
-                }
-                // Declared sizes are advisory (a chunked body can stream more
-                // than any header claimed), so the cap is enforced on the
-                // bytes actually received, aborting as soon as it is crossed.
+                const expected = Number(m[2]) - Number(m[1]) + 1;
                 const reader = response.body?.getReader?.();
+                // Real fetch responses stream: stop at the range boundary,
+                // before an untrusted host can buffer an unbounded body.
+                // Array-buffer-only custom transports retain their old API.
                 if (!reader) {
-                    const bytes = new Uint8Array(await response.arrayBuffer());
-                    if (bytes.length > maxFullFallbackBytes) {
-                        throw new Error(`host ignores Range and streamed ${bytes.length} bytes; refusing full download over ${maxFullFallbackBytes}`);
+                    const body = new Uint8Array(await response.arrayBuffer());
+                    if (body.length !== expected) {
+                        throw new Error(`range read body is ${body.length} bytes for Content-Range ${contentRange}`);
                     }
-                    full = bytes;
-                } else {
-                    const chunks = [];
-                    let received = 0;
+                    return body;
+                }
+                const chunks = [];
+                let received = 0;
+                try {
                     for (;;) {
                         const { done, value } = await reader.read();
                         if (done) break;
                         received += value.byteLength;
-                        if (received > maxFullFallbackBytes) {
+                        if (received > expected) {
                             await reader.cancel().catch(() => {});
-                            throw new Error(`host ignores Range and streamed over ${maxFullFallbackBytes} bytes; aborting full download`);
+                            throw new Error(`range read body exceeds ${expected} bytes for Content-Range ${contentRange}`);
                         }
                         chunks.push(value);
                     }
-                    full = new Uint8Array(received);
+                    if (received !== expected) {
+                        throw new Error(`range read body is ${received} bytes for Content-Range ${contentRange}`);
+                    }
+                    const body = new Uint8Array(received);
                     let at = 0;
-                    for (const chunk of chunks) { full.set(chunk, at); at += chunk.byteLength; }
+                    for (const chunk of chunks) { body.set(chunk, at); at += chunk.byteLength; }
+                    return body;
+                } finally {
+                    reader.releaseLock();
                 }
-                stats.fullFallback = true;
-                console.warn('.pikelet host does not honor Range; fell back to a one-time full download');
-                return full.subarray(offset, offset + length);
             }
+            if (response.status === 200) {
+                // Another read already started the full download: this body
+                // is the same file again, so drop it and share that one.
+                if (fullPending) {
+                    discard(response);
+                    return (await fullPending).subarray(offset, offset + length);
+                }
+                fullPending = (async () => {
+                    // Under If-Range, a 200 instead of 206 means the host ignores Range or the
+                    // pinned ETag no longer matches (the artifact was replaced). Only the first
+                    // may fall back to a full download: slices of a replaced file don't match
+                    // the manifest, and a large lexical segment has only a whole-segment digest.
+                    // So fall back only when the ETag still matches (or neither side has one).
+                    if (stats.etag) {
+                        const responseEtag = response.headers.get('etag');
+                        if (!responseEtag || !sameEtag(responseEtag, stats.etag)) {
+                            discard(response);
+                            throw pikeletError(
+                                PIKELET_ERROR_CODES.ARTIFACT_CHANGED,
+                                `artifact changed on the host: expected ETag ${stats.etag}, got ${responseEtag || '(missing)'}`,
+                                { expectedEtag: stats.etag, actualEtag: responseEtag },
+                            );
+                        }
+                    }
+                    // An unknown size must refuse, not pass the gate: with no
+                    // Content-Length (chunked body) and init() never called,
+                    // size would be 0 and the cap check silently vacuous.
+                    const size = Number(response.headers.get('content-length')) || this.size || 0;
+                    if (size <= 0) {
+                        throw new Error('host ignores Range and reports no size; refusing unbounded full download (call init() first or fix the host)');
+                    }
+                    if (size > maxFullFallbackBytes) {
+                        throw new Error(`host ignores Range and the file is ${size} bytes; refusing full download`);
+                    }
+                    // Declared sizes are advisory (a chunked body can stream more
+                    // than any header claimed), so the cap is enforced on the
+                    // bytes actually received, aborting as soon as it is crossed.
+                    const reader = response.body?.getReader?.();
+                    if (!reader) {
+                        const bytes = new Uint8Array(await response.arrayBuffer());
+                        if (bytes.length > maxFullFallbackBytes) {
+                            throw new Error(`host ignores Range and streamed ${bytes.length} bytes; refusing full download over ${maxFullFallbackBytes}`);
+                        }
+                        full = bytes;
+                    } else {
+                        const chunks = [];
+                        let received = 0;
+                        for (;;) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            received += value.byteLength;
+                            if (received > maxFullFallbackBytes) {
+                                await reader.cancel().catch(() => {});
+                                throw new Error(`host ignores Range and streamed over ${maxFullFallbackBytes} bytes; aborting full download`);
+                            }
+                            chunks.push(value);
+                        }
+                        full = new Uint8Array(received);
+                        let at = 0;
+                        for (const chunk of chunks) { full.set(chunk, at); at += chunk.byteLength; }
+                    }
+                    stats.fullFallback = true;
+                    console.warn('.pikelet host does not honor Range; fell back to a one-time full download');
+                    return full;
+                })();
+                try {
+                    return (await fullPending).subarray(offset, offset + length);
+                } catch (err) {
+                    discard(response);
+                    fullPending = null; // a later read may try again
+                    throw err;
+                }
+            }
+            discard(response);
             throw new Error(`range read failed: HTTP ${response.status}`);
         },
     };

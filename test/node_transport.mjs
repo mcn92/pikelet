@@ -247,6 +247,107 @@ console.log('crawler');
     check('a crawl fetches each page once', new Set(docs.map((d) => d.url)).size === docs.length);
 }
 
+console.log('range response bounds and retry delays');
+{
+    const sourceFor = (body, contentRange = 'bytes 0-3/4') => httpRangeSource('https://range.test/pack', {
+        fetch: async (_, init) => init.method === 'HEAD'
+            ? new Response(null, { headers: { 'content-length': '4' } })
+            : new Response(body, { status: 206, headers: { 'content-range': contentRange } }),
+    });
+    let pulls = 0;
+    let cancelled = false;
+    const oversized = sourceFor(new ReadableStream({
+        pull(controller) {
+            pulls++;
+            controller.enqueue(new Uint8Array(4));
+            if (pulls === 100) controller.close();
+        },
+        cancel() { cancelled = true; },
+    }, { highWaterMark: 0 }));
+    await rejects('oversized 206 is refused', () => oversized.read(0, 4), /body exceeds 4 bytes/);
+    check('oversized 206 is cancelled at the first excess chunk', cancelled && pulls === 2, `${cancelled}, ${pulls}`);
+    await rejects('short 206 is refused at EOF', () => sourceFor(new Uint8Array(3)).read(0, 4), /body is 3 bytes/);
+    const valid = sourceFor(new ReadableStream({ start(c) {
+        c.enqueue(new Uint8Array([1, 2])); c.enqueue(new Uint8Array([3, 4])); c.close();
+    } }));
+    check('valid multi-chunk 206 retains its bytes', (await valid.read(0, 4)).join(',') === '1,2,3,4');
+    // A host that ignores Range: reads in flight together share one full
+    // download instead of each buffering the whole file.
+    {
+        const SIZE = 4096;
+        let fullyRead = 0;
+        let gets = 0;
+        const file = Uint8Array.from({ length: SIZE }, (_, i) => i & 0xff);
+        const source = httpRangeSource('https://range.test/ignores-range', {
+            fetch: async (_, init) => {
+                if (init.method === 'HEAD') return new Response(null, { headers: { 'content-length': String(SIZE) } });
+                gets++;
+                let sent = 0;
+                return new Response(new ReadableStream({
+                    pull(c) {
+                        if (sent >= SIZE) { fullyRead++; c.close(); return; }
+                        c.enqueue(file.slice(sent, sent + 1024)); sent += 1024;
+                    },
+                }, { highWaterMark: 0 }), { status: 200, headers: { 'content-length': String(SIZE) } });
+            },
+        });
+        await source.init();
+        const warn = console.warn; console.warn = () => {};
+        let slices;
+        try {
+            slices = await Promise.all(Array.from({ length: 16 }, (_, i) => source.read(i * 256, 256)));
+        } finally { console.warn = warn; }
+        check('concurrent reads on a host that ignores Range download the file once', fullyRead === 1, `${fullyRead} full bodies, ${gets} GETs`);
+        check('each shared-download read gets its own slice', slices.every((s, i) => s.length === 256 && s[0] === ((i * 256) & 0xff)));
+        const before = gets;
+        await source.read(100, 10);
+        check('a read after the fallback is served from memory', gets === before);
+    }
+    // 206 responses are held to the pinned ETag.
+    {
+        const sourceWith = (headEtag, readEtags) => {
+            let n = 0;
+            return httpRangeSource('https://range.test/etag', {
+                fetch: async (_, init) => init.method === 'HEAD'
+                    ? new Response(null, { headers: { 'content-length': '4', ...(headEtag ? { etag: headEtag } : {}) } })
+                    : new Response(new Uint8Array(4), { status: 206, headers: { 'content-range': 'bytes 0-3/4', etag: readEtags[Math.min(n++, readEtags.length - 1)] } }),
+            });
+        };
+        const changed = sourceWith('"a"', ['"b"']);
+        await changed.init();
+        await rejects('a 206 carrying a different ETag than HEAD pinned is refused', () => changed.read(0, 4), /artifact changed on the host/);
+        const weak = sourceWith('"a"', ['W/"a"']);
+        await weak.init();
+        check('a 206 whose ETag matches weakly is accepted', (await weak.read(0, 4)).length === 4);
+        const unpinned = sourceWith(null, ['"a"', '"b"']);
+        await unpinned.init();
+        await unpinned.read(0, 4);
+        await rejects('with no ETag from HEAD, the first range read pins one', () => unpinned.read(0, 4), /artifact changed on the host/);
+    }
+    const originalTimer = globalThis.setTimeout;
+    try {
+        for (const [header, expected] of [
+            [null, [250, 500, 1000]], ['', [250, 500, 1000]],
+            ['invalid', [250, 500, 1000]], ['2', [2000, 2000, 2000]], ['0', [0, 0, 0]],
+        ]) {
+            const delays = [];
+            globalThis.setTimeout = (fn, ms) => { delays.push(ms); return originalTimer(fn, 0); };
+            let reads = 0;
+            const source = httpRangeSource('https://range.test/retry', { fetch: async (_, init) => {
+                if (init.method === 'HEAD') return new Response(null);
+                if (++reads <= 3) return new Response(null, { status: 503,
+                    headers: header === null ? {} : { 'retry-after': header } });
+                return new Response(new Uint8Array(4), { status: 206, headers: { 'content-range': 'bytes 0-3/4' } });
+            } });
+            await source.read(0, 4);
+            check(`Retry-After ${JSON.stringify(header)} uses the expected delays`,
+                JSON.stringify(delays) === JSON.stringify(expected), JSON.stringify(delays));
+        }
+    } finally {
+        globalThis.setTimeout = originalTimer;
+    }
+}
+
 console.log('supported Node versions');
 for (const [v, want] of [
     ['18.20.8', false], ['20.20.2', false], ['22.23.3', false], ['22.23.4', true], ['22.30.0', true],
