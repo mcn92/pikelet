@@ -519,6 +519,10 @@ function callListPacks(packs, mountFailures = []) {
       const isChain = Number.isInteger(info.layers) && info.layers > 1;
       return {
         name,
+        // A manifest name that is not a plain identifier never names the
+        // pack (see mountName); it is reported here, as data, instead.
+        ...(typeof info.name === 'string' && info.name !== name && !PACK_NAME.test(info.name)
+          ? { declaredName: info.name.slice(0, 200) } : {}),
         identity: info.identity,
         file: mounted.file,
         records: Number.isInteger(info.liveRecords) ? info.liveRecords : info.records,
@@ -799,20 +803,30 @@ async function callLatest(packs, journalName, args) {
  * alone mounted under. (Only for chains: on a single pack `wiki.2025` is a
  * name, not a layer number.) Names address packs in every tool call, so a
  * collision gets a stable numeric suffix rather than shadowing a mount.
+ *
+ * A name is written into the tool descriptions the client hands the model,
+ * a more trusted channel than tool output, and the manifest's name is
+ * whatever the pack's publisher chose. So every candidate must be a plain
+ * identifier (the journal-name rule); one that is not is skipped for the
+ * next, and `pack` is the last resort.
  */
+export const PACK_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export function mountName(packs, spec, info, { chain = false } = {}) {
-  let name = spec.name || info.name;
-  if (!name) {
-    const file = path.basename(isUrlLike(spec.location) ? new URL(spec.location).pathname : spec.location)
+  let file = null;
+  try {
+    file = path.basename(isUrlLike(spec.location) ? new URL(spec.location).pathname : String(spec.location ?? ''))
       .replace(/\.pikelet$/, '');
-    name = chain ? file.replace(/\.\d{4}$/, '') : file;
-  }
-  if (packs.has(name)) {
-    let n = 2;
-    while (packs.has(`${name}-${n}`)) n += 1;
-    name = `${name}-${n}`;
-  }
-  return name;
+    if (chain) file = file.replace(/\.\d{4}$/, '');
+  } catch { /* an unparseable location has no file name to offer */ }
+  const name = [spec.name, info.name, file].find((c) => typeof c === 'string' && PACK_NAME.test(c)) ?? 'pack';
+  return uniqueName(packs, name);
+}
+
+function uniqueName(packs, name) {
+  if (!packs.has(name)) return name;
+  let n = 2;
+  while (packs.has(`${name}-${n}`)) n += 1;
+  return `${name}-${n}`;
 }
 
 async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log, blobCache = null }) {

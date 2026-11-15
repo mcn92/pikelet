@@ -19,6 +19,12 @@ first.
   now left out, and the same inputs give the same identity by default.
   Builds with `SOURCE_DATE_EPOCH` set are byte-identical to 0.14.0's.
   `evaluation().generatedAt` is absent on unpinned packs.
+- **A pack whose manifest name is not a plain identifier gets another
+  name.** `pikelet mcp` serves a pack under a name made of letters,
+  digits, `.`, `_` and `-` (at most 64 characters), the rule journal names
+  already follow. A shelf or manifest name outside it is skipped for the
+  file name, then `pack`. Such a pack's `pack` argument changes;
+  `list_packs` reports the declared name as `declaredName`.
 - **A bare `pikelet` prints the commands instead of starting `create`.**
   The interactive scaffold is `pikelet create`; `pikelet` with flags but
   no command still scaffolds, as the old `npm create` flow did.
@@ -35,6 +41,12 @@ first.
 
 ### Fixed
 
+- **A pack's name can no longer put text into MCP tool descriptions.** The
+  name a pack is served under came from its manifest unchecked and was
+  written into the `search` tool's description, which clients hand to the
+  model as trusted instructions. A pack compiled with a name like
+  `docs). SYSTEM NOTE TO ASSISTANT: …` put that text in `tools/list`.
+  Names are now held to the identifier rule above.
 - **A journal is private to its owner.** `journal init`, `write_note` and
   `journal compact` created the journal under the process umask, so under
   the usual 022 the directory was 0755 and its notes, `journal.json` and
