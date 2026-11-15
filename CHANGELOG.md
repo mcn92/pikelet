@@ -19,6 +19,10 @@ first.
   now left out, and the same inputs give the same identity by default.
   Builds with `SOURCE_DATE_EPOCH` set are byte-identical to 0.14.0's.
   `evaluation().generatedAt` is absent on unpinned packs.
+- **`pikelet mcp` may answer requests out of order.** Requests are now
+  handled concurrently, so a quick call is answered while a slow one is
+  still running, and replies can arrive in a different order from the
+  requests. JSON-RPC allows this, and clients match replies by id.
 - **A pack whose manifest name is not a plain identifier gets another
   name.** `pikelet mcp` serves a pack under a name made of letters,
   digits, `.`, `_` and `-` (at most 64 characters), the rule journal names
@@ -41,6 +45,26 @@ first.
 
 ### Fixed
 
+- **A stalled host no longer hangs a read, or the MCP server.** Neither
+  `nodeFetch` nor `httpRangeSource` set a timeout, so a host that accepted
+  a request and then sent nothing left the read, and the query behind it,
+  pending with no error. Under `pikelet mcp` that stopped everything:
+  packs mounted one after another and tool calls ran one at a time inside
+  the stdin loop, so one stuck URL blocked every pack, local ones
+  included, and the client's `notifications/cancelled` could not be read.
+  - `nodeFetch` fails a request whose connection sits idle for
+    `idleTimeoutMs` (default 30 s; 0 disables), whether waiting for
+    headers or mid-body. A slow body that keeps arriving is not cut off.
+  - `httpRangeSource` keeps its own clock over every wait on the host
+    (HEAD, response headers, each body chunk), with the same option and
+    default, so a browser fetch or an injected transport cannot hang a
+    read either. It aborts the request through its signal. Retry sleeps
+    are not on the clock.
+  - `pikelet mcp` mounts packs concurrently and handles each request
+    without blocking the next. A cancelled request gets no reply. A
+    journal chain replaced by a write is closed only after calls already
+    reading it finish. The per-session limit of 100 notes is now checked
+    inside the write queue, so concurrent writes cannot overshoot it.
 - **A pack's name can no longer put text into MCP tool descriptions.** The
   name a pack is served under came from its manifest unchecked and was
   written into the `search` tool's description, which clients hand to the

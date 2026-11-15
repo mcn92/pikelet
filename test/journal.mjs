@@ -483,6 +483,22 @@ console.log('journal: MCP tools');
     check('a modern request is authored by its own clientInfo',
         l4.body.notes?.[0]?.authoredBy?.client === 'modern-client' && l4.body.notes[0].authoredBy.clientVersion === '9.9',
         JSON.stringify(l4.body.notes?.[0]?.authoredBy));
+
+    // Calls run concurrently: searches and reads in flight while a write
+    // remounts the journal must finish on the chain they started with.
+    const burst = [];
+    for (let i = 0; i < 3; i++) {
+        burst.push({ id: 30 + i * 3, name: 'write_note', args: { kind: 'measurement', title: `Burst note ${i}`, text: `Concurrent write ${i}.` } });
+        burst.push({ id: 31 + i * 3, name: 'search', args: { query: 'handoff over mcp', k: 2 } });
+        burst.push({ id: 32 + i * 3, name: 'get_record', args: { id: w.body.citation.id } });
+    }
+    for (const b of burst) send({ jsonrpc: '2.0', id: b.id, method: 'tools/call', params: { name: b.name, arguments: b.args } });
+    const burstReplies = await Promise.all(burst.map((b) => waitFor(b.id)));
+    const failedCalls = burstReplies.filter((r) => !r.result || r.result.isError);
+    check('writes interleaved with reads all succeed', failedCalls.length === 0, JSON.stringify(failedCalls).slice(0, 300));
+    const l5 = await call(40, 'latest', { limit: 5 });
+    const burstTitles = (l5.body.notes || []).map((n) => n.title).filter((x) => x.startsWith('Burst note')).sort();
+    check('every concurrent write landed exactly once', burstTitles.join('|') === 'Burst note 0|Burst note 1|Burst note 2', burstTitles.join('|'));
     check('nothing but protocol reached stdout', nonJson === 0, `${nonJson} non-JSON line(s)`);
     stdin.end();
     await done;

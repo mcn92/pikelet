@@ -42,7 +42,29 @@ export function httpRangeSource(url, options = {}) {
     // With a guard set, reads never auto-follow: only the HEAD walk below,
     // which checks each hop, may move the target.
     const redirectGuard = typeof options.redirectGuard === 'function' ? options.redirectGuard : null;
-    const readInit = (headers) => (redirectGuard ? { headers, redirect: 'error' } : { headers });
+    const readInit = (headers, signal) => (redirectGuard ? { headers, redirect: 'error', signal } : { headers, signal });
+
+    // A host that accepts a request and then sends nothing would leave the
+    // read, and the query waiting on it, pending forever. Every await on the
+    // host (headers, and each body chunk) gets this long to make progress;
+    // the transport is aborted when it does not, for transports that honor
+    // a signal. Retry sleeps are not on this clock. 0 disables it.
+    const idleTimeoutMs = options.idleTimeoutMs ?? 30_000;
+    if (!(Number.isFinite(idleTimeoutMs) && idleTimeoutMs >= 0)) {
+        throw new TypeError(`idleTimeoutMs must be a non-negative number of milliseconds, got ${options.idleTimeoutMs}`);
+    }
+    const idle = (promise, controller, what) => {
+        if (idleTimeoutMs === 0) return promise;
+        let timer;
+        const stalled = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                const err = Object.assign(new Error(`${what}: the host sent nothing for ${idleTimeoutMs / 1000} s; gave up`), { code: 'ETIMEDOUT' });
+                controller?.abort(err);
+                reject(err);
+            }, idleTimeoutMs);
+        });
+        return Promise.race([promise, stalled]).finally(() => clearTimeout(timer));
+    };
 
     // Redirect memoization. A host that answers with a redirect (GitHub
     // release assets: github.com 302s every hit to a signed CDN URL) would
@@ -65,7 +87,9 @@ export function httpRangeSource(url, options = {}) {
             let viaRedirect = false;
             try {
                 for (let hop = 0; hop < 5; hop++) {
-                    const probe = await fetch(target, { method: 'HEAD', redirect: 'manual' });
+                    const controller = new AbortController();
+                    const probe = await idle(fetch(target, { method: 'HEAD', redirect: 'manual', signal: controller.signal }),
+                        controller, `HEAD ${target}`);
                     const location = probe.headers.get('location');
                     if (probe.status >= 300 && probe.status < 400 && location) {
                         const next = new URL(location, target).href;
@@ -115,8 +139,9 @@ export function httpRangeSource(url, options = {}) {
             } catch (err) {
                 // A refused hop is a verdict, not a probe failure: falling back
                 // to the original URL would retry the same redirect. So is a
-                // replaced artifact.
-                if (err?.redirectRefused || err?.artifactChanged) {
+                // replaced artifact, and so is a host that never answered
+                // (the read that followed would wait out the same silence).
+                if (err?.redirectRefused || err?.artifactChanged || err?.code === 'ETIMEDOUT') {
                     resolving = null;
                     throw err;
                 }
@@ -178,21 +203,28 @@ export function httpRangeSource(url, options = {}) {
             const targetFor = ({ target, viaRedirect }) => (cacheKeyParam && !viaRedirect
                 ? `${target}${target.includes('?') ? '&' : '?'}${cacheKeyParam}=${offset}-${end}`
                 : target);
-            let response = await fetch(targetFor(pinned), readInit(headers));
+            const what = `range read of bytes ${offset}-${end} from ${url}`;
+            let controller = null;
+            const send = (target) => {
+                controller = new AbortController();
+                return idle(fetch(target, readInit(headers, controller.signal)), controller, what);
+            };
+            const bodyStep = (promise) => idle(promise, controller, what);
+            let response = await send(targetFor(pinned));
             if ((response.status === 401 || response.status === 403) && pinned.viaRedirect) {
                 // The pinned signed URL expired; resolve a fresh one once
                 // and retry. Concurrent reads share the re-resolution.
                 if (resolvedTarget === pinned) resolvedTarget = null;
                 stats.retries += 1;
                 discard(response);
-                response = await fetch(targetFor(await resolveTarget()), readInit(headers));
+                response = await send(targetFor(await resolveTarget()));
             }
             for (let attempt = 0; RETRYABLE.has(response.status) && attempt < maxRetries; attempt++) {
                 stats.retries += 1;
                 const delay = retryDelayMs(attempt, response);
                 discard(response);
                 await new Promise((resolve) => setTimeout(resolve, delay));
-                response = await fetch(targetFor(resolvedTarget || pinned), readInit(headers));
+                response = await send(targetFor(resolvedTarget || pinned));
             }
 
             // A pack is content-addressed bytes: a body the host encoded is
@@ -238,7 +270,7 @@ export function httpRangeSource(url, options = {}) {
                 // before an untrusted host can buffer an unbounded body.
                 // Array-buffer-only custom transports retain their old API.
                 if (!reader) {
-                    const body = new Uint8Array(await response.arrayBuffer());
+                    const body = new Uint8Array(await bodyStep(response.arrayBuffer()));
                     if (body.length !== expected) {
                         throw new Error(`range read body is ${body.length} bytes for Content-Range ${contentRange}`);
                     }
@@ -248,7 +280,7 @@ export function httpRangeSource(url, options = {}) {
                 let received = 0;
                 try {
                     for (;;) {
-                        const { done, value } = await reader.read();
+                        const { done, value } = await bodyStep(reader.read());
                         if (done) break;
                         received += value.byteLength;
                         if (received > expected) {
@@ -307,7 +339,7 @@ export function httpRangeSource(url, options = {}) {
                     // bytes actually received, aborting as soon as it is crossed.
                     const reader = response.body?.getReader?.();
                     if (!reader) {
-                        const bytes = new Uint8Array(await response.arrayBuffer());
+                        const bytes = new Uint8Array(await bodyStep(response.arrayBuffer()));
                         if (bytes.length > maxFullFallbackBytes) {
                             throw new Error(`host ignores Range and streamed ${bytes.length} bytes; refusing full download over ${maxFullFallbackBytes}`);
                         }
@@ -316,7 +348,7 @@ export function httpRangeSource(url, options = {}) {
                         const chunks = [];
                         let received = 0;
                         for (;;) {
-                            const { done, value } = await reader.read();
+                            const { done, value } = await bodyStep(reader.read());
                             if (done) break;
                             received += value.byteLength;
                             if (received > maxFullFallbackBytes) {

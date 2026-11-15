@@ -13,7 +13,8 @@
 // inflated by node:zlib, never Brotli or zstd.
 //
 // Only what the callers use is implemented: GET/HEAD without a request
-// body, a headers object (or Headers), an AbortSignal, and the three
+// body, a headers object (or Headers), an AbortSignal, an idle timeout
+// (init.idleTimeoutMs, default 30 s, 0 disables), and the three
 // redirect modes -- 'follow' for plain reads, 'manual' for the range
 // source's HEAD walk (which reads Location itself), and 'error' for reads
 // under a redirectGuard. The result is a real Response, so callers keep
@@ -36,13 +37,27 @@ const agents = {
   'http:': new http.Agent({ keepAlive: true, maxSockets: MAX_SOCKETS }),
   'https:': new https.Agent({ keepAlive: true, maxSockets: MAX_SOCKETS }),
 };
+// A host that accepts a connection and then sends nothing would otherwise
+// hold the request open forever: no error, no response. The clock is the
+// socket's idle time, so a slow but moving body never trips it, and time
+// spent queued for one of the agent's sockets does not count.
+export const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 
-function requestOnce(url, { method, headers, signal }) {
+function requestOnce(url, { method, headers, signal, idleTimeoutMs }) {
   const transport = url.protocol === 'https:' ? https : url.protocol === 'http:' ? http : null;
   if (!transport) return Promise.reject(new TypeError(`unsupported protocol ${url.protocol} in ${url.href}`));
   return new Promise((resolve, reject) => {
     const req = transport.request(url, { method, headers, signal, agent: agents[url.protocol] }, resolve);
     req.on('error', reject);
+    if (idleTimeoutMs > 0) {
+      // Covers the wait for response headers and every gap in the body: the
+      // destroy errors the response stream, which rejects the body read.
+      req.setTimeout(idleTimeoutMs, () => {
+        const err = Object.assign(new Error(`${url.href} sent nothing for ${idleTimeoutMs / 1000} s; gave up`), { code: 'ETIMEDOUT' });
+        req.res?.destroy(err);
+        req.destroy(err);
+      });
+    }
     req.end();
   });
 }
@@ -80,9 +95,13 @@ export async function nodeFetch(input, init = {}) {
   const headers = Object.fromEntries(new Headers(init.headers || {}));
   headers['accept-encoding'] = 'identity';
   headers['user-agent'] ??= 'pikelet';
+  const idleTimeoutMs = init.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+  if (!(Number.isFinite(idleTimeoutMs) && idleTimeoutMs >= 0)) {
+    throw new TypeError(`idleTimeoutMs must be a non-negative number of milliseconds, got ${init.idleTimeoutMs}`);
+  }
   let url = new URL(String(input));
   for (let hop = 0; ; hop++) {
-    const res = await requestOnce(url, { method, headers, signal: init.signal });
+    const res = await requestOnce(url, { method, headers, signal: init.signal, idleTimeoutMs });
     const location = res.headers.location;
     if (REDIRECT_STATUSES.has(res.statusCode) && location) {
       res.resume();

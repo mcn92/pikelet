@@ -63,6 +63,13 @@ export declare function httpRangeSource(url: string, options?: {
    */
   maxRetries?: number;
   /**
+   * How long, in milliseconds, each wait on the host (response headers, then
+   * each body chunk) may go without progress before the read fails with code
+   * ETIMEDOUT and the request is aborted. Default 30000; 0 disables. Retry
+   * sleeps do not count.
+   */
+  idleTimeoutMs?: number;
+  /**
    * Called with each redirect target before it is followed; throw to refuse
    * the hop. When set, range reads never auto-follow redirects. A chain walk
    * sets it for a parent named by a layer's locator, confining every hop to
@@ -79,6 +86,8 @@ export declare function httpRangeSource(url: string, options?: {
     method?: string;
     headers?: Record<string, string>;
     redirect?: 'follow' | 'manual' | 'error';
+    /** Aborted when a request makes no progress for idleTimeoutMs. */
+    signal?: unknown;
   }) => Promise<any>;
 }): HttpRangeSource;
 
@@ -94,6 +103,12 @@ export declare function nodeFetch(input: string, init?: {
   signal?: unknown;
   /** Inflate a gzip/deflate body a server sent despite identity (crawled HTML); Brotli/zstd still refused. */
   inflateGzip?: boolean;
+  /**
+   * Milliseconds the connection may sit idle (no response headers, or a gap
+   * in the body) before the request fails with code ETIMEDOUT. Default
+   * 30000; 0 disables. Time queued for a socket does not count.
+   */
+  idleTimeoutMs?: number;
 }): Promise<any>;
 
 /** openPikeletFile's options.blobCache: bytes keyed by their sha256 (lowercase hex, 32-64 digits). */

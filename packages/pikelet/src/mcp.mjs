@@ -672,12 +672,15 @@ async function mountJournal(packs, dir, { log, name = null }) {
   return packName;
 }
 
-// Reopen the journal under the same name and close the chain it replaces.
-// Tool calls run one at a time, so no read is in flight on the old chain.
-async function remountJournal(packs, journalName, log) {
+// Reopen the journal under the same name and retire the chain it replaces.
+// Tool calls run concurrently, so a call that started before the swap may
+// still be reading the old chain: `retire` closes it once those calls have
+// finished (the server passes one that waits for them).
+const closeNow = (old) => old.search.close().catch(() => {});
+async function remountJournal(packs, journalName, log, retire = closeNow) {
   const old = packs.get(journalName);
   await mountJournal(packs, old.journal.dir, { log, name: journalName });
-  await old.search.close().catch(() => {});
+  retire(old);
 }
 
 // Other sessions write to the same journal (and compact it): before each
@@ -686,13 +689,13 @@ async function remountJournal(packs, journalName, log) {
 // failed check or reopen keeps the open chain serving: on Linux its files
 // stay readable even after a compaction elsewhere deletes them, and the next
 // call tries again.
-async function refreshJournal(packs, journalName, log) {
+async function refreshJournal(packs, journalName, log, retire = closeNow) {
   const mounted = packs.get(journalName);
   try {
     const members = await journalMembers(mounted.journal.dir);
     const current = mounted.journal.members;
     if (members.length === current.length && members.every((m, i) => m === current[i])) return;
-    await remountJournal(packs, journalName, log);
+    await remountJournal(packs, journalName, log, retire);
   } catch (err) {
     log(`journal refresh failed, serving the chain already open: ${err?.message || err}`);
   }
@@ -703,7 +706,7 @@ async function refreshJournal(packs, journalName, log) {
 // operation at a time.
 const MAX_NOTES_PER_SESSION = 100;
 function journalSession() {
-  return { client: null, session: crypto.randomUUID(), written: 0, queue: Promise.resolve() };
+  return { client: null, session: crypto.randomUUID(), written: 0, queue: Promise.resolve(), retire: closeNow };
 }
 
 function serialize(session, fn) {
@@ -730,9 +733,6 @@ const requestClient = (params) => clientImplementation(params?._meta?.[META_CLIE
 // legacy session's from initialize.
 async function callWriteNote(packs, journalName, session, args, log, client = session.client) {
   const mounted = packs.get(journalName);
-  if (session.written >= MAX_NOTES_PER_SESSION) {
-    throw new Error(`write_note: this session has written ${MAX_NOTES_PER_SESSION} notes, the per-session limit`);
-  }
   const created = new Date().toISOString();
   const record = shapeNote(args, {
     created,
@@ -742,19 +742,24 @@ async function callWriteNote(packs, journalName, session, args, log, client = se
   // One write at a time: each appends to the head the previous one wrote.
   let remountError = null;
   const written = await serialize(session, async () => {
+    // Checked and counted inside the queue: concurrent calls would otherwise
+    // all pass the check before any of them counts.
+    if (session.written >= MAX_NOTES_PER_SESSION) {
+      throw new Error(`write_note: this session has written ${MAX_NOTES_PER_SESSION} notes, the per-session limit`);
+    }
     const out = await appendNote(mounted.journal.dir, record, { log });
+    session.written += 1;
     // The note is on disk from here: a failed reopen must not report the
     // write as failed, or the agent retries and records it twice. The next
     // call's refresh reopens it.
     try {
-      await remountJournal(packs, journalName, log);
+      await remountJournal(packs, journalName, log, session.retire);
     } catch (err) {
       remountError = err;
       log(`journal reopen after write failed: ${err?.message || err}`);
     }
     return out;
   });
-  session.written += 1;
   return {
     written: true,
     citation: { pack: journalName, id: written.id, identity: written.identity },
@@ -1069,8 +1074,20 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
         log(`mount failed: ${location}: ${message}`);
       }
     };
-    for (const spec of specs) {
-      await attempt(spec.location ?? spec.name ?? '(lineage)', () => mountPack(packs, spec, { openPikeletFile, httpRangeSource, log, blobCache }));
+    // Concurrently, so one slow or stalled host does not hold up the rest;
+    // each mounts into its own map, and the results are registered in the
+    // order given, so names, suffixes and tools/list order stay stable.
+    const staged = await Promise.all(specs.map(async (spec) => {
+      const own = new Map();
+      await attempt(spec.location ?? spec.name ?? '(lineage)', () => mountPack(own, spec, { openPikeletFile, httpRangeSource, log, blobCache }));
+      return own;
+    }));
+    for (const own of staged) {
+      for (const [name, entry] of own) {
+        const final = uniqueName(packs, name);
+        if (final !== name) log(`serving ${name} as ${final}: an earlier pack already has that name`);
+        packs.set(final, entry);
+      }
     }
     if (journalDir) await attempt(journalDir, async () => { journalName = await mountJournal(packs, journalDir, { log }); });
     // Warm every pack in the background so the first tool call pays for
@@ -1120,6 +1137,18 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
   };
   mountsReady.then(onMountsSettled, onMountsSettled);
 
+  // Calls in flight, the request ids among them, and the ones the client has
+  // cancelled. A journal chain replaced by a remount is closed only once
+  // every call that might still be reading it has finished.
+  const inflight = new Set();
+  const running = new Set();
+  const cancelled = new Set();
+  const retiring = new Set();
+  session.retire = (old) => {
+    const done = Promise.allSettled([...inflight]).then(() => old.search.close()).catch(() => {});
+    retiring.add(done);
+    done.finally(() => retiring.delete(done));
+  };
   const rl = readline.createInterface({ input: stdin, crlfDelay: Infinity });
   for await (const line of rl) {
     const trimmed = line.trim();
@@ -1149,115 +1178,137 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
     // A notification is never executed as a request: tools/call without an
     // id would run (a journal write included) with no response to report it.
     if (!isRequest && !method.startsWith('notifications/')) continue;
-    // Modern requests declare their version per request; server/discover
-    // is modern by definition (it is the stdio compatibility probe).
-    const metaVersion = typeof params?._meta?.[META_VERSION] === 'string' ? params._meta[META_VERSION] : null;
-    const modern = metaVersion !== null || method === 'server/discover';
-    // Modern results carry resultType and server identity; legacy results
-    // keep their exact pre-modern shape.
-    const reply = (replyId, result) => send({
-      jsonrpc: '2.0',
-      id: replyId,
-      result: modern
-        ? { resultType: 'complete', ...result, _meta: { [META_SERVER_INFO]: serverInfo, ...(result._meta || {}) } }
-        : result,
-    });
-    try {
-      if (metaVersion !== null && !supportedVersions.includes(metaVersion)) {
-        if (isRequest) {
-          replyError(id, -32022, 'Unsupported protocol version', { supported: supportedVersions, requested: metaVersion });
-        }
-      } else if (method === 'server/discover') {
-        reply(id, {
-          supportedVersions,
-          capabilities: { tools: { listChanged: true } },
-          instructions: 'This server mounts .pikelet knowledge packs. Use search to retrieve '
-            + 'provenanced passages with a matchQuality that measures retrieval relevance — whether '
-            + 'the pack covers the question\'s topic — not whether the answer is there: "strong" '
-            + 'passages are squarely on topic, so read them and cite the one that states the answer; '
-            + '"none" results still ship by default because a passage can answer without sharing '
-            + 'the question\'s wording — read and compose rather than dismissing them, and never '
-            + 'cite one as confidently as a "strong" one. Each section carries '
-            + 'grounding.uncovered, the query words no passage contained: if what you were asked '
-            + 'for is in that list, the passage does not establish it whatever matchQuality says. '
-            + 'Chained questions return only their first hop — search again for the next. '
-            + '"unscored" means a pack has no fitted calibrator at all — no confidence signal, '
-            + 'not just a low one; the response carries an unscoredWarning for these. '
-            + 'verify_pack runs the tests a pack carries inside itself, including the '
-            + 'calibration quality behind matchQuality verdicts; list_packs reports identities '
-            + 'for citation pinning.',
-          ...CACHE_HINTS,
-        });
-      } else if (method === 'initialize') {
-        // The client's own name, recorded as the author of any journal note
-        // this session writes: set by the server, not claimed by the model.
-        const client = clientImplementation(params?.clientInfo);
-        if (client) session.client = client;
-        const requested = params?.protocolVersion;
-        reply(id, {
-          protocolVersion: LEGACY_VERSIONS.includes(requested) ? requested : LEGACY_VERSIONS[0],
-          capabilities: { tools: { listChanged: true } },
-          serverInfo,
-        });
-      } else if (method === 'ping') {
-        // Removed in 2026-07-28 but kept for legacy clients; a modern
-        // caller who sends it anyway gets a well-formed empty result.
-        if (isRequest) reply(id, {});
-      } else if (method === 'tools/list') {
-        // Waits briefly for the mounts, since the tool definitions name the
-        // mounted packs. Past the grace period it answers with the same tools
-        // described without pack names, uncached, and list_changed follows
-        // when the mounts settle; tool calls meanwhile wait for the mounts.
-        if (!mountsSettled) {
-          await Promise.race([
-            mountsReady.catch(() => {}),
-            new Promise((resolve) => { setTimeout(resolve, toolsListGraceMs).unref?.(); }),
-          ]);
-        }
-        if (mountsSettled) {
+    // Each message is handled without holding up the next: a slow search
+    // (or a stalled remote pack) must not stop the server reading stdin, or
+    // a later request, or the client's cancellation of this one, would wait
+    // behind it. Replies may therefore arrive out of request order, which
+    // JSON-RPC allows; journal writes stay serialized by their own queue.
+    const handle = async () => {
+      // Modern requests declare their version per request; server/discover
+      // is modern by definition (it is the stdio compatibility probe).
+      const metaVersion = typeof params?._meta?.[META_VERSION] === 'string' ? params._meta[META_VERSION] : null;
+      const modern = metaVersion !== null || method === 'server/discover';
+      // Modern results carry resultType and server identity; legacy results
+      // keep their exact pre-modern shape.
+      // A request the client cancelled still runs to completion (a journal
+      // write is not rolled back), but its reply is dropped, as the protocol
+      // asks of a cancelled request.
+      const reply = (replyId, result) => cancelled.has(replyId) || send({
+        jsonrpc: '2.0',
+        id: replyId,
+        result: modern
+          ? { resultType: 'complete', ...result, _meta: { [META_SERVER_INFO]: serverInfo, ...(result._meta || {}) } }
+          : result,
+      });
+      const replyTo = (...error) => cancelled.has(id) || replyError(id, ...error);
+      try {
+        if (metaVersion !== null && !supportedVersions.includes(metaVersion)) {
+          if (isRequest) {
+            replyTo(-32022, 'Unsupported protocol version', { supported: supportedVersions, requested: metaVersion });
+          }
+        } else if (method === 'server/discover') {
+          reply(id, {
+            supportedVersions,
+            capabilities: { tools: { listChanged: true } },
+            instructions: 'This server mounts .pikelet knowledge packs. Use search to retrieve '
+              + 'provenanced passages with a matchQuality that measures retrieval relevance — whether '
+              + 'the pack covers the question\'s topic — not whether the answer is there: "strong" '
+              + 'passages are squarely on topic, so read them and cite the one that states the answer; '
+              + '"none" results still ship by default because a passage can answer without sharing '
+              + 'the question\'s wording — read and compose rather than dismissing them, and never '
+              + 'cite one as confidently as a "strong" one. Each section carries '
+              + 'grounding.uncovered, the query words no passage contained: if what you were asked '
+              + 'for is in that list, the passage does not establish it whatever matchQuality says. '
+              + 'Chained questions return only their first hop — search again for the next. '
+              + '"unscored" means a pack has no fitted calibrator at all — no confidence signal, '
+              + 'not just a low one; the response carries an unscoredWarning for these. '
+              + 'verify_pack runs the tests a pack carries inside itself, including the '
+              + 'calibration quality behind matchQuality verdicts; list_packs reports identities '
+              + 'for citation pinning.',
+            ...CACHE_HINTS,
+          });
+        } else if (method === 'initialize') {
+          // The client's own name, recorded as the author of any journal note
+          // this session writes: set by the server, not claimed by the model.
+          const client = clientImplementation(params?.clientInfo);
+          if (client) session.client = client;
+          const requested = params?.protocolVersion;
+          reply(id, {
+            protocolVersion: LEGACY_VERSIONS.includes(requested) ? requested : LEGACY_VERSIONS[0],
+            capabilities: { tools: { listChanged: true } },
+            serverInfo,
+          });
+        } else if (method === 'ping') {
+          // Removed in 2026-07-28 but kept for legacy clients; a modern
+          // caller who sends it anyway gets a well-formed empty result.
+          if (isRequest) reply(id, {});
+        } else if (method === 'tools/list') {
+          // Waits briefly for the mounts, since the tool definitions name the
+          // mounted packs. Past the grace period it answers with the same tools
+          // described without pack names, uncached, and list_changed follows
+          // when the mounts settle; tool calls meanwhile wait for the mounts.
+          if (!mountsSettled) {
+            await Promise.race([
+              mountsReady.catch(() => {}),
+              new Promise((resolve) => { setTimeout(resolve, toolsListGraceMs).unref?.(); }),
+            ]);
+          }
+          if (mountsSettled) {
+            await mountsUsable();
+            // Deterministic order (mount order) per the modern caching rules.
+            reply(id, { tools: toolDefinitions(packs), ...(modern ? CACHE_HINTS : {}) });
+          } else {
+            provisionalListServed = true;
+            reply(id, { tools: toolDefinitions(packs, { mounting: true, journalPending: Boolean(journalDir) && !journalName }) });
+          }
+        } else if (method === 'tools/call') {
+          // Every tool reads the packs map, so a call made while mounting is
+          // still in flight waits for it rather than seeing an empty server. A
+          // mount failure surfaces here, per call, instead of being swallowed.
           await mountsUsable();
-          // Deterministic order (mount order) per the modern caching rules.
-          reply(id, { tools: toolDefinitions(packs), ...(modern ? CACHE_HINTS : {}) });
-        } else {
-          provisionalListServed = true;
-          reply(id, { tools: toolDefinitions(packs, { mounting: true, journalPending: Boolean(journalDir) && !journalName }) });
+          if (journalName) await serialize(session, () => refreshJournal(packs, journalName, log, session.retire));
+          const toolName = params?.name;
+          const args = params?.arguments ?? {};
+          let result;
+          if (toolName === 'search') result = await callSearch(packs, args);
+          else if (toolName === 'list_packs') result = callListPacks(packs, mountFailures);
+          else if (toolName === 'get_record') result = await callGetRecord(packs, args);
+          else if (toolName === 'verify_pack') result = await callVerifyPack(packs, args);
+          else if (toolName === 'write_note' && journalName) result = await callWriteNote(packs, journalName, session, args, log, modern ? requestClient(params) : session.client);
+          else if (toolName === 'latest' && journalName) result = await callLatest(packs, journalName, args);
+          else throw new Error(`unknown tool ${JSON.stringify(toolName)}`);
+          reply(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 1) }] });
+        } else if (typeof method === 'string' && method.startsWith('notifications/')) {
+          // initialized and the rest need nothing. A cancellation is honored
+          // for a request still running; one naming anything else is ignored.
+          if (method === 'notifications/cancelled' && running.has(params?.requestId)) cancelled.add(params.requestId);
+        } else if (isRequest) {
+          replyTo(-32601, `method not found: ${method}`);
         }
-      } else if (method === 'tools/call') {
-        // Every tool reads the packs map, so a call made while mounting is
-        // still in flight waits for it rather than seeing an empty server. A
-        // mount failure surfaces here, per call, instead of being swallowed.
-        await mountsUsable();
-        if (journalName) await serialize(session, () => refreshJournal(packs, journalName, log));
-        const toolName = params?.name;
-        const args = params?.arguments ?? {};
-        let result;
-        if (toolName === 'search') result = await callSearch(packs, args);
-        else if (toolName === 'list_packs') result = callListPacks(packs, mountFailures);
-        else if (toolName === 'get_record') result = await callGetRecord(packs, args);
-        else if (toolName === 'verify_pack') result = await callVerifyPack(packs, args);
-        else if (toolName === 'write_note' && journalName) result = await callWriteNote(packs, journalName, session, args, log, modern ? requestClient(params) : session.client);
-        else if (toolName === 'latest' && journalName) result = await callLatest(packs, journalName, args);
-        else throw new Error(`unknown tool ${JSON.stringify(toolName)}`);
-        reply(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 1) }] });
-      } else if (typeof method === 'string' && method.startsWith('notifications/')) {
-        // initialized, cancelled, ... — nothing to do.
-      } else if (isRequest) {
-        replyError(id, -32601, `method not found: ${method}`);
+      } catch (err) {
+        const text = err && err.message ? err.message : String(err);
+        if (method === 'tools/call' && isRequest) {
+          // Tool-level failures are results with isError, not protocol
+          // errors — the model sees them and can correct the call.
+          reply(id, { content: [{ type: 'text', text }], isError: true });
+        } else if (isRequest) {
+          replyTo(-32603, text);
+        } else {
+          log(`error handling ${method}: ${text}`);
+        }
       }
-    } catch (err) {
-      const text = err && err.message ? err.message : String(err);
-      if (method === 'tools/call' && isRequest) {
-        // Tool-level failures are results with isError, not protocol
-        // errors — the model sees them and can correct the call.
-        reply(id, { content: [{ type: 'text', text }], isError: true });
-      } else if (isRequest) {
-        replyError(id, -32603, text);
-      } else {
-        log(`error handling ${method}: ${text}`);
-      }
-    }
+    };
+    const task = handle().catch((err) => log(`error handling ${method}: ${err?.message || err}`));
+    inflight.add(task);
+    if (isRequest) running.add(id);
+    task.finally(() => {
+      inflight.delete(task);
+      if (isRequest) { running.delete(id); cancelled.delete(id); }
+    });
   }
 
+  // stdin is closed; let calls already running reply before shutting down.
+  await Promise.allSettled([...inflight]);
   open = false;
 
   // Settle the mounts before reporting. A client that closes stdin without
@@ -1268,6 +1319,7 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
   // caught above, so this observes the outcome without a second rejection.
   await mountsReady.catch(() => {});
 
+  await Promise.allSettled([...retiring]);
   for (const mounted of packs.values()) await mounted.search.close();
 
   // Exit non-zero if any pack never mounted. Deferred to here so the

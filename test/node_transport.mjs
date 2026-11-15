@@ -345,7 +345,8 @@ console.log('range response bounds and retry delays');
             const delays = [];
             globalThis.setTimeout = (fn, ms) => { delays.push(ms); return originalTimer(fn, 0); };
             let reads = 0;
-            const source = httpRangeSource('https://range.test/retry', { fetch: async (_, init) => {
+            // idleTimeoutMs: 0 keeps the idle clock out of the recorded delays.
+            const source = httpRangeSource('https://range.test/retry', { idleTimeoutMs: 0, fetch: async (_, init) => {
                 if (init.method === 'HEAD') return new Response(null);
                 if (++reads <= 3) return new Response(null, { status: 503,
                     headers: header === null ? {} : { 'retry-after': header } });
@@ -358,6 +359,71 @@ console.log('range response bounds and retry delays');
     } finally {
         globalThis.setTimeout = originalTimer;
     }
+}
+
+console.log('stalled hosts');
+{
+    // A host that accepts a request and then sends nothing must fail the
+    // read, not leave it (and every query behind it) pending forever.
+    const site = http.createServer((req, res) => {
+        if (req.url.startsWith('/no-headers')) return;
+        if (req.url.startsWith('/body-stall')) {
+            res.writeHead(206, { 'content-range': 'bytes 0-99/100', 'content-length': '100' });
+            res.write(Buffer.alloc(10));
+            return;
+        }
+        if (req.url.startsWith('/slow')) {
+            res.writeHead(200);
+            let n = 0;
+            const tick = setInterval(() => { res.write('y'); if (++n === 4) { clearInterval(tick); res.end(); } }, 150);
+            return;
+        }
+        res.writeHead(404); res.end();
+    });
+    await new Promise((resolve) => site.listen(0, '127.0.0.1', resolve));
+    const at = `http://127.0.0.1:${site.address().port}`;
+    const timed = async (fn) => { const t0 = Date.now(); try { await fn(); return { ms: Date.now() - t0 }; } catch (err) { return { ms: Date.now() - t0, err }; } };
+
+    let r = await timed(() => nodeFetch(`${at}/no-headers`, { idleTimeoutMs: 300 }));
+    check('nodeFetch gives up on a host that never answers', r.err?.code === 'ETIMEDOUT' && r.ms < 3000, `${r.err?.message} after ${r.ms} ms`);
+    r = await timed(async () => (await nodeFetch(`${at}/body-stall`, { idleTimeoutMs: 300 })).arrayBuffer());
+    check('nodeFetch gives up on a body that stops arriving', /sent nothing/.test(r.err?.message) && r.ms < 3000, `${r.err?.message} after ${r.ms} ms`);
+    r = await timed(async () => (await nodeFetch(`${at}/slow`, { idleTimeoutMs: 300 })).text());
+    check('a body slower than the idle timeout overall, but moving, is read whole', !r.err && r.ms > 450, `${r.err?.message} after ${r.ms} ms`);
+    await rejects('nodeFetch refuses a negative idleTimeoutMs', () => nodeFetch(`${at}/slow`, { idleTimeoutMs: -1 }), /idleTimeoutMs/);
+
+    // The range source keeps its own clock, so a transport that ignores
+    // signals (or a browser fetch) cannot hang a query either.
+    let aborted = false;
+    const silent = httpRangeSource('https://range.test/silent', {
+        idleTimeoutMs: 300,
+        fetch: (_, init) => {
+            if (init.method === 'HEAD') return Promise.resolve(new Response(null, { headers: { 'content-length': '100' } }));
+            init.signal?.addEventListener('abort', () => { aborted = true; });
+            return new Promise(() => {});
+        },
+    });
+    await silent.init();
+    r = await timed(() => silent.read(0, 10));
+    check('a range read on a transport that never answers fails', r.err?.code === 'ETIMEDOUT' && r.ms < 3000, `${r.err?.message} after ${r.ms} ms`);
+    check('the stalled request is aborted through its signal', aborted);
+    check('the error names the range and the host', /bytes 0-9 from https:\/\/range\.test\/silent/.test(r.err?.message), r.err?.message);
+    const silentHead = httpRangeSource('https://range.test/silent-head', { idleTimeoutMs: 300, fetch: () => new Promise(() => {}) });
+    r = await timed(() => silentHead.init());
+    // Not a host without HEAD support (that falls back to plain reads): a
+    // host that never answers fails init, rather than every read after it.
+    check('a HEAD that never answers fails init()', r.err?.code === 'ETIMEDOUT' && r.ms < 3000, `${r.err?.message} after ${r.ms} ms`);
+
+    const stalled = httpRangeSource(`${at}/body-stall`, { idleTimeoutMs: 300, fetch: nodeFetch, cacheKeyParam: null });
+    r = await timed(() => stalled.read(0, 100));
+    check('a 206 that stops mid-body fails the read', /sent nothing/.test(r.err?.message) && r.ms < 3000, `${r.err?.message} after ${r.ms} ms`);
+    const neverAnswers = httpRangeSource(`${at}/no-headers`, { idleTimeoutMs: 300, fetch: nodeFetch, cacheKeyParam: null });
+    r = await timed(async () => { await neverAnswers.init(); await neverAnswers.read(0, 10); });
+    check('a real host that accepts and never answers fails within one timeout', /sent nothing/.test(r.err?.message) && r.ms < 1500, `${r.err?.message} after ${r.ms} ms`);
+    check('httpRangeSource refuses a negative idleTimeoutMs',
+        (() => { try { httpRangeSource('https://x.test/p', { idleTimeoutMs: -5 }); return false; } catch (err) { return /idleTimeoutMs/.test(err.message); } })());
+    site.closeAllConnections();
+    site.close();
 }
 
 console.log('supported Node versions');
