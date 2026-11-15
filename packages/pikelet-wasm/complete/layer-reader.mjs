@@ -75,10 +75,15 @@ async function walkToBase(head, options) {
     let expectIdentity = null;
     let childFetch = null;
     for (let hop = 0; hop <= maxDepth; hop++) {
-        const peek = await readMemberManifest(cursor, options);
-        if (expectIdentity !== null && peek.identity !== expectIdentity) {
-            throw new Error(`chain member at ${describeLocation(cursor)} has identity ${peek.identity.slice(0, 12)}… `
-                + `but its child named ${expectIdentity.slice(0, 12)}…: the located artifact is not the parent the chain commits to (3.2)`);
+        // Above the head, the header's identity is compared with the one the
+        // child named before the parent's manifest is fetched.
+        let peek;
+        try {
+            peek = await readMemberManifest(cursor, { ...options, expectedIdentity: expectIdentity ?? undefined });
+        } catch (err) {
+            if (err?.code !== 'IDENTITY_MISMATCH') throw err;
+            throw new Error(`chain member at ${describeLocation(cursor)} has identity ${err.identity.slice(0, 12)}… `
+                + `but its child named ${expectIdentity.slice(0, 12)}…: the located artifact is not the parent the chain commits to (3.2)`, { cause: err });
         }
         if (!peek.isLayer) return chain;          // reached the base
         if (!peek.parent) throw new Error('a layer manifest carries no layer.parent (3.2)');

@@ -2688,6 +2688,67 @@ console.log('locator following: a chain mounts from its head alone (5.1.1)');
     check('the decoy base really is a different artifact', other.identity !== base.identity);
     await rejectsAsync('a locator resolving to the wrong artifact is refused on identity',
         () => openChain([subHead]), /is not the parent the chain commits to/);
+    // The header's identity is compared before the parent's manifest is
+    // read: a decoy whose manifest bytes are garbage still fails on identity,
+    // not on the manifest hash.
+    {
+        const decoy = fs.readFileSync(other.at);
+        const mBytes = decoy.readUInt32LE(8);
+        decoy.fill(0x7b, 64, 64 + mBytes);
+        fs.writeFileSync(path.join(sub, 'base.pikelet'), decoy);
+        await rejectsAsync('a decoy parent is refused on its header identity, before its manifest is read',
+            () => openChain([subHead]), /is not the parent the chain commits to/);
+    }
+
+    // readMemberManifest holds the header to the full open's checks.
+    {
+        const { readMemberManifest: peek } = await import('../packages/pikelet-wasm/complete/index.mjs');
+        const good = fs.readFileSync(base.at);
+        const counted = (bytes) => {
+            const src = {
+                size: bytes.length, reads: [],
+                async read(offset, length) { src.reads.push([offset, length]); return bytes.subarray(offset, offset + length); },
+            };
+            return src;
+        };
+        const ok = counted(good);
+        check('readMemberManifest reads a valid member', (await peek(ok)).identity === base.identity);
+
+        const pinned = counted(good);
+        await rejectsAsync('readMemberManifest refuses an expectedIdentity mismatch',
+            () => peek(pinned, { expectedIdentity: other.identity }), /identity mismatch/);
+        check('a mismatched pin reads only the header', pinned.reads.length === 1 && pinned.reads[0][1] === 64,
+            JSON.stringify(pinned.reads));
+        await rejectsAsync('readMemberManifest refuses a malformed expectedIdentity',
+            () => peek(counted(good), { expectedIdentity: 'abc' }), /must be a sha256 hex string/);
+
+        const huge = Buffer.from(good);
+        huge.writeUInt32LE(0xffffffff, 8);
+        const hugeSrc = counted(huge);
+        await rejectsAsync('a manifest length over 16 MiB is refused as implausible',
+            () => peek(hugeSrc), /header is implausible/);
+        check('the implausible header is refused before any manifest read', hugeSrc.reads.length === 1);
+
+        const past = Buffer.from(good);
+        past.writeUInt32LE(good.length, 8);
+        await rejectsAsync('a manifest running past the file is refused as implausible',
+            () => peek(counted(past)), /header is implausible/);
+
+        await rejectsAsync('a source whose size disagrees with the header is refused',
+            () => peek(counted(Buffer.concat([good, Buffer.alloc(16)]))), /truncated or padded/);
+
+        // A manifest that hashes to the header's identity but is not JSON.
+        const junk = Buffer.from('{"profile": ');
+        const forged = Buffer.alloc(64 + junk.length + 48);
+        good.copy(forged, 0, 0, 64);
+        forged.writeUInt32LE(junk.length, 8);
+        forged.writeUInt32LE(1, 12);
+        forged.writeBigUInt64LE(BigInt(forged.length), 16);
+        crypto.createHash('sha256').update(junk).digest().copy(forged, 24);
+        junk.copy(forged, 64);
+        await rejectsAsync('a manifest that is not JSON is refused with a reader error',
+            () => peek(counted(forged)), /manifest is not valid JSON/);
+    }
 
     fs.rmSync(wt, { recursive: true, force: true });
     fs.rmSync(elsewhere, { recursive: true, force: true });

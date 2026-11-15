@@ -110,6 +110,17 @@ first.
   `lazyLexicalBytes` open option (default 8 MiB; `Infinity` reads every
   segment whole at open). A chain reports both per member and overall,
   and its `verifyLexical()` names the member that fails.
+- **Walking a chain to its base checks each parent's header first.**
+  `readMemberManifest`, which reads each hop's manifest when a chain is
+  mounted from its head, skipped the header checks the full open makes.
+  A manifest length up to the 256 MiB read budget was fetched and
+  hashed, a source whose size disagreed with its header was accepted,
+  and a manifest that was not JSON failed with a bare parser error. It
+  now applies the same 16 MiB cap, plausibility and size checks, and
+  reports a malformed manifest as one. It also takes `expectedIdentity`:
+  the walk passes the identity each child names for its parent, so a
+  located file that is not that parent is refused after its 64-byte
+  header, not after its manifest has been downloaded and hashed.
 - **A pack's name can no longer put text into MCP tool descriptions.** The
   name a pack is served under came from its manifest unchecked and was
   written into the `search` tool's description, which clients hand to the

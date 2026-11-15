@@ -339,10 +339,18 @@ export async function verifyHostEncoder(declaration, encodeQuery, dim) {
  * base, and paying for a full open per hop only to discard it is wasteful when
  * the walk may then reject the location.
  *
- * Returns { identity, manifest, isLayer, parent }. The identity check is the
- * same one openPikeletFile makes, so a tampered manifest fails here too.
+ * Returns { identity, manifest, isLayer, parent }. The header is held to the
+ * same plausibility checks, and the manifest to the same identity check, as
+ * openPikeletFile makes, so a tampered manifest fails here too. With
+ * options.expectedIdentity, a header naming another identity is refused
+ * before the manifest is read; the error carries code 'IDENTITY_MISMATCH'
+ * and the header's `identity`.
  */
 export async function readMemberManifest(input, options = {}) {
+    const expected = options.expectedIdentity;
+    if (expected !== undefined && (typeof expected !== 'string' || !/^[0-9a-f]{64}$/i.test(expected))) {
+        throw new Error('options.expectedIdentity must be a sha256 hex string');
+    }
     const source = typeof input === 'string' ? await fileSource(input) : input;
     const owned = typeof input === 'string';
     const maxReadBytes = resolveBudget(options.maxReadBytes, 'maxReadBytes', DEFAULT_OPEN_READ_BYTES);
@@ -351,14 +359,34 @@ export async function readMemberManifest(input, options = {}) {
         const hv = viewOf(header);
         if (hv.getUint32(0, true) !== MAGIC) throw new Error('not a .pikelet file (bad magic)');
         const manifestBytes = hv.getUint32(8, true);
-        const identity = [...new Uint8Array(header.buffer, header.byteOffset + 24, 32)]
-            .map((b) => b.toString(16).padStart(2, '0')).join('');
+        const segmentCount = hv.getUint32(12, true);
+        const identity = toHex(header.subarray(24, 56));
         const fileBytes = u64(hv, 16, 'header fileBytes');
+        if (manifestBytes < 2 || manifestBytes > MAX_MANIFEST_BYTES || segmentCount < 1 || segmentCount > MAX_SEGMENTS
+            || HEADER_BYTES + manifestBytes + segmentCount * TABLE_ENTRY_BYTES > fileBytes) {
+            throw new Error('.pikelet header is implausible');
+        }
+        if (Number.isSafeInteger(source.size) && source.size !== fileBytes) {
+            throw new Error(`.pikelet is truncated or padded: header says ${fileBytes} bytes, source has ${source.size}`);
+        }
+        // A pinned identity is refused one header read in: the wrong
+        // artifact's manifest is never fetched or hashed.
+        if (expected !== undefined && identity !== expected.toLowerCase()) {
+            throw Object.assign(
+                new Error(`.pikelet identity mismatch: expected ${expected.toLowerCase()}, found ${identity}`),
+                { code: 'IDENTITY_MISMATCH', identity });
+        }
         const manifestBuf = await readChecked(source, HEADER_BYTES, manifestBytes, 'manifest', maxReadBytes, fileBytes);
         if (await sha256hex(manifestBuf) !== identity) {
             throw new Error('.pikelet manifest failed identity verification');
         }
-        const manifest = JSON.parse(decoder.decode(manifestBuf));
+        let manifest;
+        try { manifest = JSON.parse(decoder.decode(manifestBuf)); } catch (err) {
+            throw new Error('.pikelet manifest is not valid JSON', { cause: err });
+        }
+        if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
+            throw new Error('.pikelet manifest is not a JSON object');
+        }
         const isLayer = manifest.profile === 'pikelet-layer-v1';
         return {
             identity,
@@ -434,7 +462,13 @@ export async function readChainMemberShell(input, options = {}) {
         if (await sha256hex(manifestBuf) !== identity) {
             throw new Error('.pikelet manifest failed identity verification');
         }
-        const manifest = JSON.parse(decoder.decode(manifestBuf));
+        let manifest;
+        try { manifest = JSON.parse(decoder.decode(manifestBuf)); } catch (err) {
+            throw new Error('.pikelet manifest is not valid JSON', { cause: err });
+        }
+        if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
+            throw new Error('.pikelet manifest is not a JSON object');
+        }
         if (manifest.profile !== 'pikelet-layer-v1' || formatVersion !== 2) {
             return { tombstoneOnly: false, tier: null, close };
         }
