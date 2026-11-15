@@ -32,6 +32,39 @@ first.
 - **A bare `pikelet` prints the commands instead of starting `create`.**
   The interactive scaffold is `pikelet create`; `pikelet` with flags but
   no command still scaffolds, as the old `npm create` flow did.
+- **A folder source may get new record ids and a new identity.** Files
+  are now ingested in a fixed order, sorted by their `/`-separated path
+  under the source root by UTF-16 code unit, instead of the
+  filesystem's readdir order. Rebuilding a folder on a filesystem whose
+  order differed (ext4's is hash order) assigns different ids even with
+  no content change, so identities, goldens and ids pinned from an
+  earlier build will not match. Layers appended to an existing pack are
+  unaffected.
+- **Malformed numeric flags are refused.** `compile --max-pages 12abc`
+  or `1.5` (and `--epochs`, `--sentence-windows`) used to truncate to 12
+  or 1; `append --max-depth abc` switched the depth limit off; `append
+  --max-pages 0` meant 500; a `--reader-drift-limit` outside 0..1 was
+  passed on. Each now fails with an error naming the flag and value.
+- **`pikelet mcp` runs no request sent without an id.** A frame like
+  `{"method":"tools/call"}` with no id used to run the tool unanswered,
+  including `write_note`. Only `notifications/` methods now run without
+  an id; a frame with an id and no method gets `invalid request`, and a
+  client's own response gets no answer.
+- **A remote read fails when the file's ETag changes.** A 206 whose ETag
+  differs (weakly compared) from the one pinned at HEAD or by an earlier
+  read, or a 200 without an ETag once one is pinned, throws
+  `ARTIFACT_CHANGED` instead of returning bytes that may mix two
+  versions of the file.
+- **Crawls with shared navigation reach `--max-pages`.** A link repeated
+  on every page took a budget slot from each page; a 60-page crawl of a
+  site with a 20-link nav stopped at 26 documents. The same command now
+  fetches up to the limit, so it can produce a larger pack.
+- **A chain query on a base that defers its encoder downloads it once.**
+  The first `query()` on such a chain now loads the query-interp
+  segment (about 25 MiB for MiniLM packs) to verify the calibration it
+  scores with, even when the caller supplies the vector.
+- **A `compact()` that cannot rebuild throws `INVALID_VECTOR`**, not
+  `INTERNAL_INVARIANT`, and leaves the index searchable (see Fixed).
 
 ### Changed
 
@@ -105,6 +138,42 @@ first.
   later `append` still refused without `--assert-ingest`. It now uses
   the chain's declaration, and refuses an `--assert-ingest` that differs
   from it, since a later layer may not change it.
+- **Packs are written atomically, and `--out` cannot name an input.** The
+  writer truncated the output before writing, so a crash or full disk
+  left a broken file where a valid pack had been. It now writes a temp
+  file, fsyncs it and renames it into place, which needs room for a
+  second copy until the rename. `append`, `compact` and `rebase` refuse
+  an `--out` that resolves to one of their own input packs, even with
+  `--force`; before, it truncated the input while the chain was still
+  reading it.
+- **A deferred base's calibration is verified before a chain query uses
+  it.** A chain query never embeds, so on a base whose encoder was
+  deferred it scored `matchQuality`, the union bloom and the drift
+  envelope from calibration bytes not yet checked against the pack's
+  identity. An altered calibration region answered normally; it now
+  fails hash verification.
+- **Remote reads are bounded and share one fallback download.**
+  `httpRangeSource` streams a 206 and cancels it at the first byte past
+  its `Content-Range`, instead of buffering whatever the host sent.
+  When a host ignores Range, the reads in flight share one full download
+  instead of each starting its own (up to 32 at once). A 429 or 503
+  without `Retry-After` now backs off (250 ms doubling) instead of
+  retrying three times at once. Responses the reader does not consume
+  are cancelled, so their connections are freed.
+- **`--supersede` paths resolve against the file that produced each
+  record.** With two `--source` roots holding the same relative path,
+  a target naming one file was refused as ambiguous. A target naming a
+  file under the working directory no longer lands on another root's
+  record with the same relative path when that file produced no record.
+- **A failed `compact()` keeps the index usable.** When the engine could
+  not rebuild the graph (a zero-norm row in an imported cosine
+  snapshot), the wrapper cleared every id mapping, so each later search
+  failed with "missing external ID mapping". The mappings are now kept.
+  The row still blocks compaction until it is deleted.
+- **Journal writes are durable.** `journal.json` is fsynced before its
+  rename, and the journal directory after each rename, so a power loss
+  cannot leave an empty `journal.json` or one naming chain files that
+  compaction already removed. Each write waits for these flushes.
 
 ## pikelet-wasm 0.14.0 / pikelet 0.14.0 — 2026-11-04
 
