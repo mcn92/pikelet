@@ -1241,6 +1241,45 @@ console.log('\nD. lexical segment and hybrid retrieval');
         () => openPikeletFile(memorySource(tampered), { encodeQuery: hostEncode }),
         /lexical segment failed hash/);
 
+    // A lazily opened segment is unverified until verifyLexical() streams
+    // it whole; an eager one was verified at open.
+    {
+        const eager = await openPikeletFile(memorySource(H.bytes), { encodeQuery: hostEncode });
+        check('an eager lexical segment reports verified at open', eager.info().lexical.integrity === 'segment-sha256'
+            && eager.info().lexical.verified === true);
+        check('verifyLexical on an eager segment resolves true', await eager.verifyLexical() === true);
+        await eager.close();
+
+        const lazy = await openPikeletFile(memorySource(H.bytes), { encodeQuery: hostEncode, lazyLexicalBytes: 1 });
+        check('lazyLexicalBytes opens a small segment lazily, unverified',
+            lazy.info().lexical.lazy === true && lazy.info().lexical.integrity === 'unverified-lazy-reads'
+            && lazy.info().lexical.verified === false);
+        check('verifyLexical streams a lazy segment and resolves true', await lazy.verifyLexical({ chunkBytes: 4096 }) === true);
+        check('after verifyLexical the lazy segment reports verified', lazy.info().lexical.verified === true);
+        await lazy.close();
+
+        // The last byte lies in the postings, which a lazy open never reads.
+        const late = Buffer.from(H.bytes);
+        const lseg = layoutOf(late).segments.lexical;
+        late[lseg.offset + lseg.length - 1] ^= 0xff;
+        const lazyTampered = await openPikeletFile(memorySource(late), { encodeQuery: hostEncode, lazyLexicalBytes: 1 });
+        check('a lazy open does not notice a tampered postings byte', lazyTampered.info().lexical.verified === false);
+        await rejects('verifyLexical rejects a tampered lazy segment',
+            () => lazyTampered.verifyLexical({ chunkBytes: 4096 }), /lexical segment failed hash verification/);
+        check('a failed verifyLexical leaves the segment unverified', lazyTampered.info().lexical.verified === false);
+        await lazyTampered.close();
+
+        const none = await openPikeletFile(memorySource(A.bytes), { encodeQuery: hostEncode });
+        check('verifyLexical on a pack without a lexical segment resolves false', await none.verifyLexical() === false);
+        await none.close();
+
+        for (const bad of [0, -1, 'big', NaN]) {
+            await rejects(`lazyLexicalBytes ${String(bad)} is refused`,
+                () => openPikeletFile(memorySource(H.bytes), { encodeQuery: hostEncode, lazyLexicalBytes: bad }),
+                /lazyLexicalBytes must be a positive number or Infinity/);
+        }
+    }
+
     // The lazy opener (wiki-scale path: interpolation search over remote
     // ranges) must score identically to the eager reader on the same
     // segment bytes.

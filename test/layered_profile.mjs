@@ -1828,7 +1828,37 @@ console.log('chain calibration: inherited and drift-exceeded with a real fit');
     const lexKept = craftLayer(lexBase, 'lexkept', { bloom: null, lexical: true });
     const cLex = await openPikeletChain([lexBase.outPath, lexKept.outPath]);
     check('a layer carrying lexical over a hybrid base mounts', cLex.info().layers === 2);
+    check('a chain of eager lexical segments reports them verified per member and overall',
+        cLex.info().members.every((m) => m.lexicalIntegrity === 'segment-sha256' && m.lexicalVerified === true)
+        && cLex.info().lexicalIntegrity === 'segment-sha256' && cLex.info().lexicalVerified === true);
     await cLex.close();
+    // Lazily opened members are unverified until the chain's verifyLexical()
+    // streams each one; a tampered member is named by depth.
+    {
+        const lazyChain = await openPikeletChain([lexBase.outPath, lexKept.outPath], { lazyLexicalBytes: 1 });
+        const before = lazyChain.info();
+        check('lazily opened chain members report their lexical segments unverified',
+            before.lexicalIntegrity === 'unverified-lazy-reads' && before.lexicalVerified === false
+            && before.members.every((m) => m.lexicalVerified === false));
+        check('chain verifyLexical resolves true', await lazyChain.verifyLexical() === true);
+        check('after verifyLexical every member reports verified',
+            lazyChain.info().lexicalVerified === true && lazyChain.info().members.every((m) => m.lexicalVerified === true));
+        await lazyChain.close();
+
+        const { openPikeletFile: openOne } = await import('../packages/pikelet-wasm/complete/index.mjs');
+        const probe = await openOne(lexBase.outPath, { encodeQuery: () => new Float32Array(CDIM), allowUnverifiedEncoder: true });
+        const lexSeg = probe.info().layout.find((s) => s.kind === 'lexical');
+        await probe.close();
+        const bad = fs.readFileSync(lexBase.outPath);
+        bad[lexSeg.offset + lexSeg.length - 1] ^= 0xff;
+        const badPath = path.join(calTmp, 'base-lex-tampered.pikelet');
+        fs.writeFileSync(badPath, bad);
+        const badChain = await openPikeletChain([badPath, lexKept.outPath], { lazyLexicalBytes: 1 });
+        await rejectsAsync('chain verifyLexical names the member whose segment fails its digest',
+            () => badChain.verifyLexical(), /chain member at depth 0: lexical segment failed hash verification/);
+        check('a failed chain verifyLexical leaves the chain unverified', badChain.info().lexicalVerified === false);
+        await badChain.close();
+    }
     const lexDropped = craftLayer(lexBase, 'lexdropped', { bloom: null, lexical: false });
     await rejectsAsync('a layer that drops lexical retrieval from a hybrid base is refused',
         () => openPikeletChain([lexBase.outPath, lexDropped.outPath]), /must not drop lexical retrieval/);

@@ -198,8 +198,12 @@ function toolDefinitions(packs, { mounting = false, journalPending = false } = {
         + 'verdicts: cvAuc, how well the relevance score separates on-topic from off-topic '
         + 'queries, and cvAucHard, how well it separates answerable from in-domain-unanswerable '
         + 'ones (expected lower, since matchQuality measures relevance). This is '
-        + 'self-verification: it proves the artifact is intact and behaves as it did when '
-        + 'built — not that its content is true or its publisher trustworthy. On a pack updated '
+        + 'self-verification: it shows the artifact behaves as it did when built, and reports '
+        + 'which of its bytes have been checked against the pack\'s identity — not that its '
+        + 'content is true or its publisher trustworthy. A large lexical (keyword) index is read '
+        + 'in pieces that are not checked one by one: lexicalVerified is false until a full pass '
+        + 'has checked the whole segment, which full: true runs (it downloads the segment, tens '
+        + 'of MiB on a large remote pack). On a pack updated '
         + 'with layers (a chain), the tests and calibration figures are the base pack\'s, run '
         + 'against the whole chain, and the result says so.',
       inputSchema: {
@@ -207,6 +211,7 @@ function toolDefinitions(packs, { mounting = false, journalPending = false } = {
         properties: {
           pack: { type: 'string', description: 'Pack to verify (optional when only one pack besides the journal is mounted).' },
           limit: { type: 'number', description: 'Max tests to run per category (default 24).' },
+          full: { type: 'boolean', description: 'Also check every lexical segment whole against its digest before the tests (default false).' },
         },
       },
     },
@@ -389,7 +394,15 @@ export async function callVerifyPack(packs, args) {
     }
     limit = args.limit;
   }
+  if (args?.full !== undefined && typeof args.full !== 'boolean') {
+    throw new Error('verify_pack: full must be a boolean');
+  }
   const mounted = packs.get(names[0]);
+  // A failed full pass rejects, so it surfaces as a tool error rather than
+  // a verdict.
+  if (args?.full === true && typeof mounted.search.verifyLexical === 'function') {
+    await mounted.search.verifyLexical();
+  }
   // evaluation() returns null when the pack carries no evaluation segment
   // and throws when the segment is present but fails its hash or does not
   // parse. The second case is an integrity failure and must surface as a
@@ -442,6 +455,11 @@ export async function callVerifyPack(packs, args) {
     encoderVerified: info.encoderVerified,
     corpusIntegrity: info.corpusIntegrity,
     indexRowIntegrity: info.indexRowIntegrity,
+    // null when the pack has no lexical segment. 'unverified-lazy-reads'
+    // with lexicalVerified false means BM25 has been reading bytes no
+    // digest has checked; full: true runs that check.
+    lexicalIntegrity: mounted.chain ? (info.lexicalIntegrity ?? null) : (info.lexical?.integrity ?? null),
+    lexicalVerified: mounted.chain ? (info.lexicalVerified ?? null) : (info.lexical ? info.lexical.verified === true : null),
     ...(mounted.chain ? {
       chain: {
         members: info.members,
@@ -620,6 +638,7 @@ async function mountChain(packs, spec, { httpRangeSource, log, head = null, blob
     // base's, tagged evaluationScope 'base', and verify_pack labels the scope
     // and skips goldens whose record a layer has since removed.
     evaluation: () => chain.evaluation(),
+    verifyLexical: () => chain.verifyLexical(),
     close: () => chain.close(),
   };
 
@@ -658,6 +677,7 @@ async function mountJournal(packs, dir, { log, name = null }) {
     },
     record: (id) => chain.record(id),
     evaluation: () => chain.evaluation(),
+    verifyLexical: () => chain.verifyLexical(),
     close: () => chain.close(),
     chain,
   };

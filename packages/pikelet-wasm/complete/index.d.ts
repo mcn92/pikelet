@@ -238,6 +238,8 @@ export interface CompleteSearch {
         docCount: number;
         /** 'segment-sha256' when read eagerly and verified whole; 'unverified-lazy-reads' for lazily opened segments. */
         integrity: 'segment-sha256' | 'unverified-lazy-reads';
+        /** True once the whole segment matched its digest: at open when eager, after verifyLexical() when lazy. */
+        verified: boolean;
         lazy?: true;
     } | null;
     /**
@@ -261,6 +263,12 @@ export interface CompleteSearch {
    * on match; throws on mismatch.
    */
   verifyVectors(options?: { chunkBytes?: number }): Promise<true>;
+  /**
+   * Stream a lazily opened lexical segment against its identity-anchored
+   * digest (an eager one was verified at open). Resolves false when the
+   * pack has no lexical segment; rejects if the bytes do not match.
+   */
+  verifyLexical(options?: { chunkBytes?: number }): Promise<boolean>;
   query(text: string, options?: {
     k?: number;
     /**
@@ -359,6 +367,14 @@ export declare function openPikeletFile(
     maxReadBytes?: number;
     /** Budget for a single corpus record read. Default 16 MiB. */
     maxRecordBytes?: number;
+    /**
+     * Lexical segments larger than this open lazily: term table and
+     * postings are read on demand and not verified per read until
+     * verifyLexical() runs. Smaller ones are read and verified whole at
+     * open. Default 8 MiB; Infinity reads every segment whole (up to
+     * maxReadBytes).
+     */
+    lazyLexicalBytes?: number;
     /** Override the kind-3 wasm kernel loader. */
     createEncoder?: () => Promise<unknown> | unknown;
     /**

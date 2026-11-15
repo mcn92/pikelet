@@ -128,7 +128,15 @@ function memberIntegritySummary(opened) {
         const values = [...new Set(infos.map((i) => i[key]))];
         return values.length === 1 ? values[0] : 'mixed';
     };
-    return { corpusIntegrity: one('corpusIntegrity'), indexRowIntegrity: one('indexRowIntegrity') };
+    const lexical = infos.filter((i) => i.lexical);
+    const lexicalValues = [...new Set(lexical.map((i) => i.lexical.integrity))];
+    return {
+        corpusIntegrity: one('corpusIntegrity'),
+        indexRowIntegrity: one('indexRowIntegrity'),
+        // null when no member carries a lexical segment.
+        lexicalIntegrity: lexical.length ? (lexicalValues.length === 1 ? lexicalValues[0] : 'mixed') : null,
+        lexicalVerified: lexical.length ? lexical.every((i) => i.lexical.verified === true) : null,
+    };
 }
 
 const isHttpUrl = (loc) => /^https?:\/\//i.test(loc);
@@ -390,8 +398,10 @@ export async function openPikeletChain(members, options = {}) {
                         const ri = typeof opened[i]?.info === 'function' ? opened[i].info() : null;
                         return {
                             depth: m.depth, identity: m.identity, records: m.records,
-                            ...(ri ? { corpusIntegrity: ri.corpusIntegrity, indexRowIntegrity: ri.indexRowIntegrity }
-                                : { tombstoneOnly: true }),
+                            ...(ri ? {
+                                corpusIntegrity: ri.corpusIntegrity, indexRowIntegrity: ri.indexRowIntegrity,
+                                ...(ri.lexical ? { lexicalIntegrity: ri.lexical.integrity, lexicalVerified: ri.lexical.verified === true } : {}),
+                            } : { tombstoneOnly: true }),
                         };
                     }),
                     // The chain encodes with the base's encoder (4.5), so the
@@ -620,6 +630,25 @@ export async function openPikeletChain(members, options = {}) {
              * or supersede the record it expects, so `evaluationScope` says
              * the material is the base's and not the chain's.
              */
+            /**
+             * verifyLexical() on every member that carries a lexical segment,
+             * base first. Resolves false when none does; rejects naming the
+             * first member whose segment fails its digest.
+             */
+            async verifyLexical(verifyOptions = {}) {
+                assertOpen();
+                let any = false;
+                for (let i = 0; i < opened.length; i++) {
+                    if (typeof opened[i]?.verifyLexical !== 'function') continue;
+                    try {
+                        any = (await opened[i].verifyLexical(verifyOptions)) || any;
+                    } catch (err) {
+                        throw new Error(`chain member at depth ${chainMembers[i].depth}: ${err?.message ?? err}`, { cause: err });
+                    }
+                }
+                return any;
+            },
+
             async evaluation() {
                 assertOpen();
                 if (typeof base.evaluation !== 'function') return null;

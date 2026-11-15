@@ -907,8 +907,9 @@ commitment of 4.5; the `ingest` equality of 4.1; and, per layer,
 everything the complete profile's verification does (manifest, header
 commitments, per-row and per-record digests on request, `verifyVectors`
 on demand). On a compacted base it MUST additionally validate the lineage
-segment per 6.3. The MCP `verify_pack` tool runs this pass and reports
-per layer.
+segment per 6.3. The MCP `verify_pack` tool reports, per layer, which of
+these checks have run; called with `full: true` it also streams every
+layer's lexical segment against its digest.
 
 ### 5.8 Caching
 

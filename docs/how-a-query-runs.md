@@ -80,7 +80,7 @@ That architecture is why a 648.5 MiB pack can answer a fresh query while fetchin
 
 A range-readable artifact cannot hash the entire file on every open without defeating the point of range reads, so integrity is layered: the resident structural portion is verified during open; lazily fetched index rows and corpus records carry independent commitments and are checked when read. Bytes a query never touches don't have to cross the network merely to prove the bytes it *did* use were correct.
 
-One exception: a lexical (BM25) segment above 8 MiB opens lazily and is covered only by the manifest's whole-segment digest, not per-read like index rows and corpus records — the same transitional stance format-1 sketch rows carry. A pack large enough for this to apply can have its lexical candidates altered between open and a full verification pass without failing a query.
+One exception: a lexical (BM25) segment above 8 MiB opens lazily and is covered only by the manifest's whole-segment digest, not per-read like index rows and corpus records — the same transitional stance format-1 sketch rows carry. A pack large enough for this to apply can serve altered lexical candidates without failing a query. Nothing checks the segment until `verifyLexical()` streams it whole against its digest; `info().lexical.verified` says whether that has happened, and `pikelet mcp`'s `verify_pack` reports it as `lexicalVerified` and runs the pass when called with `full: true`.
 
 The failure-mode suite (`benchmarks/range-proof/failure-modes.mjs`) exercises the important cases:
 

@@ -27,7 +27,7 @@ import { createAbstentionScorer } from './retrieval-abstention.mjs';
 import { openLexicalIndex, openLexicalIndexLazy } from './lexical.mjs';
 import { parseRowMapSegment } from './rowmap.mjs';
 import { PikeletSketchArtifact } from '../src/artifact/pikelet-artifact.js';
-import { blobCacheGet, blobCachePut } from '../src/artifact/pikelet-artifact-common.js';
+import { blobCacheGet, blobCachePut, verifySegmentSha256 } from '../src/artifact/pikelet-artifact-common.js';
 import { MAGIC, HEADER_BYTES, TABLE_ENTRY_BYTES, KINDS, KIND_NAMES } from './format.mjs';
 
 import {
@@ -96,7 +96,8 @@ const LAZY_QI_BYTES = 4 * 1024 * 1024;
 // index runs to tens of MiB): only the header and doclen array become
 // resident, term lookups interpolate into the remote table. Lazy reads are
 // committed via the manifest digest but not individually verified — the
-// transitional stance format-1 sketch rows carry.
+// transitional stance format-1 sketch rows carry — until verifyLexical()
+// streams the whole segment. options.lazyLexicalBytes overrides the size.
 const LAZY_LEXICAL_BYTES = 8 * 1024 * 1024;
 // The resident sketch scan is O(count * sketchDims) per query in pure JS —
 // ~500 ms at wiki scale (456k rows x 192 dims). At or above this many
@@ -486,6 +487,7 @@ export async function openPikeletFile(input, options = {}) {
     }
     const maxReadBytes = resolveBudget(options.maxReadBytes, 'maxReadBytes', DEFAULT_OPEN_READ_BYTES);
     const maxRecordBytes = resolveBudget(options.maxRecordBytes, 'maxRecordBytes', DEFAULT_RECORD_BYTES);
+    const lazyLexicalBytes = resolveBudget(options.lazyLexicalBytes, 'lazyLexicalBytes', LAZY_LEXICAL_BYTES);
     const verifyRecords = options.verifyRecords !== false;
     // Opt-in full authentication of the lazy rerank rows at open: one
     // streamed pass over the vectors segment against the (identity-anchored)
@@ -760,7 +762,7 @@ export async function openPikeletFile(input, options = {}) {
             // predate the kind skip it (spec 3.3).
             segments.has('lexical') ? (async () => {
                 const seg = segments.get('lexical');
-                if (seg.length > LAZY_LEXICAL_BYTES) {
+                if (seg.length > lazyLexicalBytes) {
                     // Confined to the segment's own window: lazy reads are
                     // not individually verified, so no field they carry may
                     // steer a read into another segment.
@@ -797,6 +799,9 @@ export async function openPikeletFile(input, options = {}) {
         if (lexicalIndex && lexicalIndex.docCount !== declaredRecords) {
             throw new Error(`.pikelet lexical segment covers ${lexicalIndex.docCount} records, corpus declares ${declaredRecords}`);
         }
+        // An eager segment was hashed whole above; a lazy one only once
+        // verifyLexical() has streamed it.
+        let lexicalVerified = Boolean(lexicalIndex && !lexicalIndex.lazy);
 
         // Query interpretation: version word, kind, two length-prefixed
         // regions that must tile the segment exactly.
@@ -1421,6 +1426,10 @@ export async function openPikeletFile(input, options = {}) {
                             // Lazy reads are bounded to the segment but not
                             // individually verified (LAZY_LEXICAL_BYTES).
                             integrity: lexicalIndex.lazy ? 'unverified-lazy-reads' : 'segment-sha256',
+                            // True once the whole segment matched its digest:
+                            // at open for an eager segment, after
+                            // verifyLexical() for a lazy one.
+                            verified: lexicalVerified,
                             ...(lexicalIndex.lazy ? { lazy: true } : {}),
                         }
                         : null,
@@ -1535,6 +1544,27 @@ export async function openPikeletFile(input, options = {}) {
             async verifyVectors(verifyOptions) {
                 assertOpen();
                 return sketch.verifyVectors(verifyOptions);
+            },
+
+            /**
+             * Full pass over a lazily opened lexical segment against its
+             * identity-anchored digest, streamed in bounded chunks where the
+             * runtime has an incremental hash. An eager segment was already
+             * verified whole at open. Resolves false when the pack carries no
+             * lexical segment.
+             */
+            async verifyLexical(verifyOptions = {}) {
+                assertOpen();
+                if (!lexicalIndex) return false;
+                if (!lexicalVerified) {
+                    const seg = segments.get('lexical');
+                    const expected = new Uint8Array(32);
+                    for (let b = 0; b < 32; b++) expected[b] = parseInt(seg.sha256.slice(2 * b, 2 * b + 2), 16);
+                    await verifySegmentSha256(source, seg.offset, seg.length, expected, 'lexical segment',
+                        { chunkBytes: verifyOptions.chunkBytes, oneShotLimit: maxReadBytes });
+                    lexicalVerified = true;
+                }
+                return true;
             },
 
             async evaluation() {

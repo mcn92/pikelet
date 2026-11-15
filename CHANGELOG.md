@@ -98,6 +98,18 @@ first.
     journal chain replaced by a write is closed only after calls already
     reading it finish. The per-session limit of 100 notes is now checked
     inside the write queue, so concurrent writes cannot overshoot it.
+- **`verify_pack` says whether a large pack's lexical index was checked,
+  and can check it.** A lexical segment over 8 MiB (the Wikipedia pack's
+  is 69 MiB) opens lazily, and its reads are not checked against the
+  pack's digest one by one. `verify_pack` left that out and described
+  itself as proving the artifact intact. It now reports `lexicalIntegrity`
+  and `lexicalVerified`, and with `full: true` streams every lexical
+  segment against its digest first (636 ms for the local Wikipedia pack;
+  a remote pack downloads the segment); a mismatch is a tool error. The
+  reader gains `verifyLexical()`, `info().lexical.verified`, and a
+  `lazyLexicalBytes` open option (default 8 MiB; `Infinity` reads every
+  segment whole at open). A chain reports both per member and overall,
+  and its `verifyLexical()` names the member that fails.
 - **A pack's name can no longer put text into MCP tool descriptions.** The
   name a pack is served under came from its manifest unchecked and was
   written into the `search` tool's description, which clients hand to the

@@ -493,5 +493,60 @@ console.log('pack names from manifests');
     check('a name over 64 characters is not used', mountName(none, { location: 'x.pikelet' }, { name: 'n'.repeat(65) }) === 'x');
 }
 
+console.log('verify_pack lexical integrity');
+{
+    // A pack whose lexical segment opened lazily: unverified until
+    // verifyLexical() runs, which `fail` makes reject as a tampered one would.
+    const lazyPack = ({ fail = false } = {}) => {
+        const pack = stubPack();
+        const info = pack.info;
+        let verified = false;
+        pack.calls = 0;
+        pack.info = () => ({ ...info(), lexical: { terms: 9, docCount: 2, integrity: 'unverified-lazy-reads', verified, lazy: true } });
+        pack.verifyLexical = async () => {
+            pack.calls++;
+            if (fail) throw new Error('lexical segment failed hash verification');
+            verified = true;
+            return true;
+        };
+        return pack;
+    };
+    const verify = async (send, waitFor, id, args) => {
+        send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'verify_pack', arguments: args } });
+        const r = (await waitFor(id)).result;
+        return r.isError ? { error: r.content[0].text } : JSON.parse(r.content[0].text);
+    };
+
+    await withServer(async ({ send, waitFor }) => {
+        const v = await verify(send, waitFor, 1, {});
+        check('a pack without a lexical segment reports lexicalIntegrity and lexicalVerified null',
+            v.lexicalIntegrity === null && v.lexicalVerified === null, JSON.stringify(v).slice(0, 160));
+        send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+        const tool = (await waitFor(2)).result.tools.find((t) => t.name === 'verify_pack');
+        check('verify_pack no longer claims to prove the artifact intact', !/proves the artifact is intact/.test(tool.description));
+        check('verify_pack offers a boolean full argument', tool.inputSchema.properties.full?.type === 'boolean');
+        const bad = await verify(send, waitFor, 3, { full: 'yes' });
+        check('a non-boolean full is refused', /full must be a boolean/.test(bad.error || ''), JSON.stringify(bad));
+    });
+
+    const pack = lazyPack();
+    await withServer(async ({ send, waitFor }) => {
+        const plain = await verify(send, waitFor, 1, {});
+        check('a lazy lexical segment is reported unverified, and not checked by default',
+            plain.lexicalIntegrity === 'unverified-lazy-reads' && plain.lexicalVerified === false && pack.calls === 0,
+            JSON.stringify({ i: plain.lexicalIntegrity, v: plain.lexicalVerified, calls: pack.calls }));
+        const full = await verify(send, waitFor, 2, { full: true });
+        check('full: true runs the whole-segment check and reports it verified',
+            full.lexicalVerified === true && pack.calls === 1 && full.verdict === 'no-tests',
+            JSON.stringify({ v: full.lexicalVerified, calls: pack.calls, verdict: full.verdict }));
+    }, { openPikeletFile: async () => pack });
+
+    await withServer(async ({ send, waitFor }) => {
+        const out = await verify(send, waitFor, 1, { full: true });
+        check('a segment that fails the full check is a tool error, not a verdict',
+            /lexical segment failed hash verification/.test(out.error || ''), JSON.stringify(out).slice(0, 160));
+    }, { openPikeletFile: async () => lazyPack({ fail: true }) });
+}
+
 console.log(`\nMCP protocol conformance: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
