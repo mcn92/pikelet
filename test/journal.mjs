@@ -400,6 +400,47 @@ console.log('journal: alongside a single corpus pack');
     await done;
 }
 
+console.log('journal: not held up by a stalled pack');
+{
+    // The journal is local: a pack on a stalled host must not keep the
+    // journal tools waiting past the grace period.
+    let fail;
+    const stalled = new Promise((_, reject) => { fail = reject; });
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const replies = [];
+    let buffer = '';
+    stdout.on('data', (d) => {
+        buffer += d;
+        let idx;
+        while ((idx = buffer.indexOf('\n')) >= 0) { replies.push(JSON.parse(buffer.slice(0, idx))); buffer = buffer.slice(idx + 1); }
+    });
+    const done = runMcpServer({
+        packPaths: ['stalled.pikelet'], journal: dir, httpRangeSource,
+        openPikeletFile: async (target, ...rest) => (String(target).endsWith('stalled.pikelet') ? stalled : openPikeletFile(target, ...rest)),
+        serverVersion: '0.0.0-test', toolsListGraceMs: 50, stdin, stdout, log: quiet,
+    });
+    const waitFor = (id) => new Promise((resolve, reject) => {
+        const deadline = Date.now() + 60000;
+        const timer = setInterval(() => {
+            const hit = replies.find((r) => r.id === id);
+            if (hit) { clearInterval(timer); resolve(hit); }
+            else if (Date.now() > deadline) { clearInterval(timer); reject(new Error(`no reply for ${id}`)); }
+        }, 5);
+    });
+    stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'latest', arguments: { limit: 1 } } })}\n`);
+    const l = (await waitFor(1)).result;
+    check('latest answers while another pack is still mounting', l && !l.isError, l?.content?.[0]?.text?.slice(0, 160));
+    stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_packs', arguments: {} } })}\n`);
+    const lp = JSON.parse((await waitFor(2)).result.content[0].text);
+    check('list_packs serves the journal and names the pack still mounting',
+        lp.packs.length === 1 && lp.packs[0].journal === true && lp.mounting?.[0] === 'stalled.pikelet', JSON.stringify(lp.mounting));
+    fail(new Error('host stalled'));
+    stdin.end();
+    const exit = await done.then(() => null, (err) => err);
+    check('the stalled pack still fails the exit status', exit?.exitCode === 1);
+}
+
 console.log('journal: MCP tools');
 {
     const stdin = new PassThrough();

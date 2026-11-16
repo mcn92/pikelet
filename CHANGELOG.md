@@ -23,6 +23,15 @@ first.
   handled concurrently, so a quick call is answered while a slow one is
   still running, and replies can arrive in a different order from the
   requests. JSON-RPC allows this, and clients match replies by id.
+- **Packs that mount late may be named in arrival order.** `pikelet
+  mcp` now serves each pack as soon as it mounts. Packs that mount within
+  the 2 s grace period are still registered in the order given, so their
+  names and collision suffixes are unchanged. A pack that mounts later is
+  registered when it arrives: if it shares a manifest or file name with
+  another pack, whichever arrived first keeps the plain name (`docs`)
+  and the other gets the suffix (`docs-2`), which can differ between
+  runs. A shelf entry's `name` stays reserved while its pack is mounting,
+  so shelf-named packs keep their names.
 - **A pack whose manifest name is not a plain identifier gets another
   name.** `pikelet mcp` serves a pack under a name made of letters,
   digits, `.`, `_` and `-` (at most 64 characters), the rule journal names
@@ -98,6 +107,18 @@ first.
     journal chain replaced by a write is closed only after calls already
     reading it finish. The per-session limit of 100 notes is now checked
     inside the write queue, so concurrent writes cannot overshoot it.
+- **A slow pack no longer holds up the packs that mounted.** `pikelet
+  mcp` answered no tool call until every mount had settled, so one URL
+  pack on a stalled host held local packs, and the journal, for up to the
+  30 s idle timeout. Each pack is now served as soon as it mounts, and a
+  tool call waits at most the 2 s grace period before serving the packs
+  that are ready (longer only while none is). A search across all packs
+  names the ones still mounting under `mounting`, with a note that they
+  were not searched; `list_packs` lists them under `mounting` too. A call
+  that names a pack not yet served waits for the mounts to settle rather
+  than reporting it unknown, and so do `get_record` and `verify_pack`
+  without `pack` while another pack might still appear. Journal tools
+  wait for the journal alone.
 - **`verify_pack` says whether a large pack's lexical index was checked,
   and can check it.** A lexical segment over 8 MiB (the Wikipedia pack's
   is 69 MiB) opens lazily, and its reads are not checked against the

@@ -241,7 +241,12 @@ rather than mixing bytes from two artifacts); transient CDN pressure
 Each pack mounts on its own. One that cannot mount — an unreachable host, a
 refused pin, an unsupported pack — does not take the others down: they
 serve, `list_packs` reports the missing one under `unavailable` with the
-reason, and the server exits non-zero when it stops.
+reason, and the server exits non-zero when it stops. A slow one does not
+hold them up either: a tool call waits up to 2 s for every pack, then
+serves the packs that have mounted. A search across all packs lists the
+rest under `mounting`, and `list_packs` does the same until they are
+ready. A call that names a pack still mounting, and `get_record` or
+`verify_pack` without `pack` while one is, waits for the mounts to finish.
 
 Instead of running the server by hand, write your MCP client's config:
 

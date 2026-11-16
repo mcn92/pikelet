@@ -54,10 +54,11 @@ const META_SERVER_INFO = 'io.modelcontextprotocol/serverInfo';
 // because mounted packs are the user's own configuration. A provisional list
 // served while mounts are still in flight carries no hints.
 const CACHE_HINTS = { ttlMs: 3600000, cacheScope: 'private' };
-// How long tools/list waits for the mounts before answering provisionally.
-// Local packs mount well inside it and get the exact list; a URL mount can
-// take tens of seconds on a slow host, and a client that times out waiting
-// for tools/list starts the session with no tools at all.
+// How long tools/list waits for the mounts before answering provisionally,
+// and how long a tool call waits for every pack before serving the ones
+// that are ready. Local packs mount well inside it and get the exact list;
+// a URL mount can take tens of seconds on a slow host, and a client that
+// times out waiting for tools/list starts the session with no tools at all.
 const TOOLS_LIST_GRACE_MS = 2000;
 // Result text is chunk-sized by construction (compile targets ~256
 // tokens); k stays small so one tool result cannot flood a context window.
@@ -526,11 +527,13 @@ export async function callVerifyPack(packs, args) {
   };
 }
 
-function callListPacks(packs, mountFailures = []) {
+function callListPacks(packs, mountFailures = [], mounting = []) {
   return {
     // Packs the server was asked to mount but could not: named so a model
     // does not read a missing pack's silence as "the corpus lacks this".
     ...(mountFailures.length ? { unavailable: mountFailures.map((f) => ({ location: f.location, error: f.error })) } : {}),
+    // Packs still mounting (a slow or stalled host): served once they are ready.
+    ...(mounting.length ? { mounting } : {}),
     packs: [...packs.entries()].map(([name, mounted]) => {
       const info = mounted.search.info();
       // A chain's `records` is the cumulative row total across layers, which
@@ -850,10 +853,13 @@ export function mountName(packs, spec, info, { chain = false } = {}) {
   return uniqueName(packs, name);
 }
 
-function uniqueName(packs, name) {
-  if (!packs.has(name)) return name;
+// `reserved` holds names that are not served yet but are spoken for: the
+// shelf names of packs still mounting.
+function uniqueName(packs, name, reserved = null) {
+  const taken = (candidate) => packs.has(candidate) || (reserved !== null && reserved.has(candidate));
+  if (!taken(name)) return name;
   let n = 2;
-  while (packs.has(`${name}-${n}`)) n += 1;
+  while (taken(`${name}-${n}`)) n += 1;
   return `${name}-${n}`;
 }
 
@@ -1083,61 +1089,119 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
   }
   // Mounting runs CONCURRENTLY with the protocol loop: a URL mount fetches
   // the pack's resident prefix (seconds on large packs), and MCP clients give
-  // up on a slow `initialize`. Tool calls await `mountsReady` instead.
+  // up on a slow `initialize`.
   //
   // Each mount is isolated: one unreachable host, refused pin or unsupported
   // pack must not take down the others. Failures are recorded per location,
   // reported by list_packs, and make the process exit non-zero at the end.
+  //
+  // Each mount is registered (served) as soon as it is ready, so a stalled
+  // host delays only its own pack. Within the grace period packs register in
+  // the order given, a ready pack waiting for the ones listed before it, so
+  // names, collision suffixes and tools/list order stay stable whenever every
+  // mount finishes inside it (local packs always do). After it, a pack
+  // registers on arrival, and a pack still mounting keeps its shelf name
+  // reserved so a pack that arrives first cannot take it.
   const mountFailures = [];
-  const mountsReady = (async () => {
-    const attempt = async (location, fn) => {
-      try { await fn(); } catch (err) {
-        const message = err?.message || String(err);
-        mountFailures.push({ location, error: message });
-        log(`mount failed: ${location}: ${message}`);
-      }
-    };
-    // Concurrently, so one slow or stalled host does not hold up the rest;
-    // each mounts into its own map, and the results are registered in the
-    // order given, so names, suffixes and tools/list order stay stable.
-    const staged = await Promise.all(specs.map(async (spec) => {
-      const own = new Map();
-      await attempt(spec.location ?? spec.name ?? '(lineage)', () => mountPack(own, spec, { openPikeletFile, httpRangeSource, log, blobCache }));
-      return own;
-    }));
-    for (const own of staged) {
-      for (const [name, entry] of own) {
-        const final = uniqueName(packs, name);
-        if (final !== name) log(`serving ${name} as ${final}: an earlier pack already has that name`);
+  const slots = specs.map((spec) => ({
+    spec,
+    location: spec.location ?? spec.name ?? '(lineage)',
+    reserve: typeof spec.name === 'string' && PACK_NAME.test(spec.name) ? spec.name : null,
+    state: 'pending', // then 'ready', 'registered' or 'failed'
+    own: null,
+    journal: false,
+  }));
+  // The journal mounts alongside the packs and registers last, so its name
+  // does not depend on how fast it opened.
+  const journalSlot = journalDir
+    ? { spec: null, location: journalDir, reserve: null, state: 'pending', own: null, journal: true }
+    : null;
+  if (journalSlot) slots.push(journalSlot);
+  let graceOver = false;
+  let mountsSettled = false;
+  // Calls waiting for a pack to register or for the mounts to settle.
+  let waiters = [];
+  const changed = () => { const woken = waiters; waiters = []; for (const wake of woken) wake(); };
+  const nextChange = () => new Promise((resolve) => { waiters.push(resolve); });
+  const register = () => {
+    for (const slot of slots) {
+      if (slot.state === 'pending') { if (graceOver) continue; break; }
+      if (slot.state !== 'ready') continue;
+      slot.state = 'registered';
+      const reserved = new Set(slots.filter((s) => s.state === 'pending' && s.reserve).map((s) => s.reserve));
+      for (const [name, entry] of slot.own) {
+        const final = uniqueName(packs, name, reserved);
+        if (final !== name) log(`serving ${name} as ${final}: that name is already taken`);
         packs.set(final, entry);
+        if (slot.journal) journalName = final;
+        // Warm the pack in the background so the first tool call pays for
+        // retrieval, not for staging: the query forces the deferred encoder,
+        // kernel init, and (URL mounts) the first rerank round trips.
+        // Failures surface on real queries, not here, and an older pack that
+        // reports no sampleQueries (or whose info() throws) must not fail
+        // the mount.
+        try {
+          const probe = entry.search.info().sampleQueries?.[0] || 'what is this about';
+          entry.warmup = entry.search.query(probe, { k: 1 }).catch(() => {});
+        } catch { /* see above */ }
       }
     }
-    if (journalDir) await attempt(journalDir, async () => { journalName = await mountJournal(packs, journalDir, { log }); });
-    // Warm every pack in the background so the first tool call pays for
-    // retrieval, not for staging: the query forces the deferred encoder,
-    // kernel init, and (URL mounts) the first rerank round trips. Failures
-    // surface on real queries, not here.
-    for (const [, mounted] of packs) {
-      // Defensive: an older pack (or a reader that does not report them) may
-      // carry no sampleQueries at all, and warmup must not be the thing that
-      // fails a mount.
-      const probe = mounted.search.info().sampleQueries?.[0] || 'what is this about';
-      mounted.warmup = mounted.search.query(probe, { k: 1 }).catch(() => {});
+    changed();
+  };
+  const settledEach = slots.map(async (slot) => {
+    try {
+      const own = new Map();
+      if (slot.journal) await mountJournal(own, journalDir, { log });
+      else await mountPack(own, slot.spec, { openPikeletFile, httpRangeSource, log, blobCache });
+      slot.own = own;
+      slot.state = 'ready';
+    } catch (err) {
+      const message = err?.message || String(err);
+      mountFailures.push({ location: slot.location, error: message });
+      log(`mount failed: ${slot.location}: ${message}`);
+      slot.state = 'failed';
     }
-  })();
+    register();
+  });
+  const graceTimer = setTimeout(() => { graceOver = true; register(); }, toolsListGraceMs);
+  graceTimer.unref?.();
+  const mountsReady = Promise.all(settledEach).then(() => {
+    clearTimeout(graceTimer);
+    graceOver = true;
+    register();
+  });
   // Per-pack failures are caught above; this catches only a fault in the
-  // mount loop itself (e.g. the warmup's info() throwing), so it surfaces
-  // per call rather than as an unhandled rejection.
+  // registration itself, so it surfaces per call rather than as an
+  // unhandled rejection.
   mountsReady.catch((err) => {
     mountFailures.push({ location: null, error: err?.message || String(err) });
     log(`mount failed: ${err?.message || err}`);
   });
-  // A failed mount is reported per call only when nothing mounted at all;
+  const stillMounting = () => slots.filter((s) => s.state === 'pending').map((s) => s.location);
+  // A tool call waits for every mount for up to the grace period, then serves
+  // whatever has registered, and waits further only while nothing has. A
+  // failed mount is reported per call only when nothing mounted at all;
   // otherwise the survivors serve and list_packs names what is missing.
   const mountsUsable = async () => {
-    await mountsReady;
+    while (!mountsSettled && !(graceOver && packs.size > 0)) await nextChange();
     if (packs.size === 0 && mountFailures.length) {
       throw new Error(`no pack mounted: ${mountFailures.map((f) => (f.location ? `${f.location}: ${f.error}` : f.error)).join('; ')}`);
+    }
+  };
+  // A call that names a pack not yet served, or a single-pack tool called
+  // without `pack` while another pack may still appear, waits for the mounts
+  // to settle rather than answering "unknown pack" or picking the wrong one.
+  // A journal tool waits for the journal alone.
+  const packsFor = async (toolName, args) => {
+    if (mountsSettled) return;
+    const requested = args?.pack;
+    const single = toolName === 'get_record' || toolName === 'verify_pack';
+    if ((typeof requested === 'string' && !packs.has(requested))
+        || (requested === undefined && single && slots.some((s) => s.state === 'pending' && !s.journal))) {
+      await mountsReady.catch(() => {});
+      while (!mountsSettled) await nextChange();
+    } else if ((toolName === 'write_note' || toolName === 'latest') && journalSlot) {
+      while (journalSlot.state === 'pending') await nextChange();
     }
   };
 
@@ -1150,12 +1214,13 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
   // answers provisionally instead, and once the mounts settle the client is
   // told to fetch the list again, now naming the packs actually served. The
   // flag is set by a reaction on mountsReady itself, so it is already true
-  // by the time anything awaiting a promise derived from it resumes.
-  let mountsSettled = false;
+  // by the time anything awaiting a promise derived from it resumes; calls
+  // waiting in mountsUsable or packsFor are woken once it is.
   let provisionalListServed = false;
   let open = true;
   const onMountsSettled = () => {
     mountsSettled = true;
+    changed();
     if (provisionalListServed && open) send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
   };
   mountsReady.then(onMountsSettled, onMountsSettled);
@@ -1243,6 +1308,7 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
               + 'grounding.uncovered, the query words no passage contained: if what you were asked '
               + 'for is in that list, the passage does not establish it whatever matchQuality says. '
               + 'Chained questions return only their first hop — search again for the next. '
+              + 'A search that lists packs under mounting did not search them yet; search again shortly. '
               + '"unscored" means a pack has no fitted calibrator at all — no confidence signal, '
               + 'not just a low one; the response carries an unscoredWarning for these. '
               + 'verify_pack runs the tests a pack carries inside itself, including the '
@@ -1288,13 +1354,25 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
           // Every tool reads the packs map, so a call made while mounting is
           // still in flight waits for it rather than seeing an empty server. A
           // mount failure surfaces here, per call, instead of being swallowed.
-          await mountsUsable();
-          if (journalName) await serialize(session, () => refreshJournal(packs, journalName, log, session.retire));
           const toolName = params?.name;
           const args = params?.arguments ?? {};
+          await mountsUsable();
+          await packsFor(toolName, args);
+          if (journalName) await serialize(session, () => refreshJournal(packs, journalName, log, session.retire));
           let result;
-          if (toolName === 'search') result = await callSearch(packs, args);
-          else if (toolName === 'list_packs') result = callListPacks(packs, mountFailures);
+          if (toolName === 'search') {
+            // Searching every pack while some are still mounting: say which
+            // were left out, so their silence is not read as "not covered".
+            // Taken before the search, so a pack that registers during it is
+            // either searched or listed here, never neither.
+            const pending = args.pack === undefined ? stillMounting() : [];
+            result = await callSearch(packs, args);
+            if (pending.length) {
+              result.mounting = pending;
+              result.mountingNote = 'These packs had not finished mounting and were not searched. '
+                + 'Search again shortly, or call list_packs to see when they are ready.';
+            }
+          } else if (toolName === 'list_packs') result = callListPacks(packs, mountFailures, stillMounting());
           else if (toolName === 'get_record') result = await callGetRecord(packs, args);
           else if (toolName === 'verify_pack') result = await callVerifyPack(packs, args);
           else if (toolName === 'write_note' && journalName) result = await callWriteNote(packs, journalName, session, args, log, modern ? requestClient(params) : session.client);

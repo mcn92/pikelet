@@ -446,7 +446,8 @@ console.log('slow calls, cancellation and concurrent mounts');
         check('the uncancelled request behind it still answers', replies.some((r) => r.id === 11 && r.result));
     }, { openPikeletFile: async () => slowPack() });
 
-    // Mounts run concurrently but are registered in the order given.
+    // Mounts run concurrently but, within the grace period, are registered
+    // in the order given.
     const started = Date.now();
     await withServer(async ({ send, waitFor }) => {
         send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_packs', arguments: {} } });
@@ -461,6 +462,112 @@ console.log('slow calls, cancellation and concurrent mounts');
         openPikeletFile: async (target) => {
             await new Promise((resolve) => setTimeout(resolve, String(target).endsWith('slow.pikelet') ? 700 : 600));
             return stubPack();
+        },
+    });
+}
+
+console.log('progressive mounts');
+{
+    // A pack on a stalled host must not hold up the packs that mounted: past
+    // the grace period, calls serve what is ready and say what is not.
+    const named = (name, text) => {
+        const pack = stubPack();
+        const info = pack.info;
+        pack.info = () => ({ ...info(), name, identity: (name === 'local' ? 'b' : 'c').repeat(64) });
+        const query = pack.query;
+        pack.query = async (q, opts) => {
+            const out = await query(q, opts);
+            return { ...out, results: out.results.map((r) => ({ ...r, text })) };
+        };
+        return pack;
+    };
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    await withServer(async ({ send, waitFor, replies }) => {
+        const call = (id, name, args) => send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+        send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+        const provisional = (await waitFor(1)).result;
+        check('tools/list is provisional while a pack is stalled',
+            provisional.tools[0].inputSchema.properties.pack.description.includes('still mounting'));
+        call(2, 'search', { query: 'what is a stub' });
+        const s = JSON.parse((await waitFor(2)).result.content[0].text);
+        check('a search past the grace period serves the mounted pack',
+            s.packsSearched.join(',') === 'local' && s.sections[0].results[0].text === 'local text', JSON.stringify(s.packsSearched));
+        check('it names the pack it could not search yet',
+            s.mounting?.join(',') === 'stalled.pikelet' && /not searched/.test(s.mountingNote ?? ''), JSON.stringify(s.mounting));
+        call(3, 'search', { query: 'what is a stub', pack: 'local' });
+        const scoped = JSON.parse((await waitFor(3)).result.content[0].text);
+        check('a search scoped to a mounted pack does not report the others', scoped.mounting === undefined);
+        call(4, 'list_packs', {});
+        const lp = JSON.parse((await waitFor(4)).result.content[0].text);
+        check('list_packs names the pack still mounting',
+            lp.packs.map((p) => p.name).join(',') === 'local' && lp.mounting?.join(',') === 'stalled.pikelet', JSON.stringify(lp));
+        // These cannot be answered correctly until the stalled pack settles.
+        call(5, 'search', { query: 'what is a stub', pack: 'stalled' });
+        call(6, 'get_record', { id: 0 });
+        send({ jsonrpc: '2.0', id: 7, method: 'ping' });
+        await waitFor(7);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        check('a call naming a pack still mounting waits for it', !replies.some((r) => r.id === 5));
+        check('get_record without pack waits while another pack may appear', !replies.some((r) => r.id === 6));
+        check('no list_changed while a pack is still mounting',
+            !replies.some((r) => r.method === 'notifications/tools/list_changed'));
+        release();
+        const late = JSON.parse((await waitFor(5)).result.content[0].text);
+        check('the late pack serves once it mounts', late.sections[0].pack === 'stalled' && late.sections[0].results[0].text === 'stalled text');
+        const g = (await waitFor(6)).result;
+        check('get_record without pack then asks which pack', g.isError && /pack is required/.test(g.content[0].text), g.content[0].text);
+        check('list_changed follows once the late pack mounts',
+            replies.some((r) => r.method === 'notifications/tools/list_changed'));
+        call(8, 'list_packs', {});
+        const after = JSON.parse((await waitFor(8)).result.content[0].text);
+        check('a pack that mounts after the grace period registers on arrival',
+            after.packs.map((p) => p.name).join(',') === 'local,stalled' && after.mounting === undefined, JSON.stringify(after.packs.map((p) => p.name)));
+    }, {
+        packPaths: ['stalled.pikelet', 'local.pikelet'],
+        toolsListGraceMs: 50,
+        openPikeletFile: async (target) => {
+            if (String(target).endsWith('stalled.pikelet')) { await gate; return named('stalled', 'stalled text'); }
+            return named('local', 'local text');
+        },
+    });
+
+    // A ready pack never waits on a stalled one listed before it past the
+    // grace period, and a call made before it ends waits that long at most.
+    const started = Date.now();
+    await withServer(async ({ send, waitFor }) => {
+        send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query: 'what is a stub' } } });
+        const r = (await waitFor(1)).result;
+        const elapsed = Date.now() - started;
+        check('a call waits out the grace period, not the stalled host', !r.isError && elapsed >= 150 && elapsed < 2000, `${elapsed} ms`);
+    }, {
+        packPaths: ['stalled.pikelet', 'local.pikelet'],
+        toolsListGraceMs: 200,
+        openPikeletFile: async (target) => {
+            if (String(target).endsWith('stalled.pikelet')) await new Promise((resolve) => setTimeout(resolve, 3000));
+            return named(String(target).endsWith('stalled.pikelet') ? 'stalled' : 'local', 'x');
+        },
+    });
+
+    // A pack still mounting keeps its shelf name: one that arrives first with
+    // the same manifest name takes the suffix instead.
+    let releaseShelf;
+    const shelfGate = new Promise((resolve) => { releaseShelf = resolve; });
+    await withServer(async ({ send, waitFor }) => {
+        send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_packs', arguments: {} } });
+        const before = JSON.parse((await waitFor(1)).result.content[0].text);
+        check('a pack arriving first does not take a pending shelf name',
+            before.packs.map((p) => p.name).join(',') === 'docs-2', JSON.stringify(before.packs.map((p) => p.name)));
+        releaseShelf();
+        send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'search', arguments: { query: 'q', pack: 'docs' } } });
+        const s = JSON.parse((await waitFor(2)).result.content[0].text);
+        check('the shelf-named pack gets its name when it arrives', s.sections[0].pack === 'docs' && s.sections[0].results[0].text === 'shelf text');
+    }, {
+        packPaths: [{ location: 'a.pikelet', name: 'docs' }, 'b.pikelet'],
+        toolsListGraceMs: 50,
+        openPikeletFile: async (target) => {
+            if (String(target).endsWith('a.pikelet')) { await shelfGate; return named('local', 'shelf text'); }
+            return named('docs', 'other text');
         },
     });
 }

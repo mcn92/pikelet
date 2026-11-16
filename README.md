@@ -63,7 +63,7 @@ The complete artifact is never downloaded. The transcript and per-query table ar
 
 ## Packs for agents
 
-`pikelet mcp` serves one or more packs over the Model Context Protocol, with four tools: `search`, `get_record`, `list_packs`, and `verify_pack`, which replays the tests stored inside the pack. If one pack fails to mount (an unreachable host, a refused pin), the others still serve and `list_packs` names the missing one and why.
+`pikelet mcp` serves one or more packs over the Model Context Protocol, with four tools: `search`, `get_record`, `list_packs`, and `verify_pack`, which replays the tests stored inside the pack. If one pack fails to mount (an unreachable host, a refused pin), the others still serve and `list_packs` names the missing one and why; one on a slow host does not hold the others up past a 2 s grace.
 
 A pack mounted with a content hash — `https://example.com/docs.pikelet#<sha256>` — has a stable identity, so "what body of knowledge did this agent query?" has a reproducible answer. A citation is `(pack identity, record id)`, and it survives updates: a chain of layers resolves citations made against its earlier versions, and a compacted pack translates them forward or reports that the record was deleted. Citation translation is a library call today (`citation(identity, id)`); the MCP tools do not expose it yet.
 
