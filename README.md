@@ -100,7 +100,7 @@ A nearest neighbour is not automatically evidence that a corpus covers a questio
 
 Pikelet targets `build → publish → query many times → replace on release`, with small layered updates in between. Use it when you want search without operating search infrastructure, search inside a browser, edge worker, or offline tool, a corpus you can hand to someone else, or an agent working against a frozen, versioned body of knowledge.
 
-Use a database instead if your corpus has heavy online writes, needs transactional mutation, serves many tenants, or already lives comfortably in one. The remote scan is linear in row count, so the design targets corpora through the low millions of records, not web scale.
+Use a database instead if your corpus has heavy online writes, needs transactional mutation, serves many tenants, or already lives comfortably in one. The remote scan is linear in row count, so the design targets corpora through the low millions of records, not web scale. Text handling is English-first: keyword search keeps only ASCII letters and digits, so accented words are split into fragments and non-Latin words are dropped (see [Limitations](packages/pikelet/README.md#limitations)).
 
 It is also not new retrieval research. HNSW is HNSW, BM25 is BM25, HTTP Range is HTTP Range, and the bundled MiniLM-L6 encoder was chosen for being small enough to live inside the file — ArguAna shows a real quality cost from that. The project is about arranging those pieces around one constraint: **the knowledge base itself must be distributable as a file and stay useful without retrieval infrastructure.**
 

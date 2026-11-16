@@ -618,8 +618,26 @@ path). Both modes log a deprecation note for the `.pikelet-range` format.
 
 ## Limitations
 
-The bundled student encoder featurizes `[a-z0-9']` tokens only, and chunking
-counts whitespace-separated tokens. English and other Latin-script,
-whitespace-delimited content works; unsegmented scripts (CJK and similar) do
-not — the build fails with an explicit 0-chunks error, and queries with no
-recognized terms return a graceful no-match instead of results.
+Text handling is English-first. Content in other languages builds and
+serves, but three parts of the pipeline treat it worse:
+
+- **Keyword search and the coverage checks are ASCII-only.** The BM25 index,
+  and the word coverage behind `matchQuality` and `grounding.uncovered`, keep
+  only runs of `a`-`z`, `0`-`9` and `'`, at least two characters long. Any
+  other letter splits a word, and fragments shorter than two are dropped:
+  `café` becomes `caf`, `crème` becomes `cr` and `me`, `één` disappears, and
+  Greek, Cyrillic or CJK text yields nothing. An accented word still matches
+  the same spelling, but not its unaccented form (`cafe`), and its fragments
+  can match unrelated words. A word that disappears gets no keyword match,
+  and `grounding.uncovered` cannot list it, so it gives no warning that a
+  passage lacks it. On a pack compiled from a Dutch grammar, a keyword-only
+  search for `één` returns nothing, while `twee` finds its record.
+- **The default encoder was trained on English.** all-MiniLM-L6-v2's
+  WordPiece tokenizer strips accents and accepts any script, so the vectors
+  do see these words, but expect weaker retrieval outside English.
+- **Chunking counts whitespace-separated words** and drops documents under
+  25 of them. Unsegmented scripts (CJK and similar) have too few, so a build
+  from them fails with an explicit 0-chunks error.
+
+The legacy student encoder (`--mode student`) has the same ASCII-only
+featurization as keyword search.
