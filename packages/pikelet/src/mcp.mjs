@@ -11,9 +11,12 @@
 //   immutable manifest identity (sha256), and the chunk's title, heading
 //   path, anchor, and source — so an answer can cite the exact knowledge
 //   state it was derived from.
-// - Abstention is surfaced, not smoothed over: a pack that cannot answer
-//   says so per pack (matchQuality 'none' with zero results), which is
-//   exactly what a grounding layer must be able to tell a model.
+// - Abstention is surfaced, not smoothed over: each pack's section carries
+//   its own matchQuality, so a pack that does not cover the question says
+//   so ('none') even when another pack answers. Results under 'none' still
+//   ship unless showAbstained is false, since a passage can answer without
+//   sharing the question's wording; the verdict tells the model how far to
+//   trust them.
 // - Multi-pack search returns per-pack sections, never a cross-pack
 //   fusion: distances are only comparable within one pack's encoder and
 //   corpus, and keeping packs separate keeps provenance separable.
