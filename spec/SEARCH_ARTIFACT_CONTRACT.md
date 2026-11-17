@@ -3,14 +3,13 @@
 Copyright 2026 Matthew Noonan. This specification is part of the Pikelet
 project and is licensed under the Apache License 2.0 (see `LICENSE`).
 
-**Status:** Draft 1  
+**Status:** Not frozen  
 **Scope:** Behavioral contract for Pikelet Search Artifacts. This document is
 not a byte-layout specification.
 
-Draft 1 resolves three previously open decisions — the identity scheme, the
-tolerance regime, and graph traversal semantics — adds result hydration to the
-execution layer, and grounds conformance in the fixture assets that exist in
-this repository today.
+The contract settles the identity scheme, the tolerance regime, and graph
+traversal semantics, includes result hydration in the execution layer, and
+grounds conformance in the fixture assets that exist in this repository.
 
 ## 1. Thesis
 
@@ -469,7 +468,7 @@ evaluation, and calibration are all carried by or content-addressed from one
 artifact identity.
 
 This profile is implemented and shipping: byte layout and reader obligations
-are specified in `COMPLETE_PROFILE.md` (Draft 2), the reader and builder
+are specified in `COMPLETE_PROFILE.md`, the reader and builder
 ship in `pikelet-wasm/complete`, and `pikelet compile` emits
 it. It is the profile that turns Pikelet from a vector-search library into
 an artifact compiler and reader.
@@ -498,7 +497,7 @@ These decisions must be resolved before freezing a byte-layout specification:
 9. What numeric distance-error bounds apply per metric and quantization scheme
    for independent-reader conformance?
 
-Resolved in Draft 1: artifact identity is the hash of a canonical manifest
+Resolved: artifact identity is the hash of a canonical manifest
 with range-verifiable segment commitments (4.1); rank-exactness is scoped to a
 designated reference reader, with recall and distance bounds for all other
 readers (5.3); graph traversal semantics are part of each graph profile's

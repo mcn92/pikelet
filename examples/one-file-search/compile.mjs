@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Compile the five Search Artifact components into one .pikelet file per
-// spec/COMPLETE_PROFILE.md (Draft 1), and inspect/verify the result:
+// spec/COMPLETE_PROFILE.md, and inspect/verify the result:
 //
 //   node compile.mjs                 # compile the encoder-conformance assets -> pikelet-docs.pikelet
 //   node compile.mjs --inspect pikelet-docs.pikelet
@@ -79,7 +79,7 @@ async function compile(paths, outPath) {
         path.dirname(paths.manifestPath), '..', 'abstention-golden.json'), 'utf8'));
 
     // Corpus layout v2: per-record digests behind a page table, so each
-    // hydrated record verifies on its own range read (spec 3.5, Draft 2).
+    // hydrated record verifies on its own range read (spec 3.5).
     const corpusSegment = buildCorpusSegment(records);
     const segments = [
         { kind: 'index', bytes: Buffer.from(sketchBytes) },

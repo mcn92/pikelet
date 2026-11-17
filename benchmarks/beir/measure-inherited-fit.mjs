@@ -5,7 +5,7 @@
 // Under `inherited` (5.5) the base's retrieval-signals-v1 scorer runs
 // unchanged over the merged window of a whole chain. The gate is
 // calibrationDrift = (appended + tombstoned) / records_base against a
-// provisional, non-normative readerLimit of 0.20. The question the draft
+// provisional, non-normative readerLimit of 0.20. The question the profile
 // asks is not only "how big is the error at 0.20" but whether a
 // fraction-of-records gate is the right INPUT at all -- i.e. whether the
 // same drift fraction hurts equally when the change is random versus

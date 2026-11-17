@@ -3,10 +3,10 @@
 Copyright 2026 Matthew Noonan. This specification is part of the Pikelet
 project and is licensed under the Apache License 2.0 (see `LICENSE`).
 
-**Status:** Draft 2 (2026-08-21) — for review, not frozen. Draft 2 adds
-format version 2: per-record corpus integrity (section 3.5), the host-encoder
-verification obligation for kind 2 (section 3.6), the reader's bounded-read
-rules (section 4), and the CI conformance suite (section 5). Format-1 files
+**Status:** Not frozen. Format version 2 adds per-record corpus integrity
+(section 3.5), the host-encoder verification obligation for kind 2
+(section 3.6), the reader's bounded-read rules (section 4), and the CI
+conformance suite (section 5). Format-1 files
 remain readable; readers report which integrity stance a file carries.
 **Profile of:** the Search Artifact Contract (`SEARCH_ARTIFACT_CONTRACT.md`, section 9.4)
 **File extension:** `.pikelet`
@@ -530,7 +530,7 @@ artifacts that need every byte authenticated MUST run the full pass —
 `verifyIndexVectors: true` at open or `verifyVectors()` afterwards
 (`info().vectorsVerified` reports the state).
 
-Format-1 files keep Draft 1's stance — whole-segment digests only, lazy
+Format-1 files keep the original stance — whole-segment digests only, lazy
 record reads not independently verifiable — and readers MUST report which
 stance a file carries (`info().corpusIntegrity`) rather than presenting
 both as equivalent.
@@ -547,7 +547,7 @@ both as equivalent.
   remain valid standalone profiles; this container embeds the sketch
   profile and does not deprecate anything.
 
-## 8. Open questions for Draft 2
+## 8. Open questions
 
 1. ~~Corpus compression (per-record or segment-level) — record-granular
    range reads argue for per-record; measure before deciding.~~

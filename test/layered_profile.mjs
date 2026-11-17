@@ -2187,8 +2187,7 @@ console.log('rebase: THE DELTA CASE — a rebase replays what the layer did (6.2
     // branch B must NOT set bit 5 and must NOT carry A1's edge: bit 5 is in
     // A2's CUMULATIVE bitset only because it inherited it, and replaying the
     // cumulative set would import an ancestor's operation into a branch that
-    // never performed it. Draft 2 replayed the cumulative set; this is the
-    // correction.
+    // never performed it.
     const base = { identity: id64(1), records: 100 };
     const a1 = { identity: id64(2), records: 10 };
     const b1 = { identity: id64(3), records: 7 };
@@ -2447,8 +2446,8 @@ console.log('lineage-v1: round trip and the head table (6.3)');
         JSON.stringify(lin.supersessions) === JSON.stringify([[2, 10, 1]]));
     check('the segment tiles exactly',
         seg.length === LINEAGE_HEADER_BYTES + LINEAGE_HEAD_ENTRY_BYTES * 3 + bitsetBytesFor(18) + 12);
-    // Draft 2's segment named only the old head; the table is what makes a
-    // citation against an INTERMEDIATE head resolvable.
+    // The table is what makes a citation against an INTERMEDIATE head
+    // resolvable, not only one against the old head.
     check('the table is at most 17 x 48 bytes', MAX_HEADS === 17 && LINEAGE_HEAD_ENTRY_BYTES === 48);
 }
 

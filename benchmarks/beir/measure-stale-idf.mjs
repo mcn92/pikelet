@@ -3,9 +3,9 @@
 // ranking moves when N, avgdl and df still count deleted records.
 //
 // A layered chain cannot cheaply recompute lexical statistics over the live
-// set -- that needs every posting list at mount -- so the draft counts
+// set -- that needs every posting list at mount -- so the profile counts
 // tombstoned records in all three and gates the error on record-count drift
-// alone. The draft is explicit that this is a change-volume gate implying no
+// alone. The profile is explicit that this is a change-volume gate implying no
 // ranking bound, and open question 3 asks for the size of the effect, with
 // rare-term deletions specifically. This measures it.
 //
@@ -18,7 +18,7 @@
 // The delta is attributable to the statistics alone: same texts, same
 // tokenizer, same BM25 constants, same live document set.
 //
-// Deletion policies, because the draft's worry is concentration, not volume:
+// Deletion policies, because the profile's worry is concentration, not volume:
 //   random     -- uniform over the corpus, the optimistic case
 //   rare-term  -- every doc holding a term whose df is in [1, RARE_DF_MAX],
 //                 chosen to maximise df distortion at low drift

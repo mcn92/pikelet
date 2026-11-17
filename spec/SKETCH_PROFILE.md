@@ -3,7 +3,7 @@
 Copyright 2026 Matthew Noonan. This specification is part of the Pikelet
 project and is licensed under the Apache License 2.0 (see `LICENSE`).
 
-**Status:** Draft 1
+**Status:** Not frozen
 **Profile of:** the Search Artifact Contract (`SEARCH_ARTIFACT_CONTRACT.md`)
 **File extension:** `.pikelet-sketch`
 **Magic:** `PSA1` (`0x31415350`, little-endian u32)

@@ -134,7 +134,7 @@ The **range proof** uses a server that does not understand Pikelet and reports m
 
 ## Status
 
-Pikelet is early: the implementation is real, the format is not frozen (Draft 2), and there is one primary author. Prebuilt WASM, local and HTTP readers, the embedded encoder, BM25 hybrid retrieval, content identity with lazy-read verification, calibrated abstention, MCP mounting, layered updates, and the experimental journal all ship today. `npm test` runs the engine, artifact-profile, MCP, ingestion, and format-hardening conformance suites.
+Pikelet is early: the implementation is real, the format is not frozen, and there is one primary author. Prebuilt WASM, local and HTTP readers, the embedded encoder, BM25 hybrid retrieval, content identity with lazy-read verification, calibrated abstention, MCP mounting, layered updates, and the experimental journal all ship today. `npm test` runs the engine, artifact-profile, MCP, ingestion, and format-hardening conformance suites.
 
 Previously known as **Pancake** (renamed September 2026); files from before the rename remain readable — see [`docs/history.md`](docs/history.md). Pikelet is unrelated to the Pikelet programming language.
 

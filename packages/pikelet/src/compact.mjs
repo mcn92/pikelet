@@ -332,7 +332,7 @@ export async function rebaseLayer(flags) {
     // 6.2: "if that artifact is unavailable, the delta is unknowable and the
     // rebase MUST refuse." Say that, rather than leaking an ENOENT: the
     // operator needs to know WHY the file matters, since the obvious next move
-    // (rebase the cumulative bitset instead) is the thing Draft 2 got wrong.
+    // (rebase the cumulative bitset instead) would be wrong.
     throw new CliError(`cannot open the layer's original parent `
       + `${String(L.parent?.identity).slice(0, 12)}… (${err.message}). A rebase replays what the layer `
       + 'itself deleted, which is its cumulative mask MINUS its parent\'s; without the parent that '

@@ -3,11 +3,12 @@
 Copyright 2026 Matthew Noonan. This specification is part of the Pikelet
 project and is licensed under the Apache License 2.0 (see `LICENSE`).
 
-**Status:** Draft 4 (2026-09-26) — the last conceptual-review draft; not
-frozen. Implemented and shipping since pikelet-wasm 0.9.0 / pikelet 0.9.0
-(2026-09-29): `pikelet append`, `compact` and `rebase`, chain mounting in
-`pikelet mcp` and `openPikeletChain` in `pikelet-wasm`. Section 11 records
-where the implementation differs from this text.
+**Status:** Not frozen. Implemented and shipping since pikelet-wasm 0.9.0 /
+pikelet 0.9.0 (2026-09-29): `pikelet append`, `compact` and `rebase`, chain
+mounting in `pikelet mcp` and `openPikeletChain` in `pikelet-wasm`. Section
+11 records where the implementation differs from this text. Further
+changes are driven by `layered_profile.mjs`, the range-proof harness, R2
+and real queries.
 
 **Measurement pass, 2026-09-26.** Open questions 1, 2 and 3 have been run
 against the shipped code on BEIR corpora; 13's preamble states the method
@@ -15,65 +16,19 @@ and the scope limits, and the findings are recorded in 13.1-13.3 with the
 affected normative sections updated (4.5, 5.4, 5.5). In summary: the
 inherited fit does not degrade out to 40% drift, so 5.5's 0.20 limit is
 conservative; bloom pollution is real but never changed a verdict, and
-4.5's claim about *which direction* it pushes was backwards; stale lexical
+it pushes toward abstention, not away from it (4.5); stale lexical
 statistics cost under 0.005 nDCG@10, so 13.3's proposed per-layer `df`
 correction table is dropped. None of this is wiki-pack scale, and questions
 4-9 remain untouched, so the implementation gate of 13 had moved but not
 opened (the implementation went ahead after this pass; 4-9 are still
-open). Draft 4 revises Draft 3 (same day) after a
-fourth review that found no remaining architectural defect: the
-compaction conformance oracle no longer demands ranking invariance from
-an operation designed to change retrieval statistics, and instead asserts
-corpus preservation plus independently checked retrieval correctness
-(6.3, 10 E); redirect targets during parent resolution are confined to
-the child's canonical directory at every hop, and encoded separators are
-rejected (5.1.1); the chain's ingestion declaration is defined by
-inheritance, with only a depth-1 layer able to introduce an assertion
-(6.1); an absent producer envelope is `+∞` and a reader's limit MUST be
-finite (5.5); a layer that introduces neither a record nor a new
-tombstone is prohibited (6.1); `C` is defined as counting unmasked rows
-at query time, so `recommendedRerank` stays a property of the layer's
-sketch (4.6, 5.3); and lineage translation is named *forward*
-translation, distinct from historical state (6.3). A post-review pass
-the same day added the term **search tier** (3.1) so that masking,
-candidate generation and lexical statistics unambiguously include the
-base, which "for every layer" had literally excluded (5.1–5.4, 8); a
-terminal rule that an empty rebase emits no layer (6.2); an
-ingestion-declaration compatibility precondition for rebase (6.2); and
-the schema rule that `ingestAsserted` is a sibling of `layer.ingest`,
-never a member of it (4.1). Draft 5 should be
-driven by `layered_profile.mjs`, the range-proof harness, R2 and real
-queries rather than by another reading of this text. Draft 3 revised
-Draft 2 after a third review, and fixed two correctness defects: rebase now replays only the tombstones a
-layer itself introduced (its delta over `zeroExtend` of its parent's mask,
-3.4) and the supersession edges it physically recorded, never its
-inherited cumulative state (6.2); and tombstone masks are supplied to
-candidate generation in every layer so dead rows never occupy a candidate
-slot or rerank budget (5.3). It also repairs the provenance story: a bare
-id is an id in the mounted head, a citation is `(identity, id)`, and it
-resolves only along the mounted ancestry (5.6); the lineage segment now
-carries a table of every head in the compacted chain and per-edge depth,
-with normative validation, so a citation against any retired head of that
-chain translates (6.3). Further: the drift limit is
-`min(producerEnvelope, readerLimit)` so an artifact cannot loosen a host
-(5.5); "bounded by drift" is replaced everywhere by the truthful
-statement that drift is a change-volume gate implying no error bound
-(4.5, 5.4); `zeroExtend` is defined (3.4); rebase regenerates chain-level
-evaluation material (6.2); kind-1 bases are readable but not appendable,
-and appendability requires an ingestion declaration (6.1); locator checks
-run after canonicalization (5.1.1); the candidate budget counts every row
-fetched (5.9); and the chain-only 32-term truncation is withdrawn in
-favour of an explicit failure at the lexical ceiling (5.4, 5.9). Draft 2
-fixed rebase id translation, interval-based ownership, preflight budgets
-and translation-versus-dereference; Draft 1 fixed bloom semantics,
-calibration drift, the layer's own segment requirements, depth limits,
-supersession chaining, rebase conflicts, parent resolution, chain budgets
-and identity-versus-availability. Nothing in this document changes the
-bytes of any existing `.pikelet`; every released artifact is a valid
-**base** of a chain as it stands (whether it is *appendable* is 6.1's
-question).
+open).
+
+Nothing in this document changes the bytes of any existing `.pikelet`;
+every released artifact is a valid **base** of a chain as it stands
+(whether it is *appendable* is 6.1's question).
+
 **Profile of:** the Search Artifact Contract (`SEARCH_ARTIFACT_CONTRACT.md`)
-and the Complete Search Artifact Profile (`COMPLETE_PROFILE.md`, Draft 2),
+and the Complete Search Artifact Profile (`COMPLETE_PROFILE.md`),
 whose container and segment layouts this profile reuses without amending.
 **File extension:** `.pikelet` (a layer is a `.pikelet` file)
 **Magic:** `PSF1` (`0x31465350`), unchanged
@@ -542,10 +497,9 @@ scorer's known-token fraction over-reads for a query about deleted content;
 it never reads a live word as unknown, because a bloom can only gain bits.
 
 **Which way that over-read pushes depends on the sign of `known_frac`'s
-weight in the base's fit, and in the shipped model it is fail-safe.** Drafts
-1-4 asserted the over-read makes abstention *less* likely. Measured against
-the shipped `retrieval-signals-v1` stage-2 model that is backwards: the
-weight is negative (see 13.2 for the numbers), by design — a query whose
+weight in the base's fit, and in the shipped model it is fail-safe.** It
+does not make abstention *less* likely, as one might expect. In the shipped
+`retrieval-signals-v1` stage-2 model the weight is negative (see 13.2 for the numbers), by design — a query whose
 vocabulary the corpus knows well but whose answer retrieval cannot find is
 the profile of an in-domain unanswerable question, so high `known_frac`
 pushes *toward* abstention. Since pollution can only raise `known_frac`, it
@@ -580,8 +534,7 @@ on exactly the records the layer was published to add. A layer **with
 records** whose calibration region is `none` while the base carries a fit
 degrades the chain to `unscored` (5.5), so a producer SHOULD always ship
 the bloom on such a layer. A tombstone-only layer's `none` does not
-degrade the chain: it hides no vocabulary. (Drafts 1-4 applied the rule to
-every layer, so a single deletion unscored the whole chain.)
+degrade the chain: it hides no vocabulary.
 
 ### 4.6 Index, corpus and lexical segments
 
@@ -834,8 +787,7 @@ its claim of how much change its fit tolerates. `readerLimit` is the
 host's policy. The effective limit is the stricter of the two: **a host
 can always be stricter than the artifact, and an artifact can never make
 a host less strict.** Because `readerLimit` is finite, an artifact that
-declares nothing is still gated. (Draft 1 had the precedence the other
-way, letting a manifest loosen a host's policy.)
+declares nothing is still gated.
 
 The reference reader's `readerLimit` default is **0.20, non-normative**. It
 was chosen before any measurement existed, on the suspicion that content or
@@ -1077,8 +1029,7 @@ performed them — worse, it would import an ancestor's tombstone without
 that ancestor's supersession edge, half of one operation. To compute
 `ΔT_L` the rebase MUST open `L`'s original parent by
 `L.layer.parent.identity`; if that artifact is unavailable, the delta is
-unknowable and the rebase MUST refuse. Draft 2 replayed the cumulative
-set; this is the correction.
+unknowable and the rebase MUST refuse.
 
 **Two kinds of id.** `L` refers to ids of two kinds, and a rebase treats
 them oppositely. Ids `L` **owns** — `R_L`, and the `y` side of every edge
@@ -1240,10 +1191,10 @@ before and after as a behavioral comparison, never as an equality.
 ```
 
 The **head table** is what lets a citation against any head of the
-compacted chain — not only the last one — translate. Draft 2's segment
-named only the old head, so once layers were retired a citation made
-while `H3` or `H7` was the published head was unresolvable, and a chain
-compacted twice could not recognize the intermediate base. Because depth
+compacted chain — not only the last one — translate. Without it, once
+layers were retired a citation made while `H3` or `H7` was the published
+head would be unresolvable, and a chain compacted twice could not
+recognize the intermediate base. Because depth
 is at most 16, the table is at most 17 × 48 bytes; the previous compacted
 base is its depth-0 entry, so retaining intermediate compacted bases
 gives multi-hop translation with nothing further.
@@ -1732,12 +1683,12 @@ as "the feared effect did not appear at this scale", not as a bound.
    it is new segment machinery correcting an effect below noise. What is
    not covered: this is lexical-only ranking, not hybrid fusion, and the
    guard of the shipped fusion rule interacts with lexical rank.
-4. **Sketch geometry per layer.** Allowed as drafted; forbidding it would
+4. **Sketch geometry per layer.** Allowed as specified; forbidding it would
    simplify a future resident index over the union of sketch tiers.
 5. **The producer default of 8 and the budgets of 5.9.** Chosen for
    round-trip count and plausibility, not measured. The range-proof
    harness over R2 decides both.
-6. **A shared query-term limit.** Draft 3 keeps the single-file and chain
+6. **A shared query-term limit.** This profile keeps the single-file and chain
    paths identical and fails a chain query only at the lexical ceiling.
    If very long queries on deep chains turn out to matter, the
    alternative is one term limit for *both* paths, which is an amendment
@@ -1749,4 +1700,4 @@ as "the feared effect did not appear at this scale", not as a bound.
    the question "who moved the head?" has no answer inside the format.
 9. **Merged ranking across unrelated packs on a shelf.** This profile
    merges layers of one chain. The MCP server's per-pack sections for
-   unrelated packs are a separate question this draft does not touch.
+   unrelated packs are a separate question this profile does not address.

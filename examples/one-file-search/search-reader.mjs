@@ -10,7 +10,7 @@
 //
 // This file exists to answer the composition questions ahead of the complete
 // artifact profile (SEARCH_ARTIFACT_CONTRACT.md section 9.4) — its API is a
-// draft of the future one-file reader, not a published surface. The
+// prototype of the one-file reader, not a published surface. The
 // abstention helpers are extracted verbatim from the edge-worker example's
 // worker.js so the committed golden fixtures transfer as acceptance tests.
 
