@@ -182,8 +182,12 @@ The calibration (`retrieval-signals-v1`) is a small fitted model plus a
 base64 bloom filter of the corpus vocabulary. At query time it scores the
 search's distance signals and the query's word coverage into a
 `matchQuality` verdict: `strong`, `weak` or `none`, or `unscored` when a
-pack has no fitted calibration. It measures whether the corpus covers the
-question's topic, not whether a passage states the answer.
+pack has no fitted calibration. Packs compiled by the current release also
+carry a second, distance-only model (`gate`) that alone decides `none`, so
+a question worded differently from its passage is not hidden for that
+reason; word coverage then only separates `strong` from `weak`. Readers
+that predate the gate ignore it. The verdict measures whether the corpus
+covers the question's topic, not whether a passage states the answer.
 
 ### Evaluation segment (kind 4)
 

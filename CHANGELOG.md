@@ -12,6 +12,18 @@ first.
 
 ### Compatibility
 
+- **New packs hide fewer results under "none".** `compile` now fits a
+  second, distance-only model (`gate` in the calibration asset) that alone
+  decides `matchQuality: "none"`; the existing model, which weighs word
+  overlap heavily, now only separates `strong` from `weak`. A question
+  worded differently from its passage is no longer hidden because the
+  passage does not share its words. On held-out question sets the share
+  of answerable questions hidden fell from 18 of 60 to 1 of 60, with no
+  more off-topic questions accepted; `strong` verdicts are unchanged.
+  Packs compiled before this keep their old behaviour in every reader,
+  and readers that predate the gate ignore it. Recompiling changes a
+  pack's verdicts and its identity. A gate that is present but malformed
+  makes the pack `unscored`. Measurements are in `docs/calibration.md`.
 - **A pack records no build time unless `SOURCE_DATE_EPOCH` is set.**
   `compile` stamped the wall-clock time into the evaluation segment's
   `generatedAt`, so two builds of the same inputs had different

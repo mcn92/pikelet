@@ -133,6 +133,9 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
         humanCalibrationQueries: calibrationSummary.humanCalibrationQueries,
         realQueryAuc: calibrationSummary.realQueryAuc,
         realQueryAbstentionRate: calibrationSummary.realQueryAbstentionRate,
+        // The distance-only show/hide gate's threshold (capped and uncapped)
+        // and features; null when the pack shipped without one.
+        gate: calibrationSummary.gate ?? null,
         // Comparison-only: how a semantic (embedding) word-grounding signal
         // would separate positives from hard negatives versus the lexical
         // coverage1 feature that actually feeds the fit. Not used for

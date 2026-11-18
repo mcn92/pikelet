@@ -14,11 +14,36 @@
 // model instead of NaN. Word rules ship in the asset so builder and reader
 // cannot drift. There is no semantic (maxSim) grounding path; see
 // docs/calibration.md for why it was removed.
+//
+// asset.gate, when present, is a second, distance-only model that alone
+// decides 'abstain': results are hidden only when the retrieval itself is
+// far, never because the query's words are missing from the passages (a
+// paraphrase). The model above then only splits shown results into
+// 'answer' and 'weak'. A reader that predates the gate ignores it and
+// scores as before. See docs/calibration.md, "Two decisions".
 
 // Upper bound on asset.coverage.topK. calibrate.mjs ships 5; every passage
 // counted here is a record hydrated on every query, so a pack must not be
 // able to turn one query into a hydration of its whole rerank window.
 export const MAX_COVERAGE_TOP_K = 10;
+
+// The signals a gate may name: the retrieval-side ones score() computes.
+const GATE_SIGNALS = new Set(['d0', 'margin', 'mean10', 'known_frac']);
+
+// A gate that is present but malformed returns undefined, which the caller
+// turns into an unscored scorer: falling back to the coverage model would
+// silently restore the behaviour the gate exists to replace.
+function parseGate(gate) {
+    if (gate === undefined) return null;
+    if (!gate || typeof gate !== 'object') return undefined;
+    const { features, weights, bias, standardize, hard } = gate;
+    if (!Array.isArray(features) || features.length === 0 || !Array.isArray(weights) || weights.length !== features.length) return undefined;
+    if (!features.every((f) => GATE_SIGNALS.has(f)) || !weights.every(Number.isFinite) || !Number.isFinite(bias)) return undefined;
+    const mean = standardize?.mean, std = standardize?.std;
+    if (!features.every((f) => Number.isFinite(mean?.[f]) && Number.isFinite(std?.[f]) && std[f] > 0)) return undefined;
+    if (!Number.isFinite(hard) || hard < 0 || hard > 1) return undefined;
+    return { features, weights, bias, mean, std, hard };
+}
 
 export function createAbstentionScorer(asset, bloomBytes) {
     if (!asset || !Array.isArray(asset.weights) || !asset.thresholds) return null;
@@ -27,6 +52,8 @@ export function createAbstentionScorer(asset, bloomBytes) {
     // degrade to unscored instead (callers map a null scorer to it).
     const { hard, weak } = asset.thresholds;
     if (!Number.isFinite(hard) || !Number.isFinite(weak) || hard < 0 || hard > weak || weak > 1) return null;
+    const gate = parseGate(asset.gate);
+    if (gate === undefined) return null;
     const coverageCfg = asset.coverage && typeof asset.coverage.weight === 'number'
         && Number.isFinite(asset.coverage.mean) && Number.isFinite(asset.coverage.std)
         ? asset.coverage : null;
@@ -189,6 +216,14 @@ export function createAbstentionScorer(asset, bloomBytes) {
             // both thresholds and answers everything.
             if (!Number.isFinite(z)) return { p: null, verdict: 'unscored', signals };
             const p = 1 / (1 + Math.exp(-z));
+            if (gate) {
+                let zGate = gate.bias;
+                gate.features.forEach((f, j) => { zGate += ((signals[f] - gate.mean[f]) / gate.std[f]) * gate.weights[j]; });
+                if (!Number.isFinite(zGate)) return { p: null, verdict: 'unscored', signals };
+                const pGate = 1 / (1 + Math.exp(-zGate));
+                const verdict = pGate < gate.hard ? 'abstain' : p < asset.thresholds.weak ? 'weak' : 'answer';
+                return { p, pGate, verdict, signals, grounding };
+            }
             const verdict = p < asset.thresholds.hard ? 'abstain'
                 : p < asset.thresholds.weak ? 'weak' : 'answer';
             return { p, verdict, signals, grounding };

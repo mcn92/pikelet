@@ -19,6 +19,11 @@ visible changes are recorded in the [CHANGELOG](../CHANGELOG.md).
   gibberish. "none" means this pack does not cover the topic; "strong" means
   it does.
 - **Hard threshold:** the 95th percentile of off-topic probability.
+- **Show/hide gate** (`asset.gate`): a second model over `d0`, `margin` and
+  `mean10` only, fit on the same rows. In readers that know it, it alone
+  decides `none`; the model above only splits shown results into `strong`
+  and `weak`. Its threshold is the same off-topic percentile, capped at
+  0.15. See [Two decisions](#two-decisions-hiding-and-strength).
 - **Hard negatives** (ablation, entity-swap, held-out-document) are still
   generated, but only to report `cvAucHard`, i.e. how far "strong" can be
   read as "answered". They do not shape the fit, the thresholds, or the gates.
@@ -26,6 +31,53 @@ visible changes are recorded in the [CHANGELOG](../CHANGELOG.md).
   that the `d0` weight's sign makes sense, and, when the corpus ships
   human-written questions (`runtime.calibrationQueries`), a held-out
   real-query abstention check.
+
+## Two decisions: hiding and strength
+
+Until the gate, one model decided all three verdicts, and `coverage1`
+carried most of its weight (3.4 against −0.5 for `d0` on a 32-document
+pack). Positives are template questions built from the passage's own
+words, so coverage is near 1.0 for all of them (cause 1 of the v5 analysis
+below), and the fit leans on it. A real paraphrase shares few words with
+its passage, scores low coverage, and was hidden even with its passage at
+rank 1.
+
+**Measurement (2026-11-18).** Four question sets were written by
+separate authors who saw only the corpus: a fitting set and a held-out
+set for each of a 32-document policy corpus (from an external benchmark
+that reported eight hidden paraphrases) and `docs/*.md` (106 chunks).
+Each has plain and paraphrased answerable questions, right-topic
+missing-fact questions, near-domain questions no document covers, and
+unrelated ones. Compile's training rows were dumped, the fit was replayed
+offline (reproducing the shipped weights exactly), and variants were
+scored on those sets plus the three regression sets in `test/relevance/`
+(Pride and Prejudice, internal-docs, Veyra).
+
+- The single model hid 8 of the benchmark's 24 paraphrases, 15 and 17 of
+  30 answerable questions on the policy corpus's fitting and held-out
+  sets, all with the answer retrieved. No threshold fixed it: at its best
+  it hid 30 of 60 held-out answerable questions to accept as few
+  near-domain ones as the gate does.
+- A distance-only model alone stopped the hiding but called more
+  missing-fact questions `strong` on the regression sets (Veyra
+  unsupported 14 → 19 of 20), because coverage had been demoting them to
+  `weak`.
+- Splitting the decisions keeps every `strong` verdict the single model
+  gave and removes most of the hiding. With the gate's threshold capped
+  at 0.15, across all eight sets 1 of 405 answerable questions was hidden
+  (single model: 41) and 24 of 80 off-topic or near-domain questions were
+  accepted (26), mostly as `weak`. On the held-out sets alone: 1 of 60
+  hidden (18) and 11 of 32 accepted (11). Caps of 0.3 and 0.5 hid 4 and 7
+  of 60 while accepting 7 and 5 of 32; 0.15 was chosen because hiding an
+  answer is the costlier error (the library withholds results under
+  `none` by default).
+
+What the gate does not do: questions on a covered topic that ask for a
+fact no passage holds are still accepted (27 of 27 on the new sets), as
+the relevance target intends. Word coverage is not a usable support
+signal for them either: missing-fact questions reuse the topic's words
+and covered 0.43–0.68 of them, more than real paraphrases did
+(0.14–0.37).
 
 ## Why v6 changed the target to relevance
 

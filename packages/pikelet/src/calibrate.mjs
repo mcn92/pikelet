@@ -8,6 +8,9 @@ import path from 'node:path';
 // relevance: positives are retrieval-verified template queries about the
 // corpus, negatives are off-topic queries (a foreign bank plus gibberish).
 // The hard threshold sits at a high percentile of off-topic probability.
+// A second, distance-only model fit on the same rows (asset.gate) decides
+// "none" in readers that know it; this model then only separates strong
+// from weak, so word coverage can demote a result but not hide it.
 // Hard negatives (ablation, entity-swap, held-out-document) are generated
 // only to report cvAucHard; they do not shape the fit. Human-written
 // questions, when the corpus ships them, are held out as validation.
@@ -73,6 +76,15 @@ const MIN_PARAPHRASE_STRESS_SAMPLE = 8;
 // exist.
 const HARD_CEILING = 0.5;
 const MIN_WEAK_BAND = 0.08;
+// The show/hide gate (asset.gate): a distance-only model that alone decides
+// "none", so a paraphrase whose words the passage does not share is never
+// hidden for that reason (docs/calibration.md, "Two decisions"). Its hard
+// threshold is the off-topic percentile like the main model's, capped at
+// GATE_HARD_CAP: on four held-out and three regression question sets, 0.15
+// hid 1 of 405 answerable questions (the coverage model hid 41) while
+// accepting no more off-topic ones (24 of 80 against 26).
+const GATE_FEATS = ['d0', 'margin', 'mean10'];
+const GATE_HARD_CAP = 0.15;
 
 // Off-domain but real-English queries, spanning consumer, developer, finance,
 // and household domains. Same role as the wiki calibrator's foreign title
@@ -1041,12 +1053,34 @@ export async function calibrateRetrievalAbstention({ chunks, config, embedQuery,
   // caveat), so it is safe in the direction that matters.
   const weak = Math.min(0.95, Math.max(weakRaw, hard + MIN_WEAK_BAND));
 
+  // The show/hide gate, fit on the same rows and weights as the main model.
+  // Its d0 weight must be negative for the same reason the main model's
+  // must; when it is not, the pack ships without a gate and the main model
+  // decides "none" as before.
+  const gateModel = genericScorerFor(GATE_FEATS, fit, fitWeightOf);
+  let gate = null;
+  let gateHardRaw = null;
+  if (gateModel.w[GATE_FEATS.indexOf('d0')] <= 0) {
+    gateHardRaw = quantile(fitNegatives.map((r) => gateModel.prob(r)), OFFTOPIC_HARD_QUANTILE);
+    gate = {
+      features: GATE_FEATS,
+      standardize: { mean: gateModel.mean, std: gateModel.std },
+      weights: gateModel.w,
+      bias: gateModel.b,
+      hard: +Math.min(gateHardRaw, HARD_CEILING, GATE_HARD_CAP).toFixed(6),
+    };
+  } else {
+    log('Calibration: the distance-only gate has a non-negative d0 weight; shipping without a gate, so word coverage can still decide "none"');
+  }
+  // Whether a row's results would be hidden, under the rule the reader applies.
+  const hidden = (r) => (gate ? gateModel.prob(r) < gate.hard : r.p < hard);
+
   // Validate against something the generator did not make: held-out
   // human-written queries. There is no synthetic fallback; corpora without
   // runtime.calibrationQueries are validated by the cross-validated AUC gate
   // only.
   for (const r of humanRows) r.p = model.prob(r);
-  const realQueryAbstained = humanRows.filter((r) => r.p < hard).length;
+  const realQueryAbstained = humanRows.filter(hidden).length;
   const realQueryAuc = humanRows.length
     ? aucFor(humanRows, fitNegatives) : null;
   if (humanRows.length >= MIN_PARAPHRASE_STRESS_SAMPLE
@@ -1136,7 +1170,7 @@ export async function calibrateRetrievalAbstention({ chunks, config, embedQuery,
     foreignNegativeQueries: negatives.filter((r) => r.negativeKind === 'foreign-bank').length,
     foreignKeptEvalOnlyAsSemanticOverlap: droppedForeign,
     foreignDropD0Threshold: +positiveMedianD0.toFixed(6),
-    evalOnlyWouldAnswerAtHard: evalOnlyRows.filter((r) => r.p >= hard).length,
+    evalOnlyWouldAnswerAtHard: evalOnlyRows.filter((r) => !hidden(r)).length,
     syntheticGibberishQueries: negatives.filter((r) => r.negativeKind === 'synthetic-gibberish').length,
     // Hard negatives feed only the cvAucHard diagnostic.
     ablationNegativeQueries: negatives.filter((r) => r.negativeKind === 'ablation').length,
@@ -1163,6 +1197,9 @@ export async function calibrateRetrievalAbstention({ chunks, config, embedQuery,
     },
     hardThresholdOverlap: hardOverlap,
     hardThresholdClampedFrom: hardRaw > HARD_CEILING ? Number(hardRaw.toFixed(6)) : null,
+    // The show/hide gate (asset.gate): its threshold before the cap, and
+    // whether one shipped. null when the gate's fit was rejected.
+    gate: gate ? { hard: gate.hard, hardUncapped: +gateHardRaw.toFixed(6), features: GATE_FEATS } : null,
     vocab: { uniqueWords, keptWords, minCount },
     coverage: { topPassages: COVERAGE_TOP_PASSAGES, commonWords: commonWords.commonWords, commonDfCap: commonWords.dfCap },
     // Comparison only: maxSim1 is not in the fit and no reader reads this
@@ -1199,6 +1236,9 @@ export async function calibrateRetrievalAbstention({ chunks, config, embedQuery,
       },
     },
     thresholds: { hard: +hard.toFixed(6), weak: +weak.toFixed(6) },
+    // Decides "none" in readers that know it; thresholds.hard keeps doing so
+    // in readers that predate it.
+    ...(gate ? { gate } : {}),
     vocabBloom: { bits, hashes: ['fnv1a:0', 'fnv1a:0x9e3779b9'], minCount },
   };
   return {

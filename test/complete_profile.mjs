@@ -1891,6 +1891,47 @@ console.log('inline encoder: the declared weight format is one the kernel runs')
         check(`coverage.topK ${JSON.stringify(topK)} degrades to unscored`,
             createAbstentionScorer({ ...base, coverage: { ...coverage, topK } }, bloom) === null);
     }
+
+    // asset.gate: a distance-only model that alone decides "none". The main
+    // model here scores on known_frac only, so the two disagree on purpose.
+    const twoModel = {
+        features: ['known_frac'], weights: [4], bias: 0,
+        standardize: { mean: { known_frac: 0.5 }, std: { known_frac: 0.25 } },
+        thresholds: { hard: 0.2, weak: 0.6 },
+        vocabBloom: { bits: 64 },
+    };
+    const gate = { features: ['d0'], weights: [-4], bias: 0, standardize: { mean: { d0: 0.5 }, std: { d0: 0.1 } }, hard: 0.15 };
+    const near = [{ distance: 0.3 }, { distance: 0.6 }];
+    const far = [{ distance: 0.9 }, { distance: 0.95 }];
+    const gated = createAbstentionScorer({ ...twoModel, gate }, bloom);
+    const ungated = createAbstentionScorer(twoModel, bloom);
+    // An empty bloom makes every query word unknown: known_frac 0, so the
+    // main model alone would abstain.
+    const close = await gated.score('unfamiliar wording', near, []);
+    check('a near retrieval is shown even when the main model would hide it, as weak',
+        close.verdict === 'weak' && close.p < twoModel.thresholds.hard && close.pGate >= gate.hard, JSON.stringify(close));
+    check('without a gate the same retrieval is hidden, as before',
+        (await ungated.score('unfamiliar wording', near, [])).verdict === 'abstain');
+    const distant = await gated.score('unfamiliar wording', far, []);
+    check('a far retrieval is hidden by the gate', distant.verdict === 'abstain' && distant.pGate < gate.hard, JSON.stringify(distant));
+    const knownBloom = new Uint8Array(8).fill(0xff);
+    const strongNear = await createAbstentionScorer({ ...twoModel, gate }, knownBloom).score('familiar wording', near, []);
+    check('the main model still decides strong over weak', strongNear.verdict === 'answer', JSON.stringify(strongNear));
+    const strongFar = await createAbstentionScorer({ ...twoModel, gate }, knownBloom).score('familiar wording', far, []);
+    check('the gate hides even what the main model would call strong', strongFar.verdict === 'abstain', JSON.stringify(strongFar));
+    const badGates = [
+        ['not an object', 'd0'],
+        ['an unknown signal', { ...gate, features: ['coverage1'], standardize: { mean: { coverage1: 0.5 }, std: { coverage1: 0.1 } } }],
+        ['mismatched weights', { ...gate, weights: [-4, 1] }],
+        ['a zero std', { ...gate, standardize: { mean: { d0: 0.5 }, std: { d0: 0 } } }],
+        ['a non-finite weight', { ...gate, weights: [NaN] }],
+        ['a threshold above 1', { ...gate, hard: 1.5 }],
+        ['a missing threshold', { ...gate, hard: undefined }],
+        ['no features', { ...gate, features: [], weights: [] }],
+    ];
+    for (const [label, bad] of badGates) {
+        check(`a gate with ${label} degrades to unscored`, createAbstentionScorer({ ...twoModel, gate: bad }, bloom) === null);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2035,6 +2076,15 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     for (const q of ['how do I renew my passport', 'best mortgage refinance rates', 'nginx 502 bad gateway fix']) {
         const v = await verdict(q);
         check(`an off-topic question is "none": ${q}`, v === 'none', v);
+    }
+    // The show/hide gate: shipped, capped at 0.15, and a paraphrase that
+    // shares almost no words with its passage is not hidden.
+    check('the asset ships a distance-only show/hide gate capped at 0.15',
+        cal?.gate?.hard > 0 && cal.gate.hard <= 0.15 && JSON.stringify(cal.gate.features) === '["d0","margin","mean10"]',
+        JSON.stringify(cal?.gate));
+    for (const q of ['why does the sea come in and go out twice daily', 'what makes a loaf puff up before it goes in the oven']) {
+        const v = await verdict(q);
+        check(`a paraphrase sharing few words with its passage is not "none": ${q}`, v === 'strong' || v === 'weak', v);
     }
     await pack.close();
 
