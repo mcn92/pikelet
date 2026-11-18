@@ -31,8 +31,6 @@ export function isSupportedNode(versionString) {
 
 export function nodeSupportWarning(versionString = process.versions.node) {
   if (isSupportedNode(versionString)) return null;
-  return `warning: pikelet does not support Node ${versionString} (supported: ${SUPPORTED_NODE_RANGE}). `
-    + 'Earlier releases have a fetch response-decompression bug; pikelet\'s own reads avoid it, but other code in '
-    + 'the process may not; 18.x, 20.x, 23.x and 25.x are end-of-life and will not be fixed. '
-    + 'Upgrade Node. (Set PIKELET_NO_NODE_WARNING=1 to silence this.)';
+  // One line: it prints on every run. The reason is in the README and above.
+  return `warning: Node ${versionString} is unsupported; use ${SUPPORTED_NODE_RANGE} (PIKELET_NO_NODE_WARNING=1 hides this)`;
 }

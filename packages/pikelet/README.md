@@ -37,10 +37,12 @@ the CLI and `pikelet-wasm` are its only two packages, with no native code and
 no transitive dependencies. The CLI requires Node 22.23.4+, 24.22.1+ or 26.12.1+: earlier releases ship a
 fetch that decompresses any response a server labels with a
 `Content-Encoding`, and 18.x, 20.x, 23.x and 25.x are end-of-life with no
-fix. The CLI warns on start under any other version. `npx pikelet` lists the commands, and
-`npx pikelet <command> --help` gives one command's options; a
-flag the CLI does not know is refused (`Unknown flag --x`) rather than
-silently ignored.
+fix. The CLI warns on start under any other version. `npx pikelet` lists the commands,
+`npx pikelet <command> --help` gives one command's options, and
+`npx pikelet --version` prints the version. Flags take two dashes and
+either `--out x` or `--out=x`; an unknown command, an unknown flag or a
+single-dash option other than `-h` and `-v` is refused with an error
+rather than ignored.
 
 ## Scaffolding a search app
 
@@ -103,7 +105,7 @@ When you want the search *file* rather than a search *app*, `compile` builds
 a complete kind-3 artifact and stops — no project, no Worker, no Cloudflare:
 
 ```bash
-npx pikelet compile --source ./docs --out search.pikelet
+npx pikelet compile ./docs --out search.pikelet
 ```
 
 The output is one self-contained file carrying the corpus records, sketch
@@ -116,14 +118,25 @@ const search = await openPikeletFile('search.pikelet');
 const out = await search.query('how do I configure auth', { k: 5 });
 ```
 
+or search it from the terminal, which prints the matchQuality verdict and
+each result's title, source and text, exactly what the MCP `search` tool
+returns for the same question (`--json` prints that response unchanged,
+`--limit <n>` sets the result count):
+
+```bash
+npx pikelet query search.pikelet "how do I configure auth"
+```
+
 Passage embedding runs locally through the same inline encoder the artifact
 carries (the ~24 MiB weight blob is fetched once, digest-pinned, when the
 package copy is absent — registry installs ship without it), on a worker
-pool sized to your cores — roughly 3 minutes for a ~570-chunk docs site on
-8 cores. Each worker holds its own kernel and weight copy, so the pool
+pool sized to your cores: about two chunks a second per core, plus
+roughly 20 to 30 seconds of calibration (655 chunks took 83 seconds on 8
+cores). Each worker holds its own kernel and weight copy, so the pool
 trades a few hundred MB of build-time memory for the near-linear speedup;
 `PIKELET_EMBED_WORKERS` overrides the pool size (0 forces
-sequential). `compile` accepts `--source` (folder or URL), `--out`,
+sequential). `compile` accepts `--source` (folder or URL, or the first
+argument), `--out`,
 `--name` (corpus name recorded in the artifact), and `--force` to
 overwrite the output file. Folder sources take `--include`/`--exclude`
 filesystem globs; URL sources take `--max-pages` and

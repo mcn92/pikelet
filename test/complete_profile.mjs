@@ -2200,7 +2200,12 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     // windowed retrieval it serves.
     console.log('sentence windows: compile, serve and calibrate over windowed rows');
     const windowedOut = path.join(tmp, 'windowed.pikelet');
-    cli(['compile', '--source', docs, '--out', windowedOut, '--sentence-windows', '2']);
+    // The source as the first argument and --flag=value are the documented
+    // shorthands for --source and --flag value.
+    const windowedLog = cli(['compile', docs, `--out=${windowedOut}`, '--sentence-windows', '2']);
+    check('compile ends by naming the query and mcp install next steps, sized in MiB',
+        /Next:\n  pikelet query \S+ "a question"[^\n]*\n  pikelet mcp install --pack \S+/.test(windowedLog)
+        && / MiB, \d+ records, identity /.test(windowedLog), windowedLog.slice(-400));
     const wpack = await openPikeletFile(windowedOut);
     const winfo = wpack.info();
     check('a windowed pack indexes more rows than records', winfo.indexRows > winfo.records && winfo.rowMap?.sentences === 2,
@@ -2268,14 +2273,61 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     // `pikelet` prints the overview rather than starting the scaffold.
     console.log('help: an overview, and one page per command');
     const overview = cli([]);
-    check('a bare pikelet prints the overview, leading with compile and mcp install',
-        /Get started:\n  pikelet compile[^\n]*\n  pikelet mcp install/.test(overview) && !/Project name/.test(overview), overview.slice(0, 200));
+    check('a bare pikelet prints the overview, leading with compile, query and mcp install',
+        /Get started:\n  pikelet compile[^\n]*\n  pikelet query[^\n]*\n  pikelet mcp install/.test(overview) && !/Project name/.test(overview), overview.slice(0, 200));
     check('--help prints the same overview', cli(['--help']) === overview);
     check('mcp --help prints mcp\'s help instead of asking for a pack', /pikelet mcp --pack/.test(cli(['mcp', '--help'])));
     check('-h and help <command> reach a command\'s help',
         /pikelet append --parent/.test(cli(['append', '-h'])) && cli(['help', 'append']) === cli(['append', '--help']));
     check('compile --help lists the flags compile takes', ['--license', '--calibration-queries', '--skip-calibration', '--sentence-windows']
         .every((flag) => cli(['compile', '--help']).includes(flag)));
+
+    // Mistyped commands and flags fail with a message instead of starting the
+    // scaffold's prompts or being ignored.
+    console.log('cli: unknown commands, short options, --version, --flag=value');
+    const failure = (args) => {
+        try { cli(args); return null; } catch (error) { return { status: error.status, stderr: String(error.stderr), stdout: String(error.stdout) }; }
+    };
+    const ownVersion = JSON.parse(fs.readFileSync(path.join(ROOT, 'packages', 'pikelet', 'package.json'), 'utf8')).version;
+    check('--version and -v print the version', cli(['--version']).trim() === ownVersion && cli(['-v']).trim() === ownVersion);
+    const typo = failure(['compil', '--source', docs]);
+    check('an unknown command fails, suggests the nearest command and prints the overview',
+        typo && typo.status !== 0 && /Unknown command "compil"\. Did you mean "compile"\?/.test(typo.stderr)
+        && /Commands:/.test(typo.stderr) && !/Project name/.test(typo.stdout), JSON.stringify(typo).slice(0, 300));
+    const stranger = failure(['frobnicate']);
+    check('an unknown command with no near match names no guess',
+        stranger && /Unknown command "frobnicate"\n/.test(stranger.stderr), JSON.stringify(stranger).slice(0, 200));
+    const short = failure(['compile', '-o', path.join(tmp, 'never.pikelet'), '--source', docs]);
+    check('a single-dash option is refused, not ignored',
+        short && /Unknown option -o: pikelet's flags take two dashes/.test(short.stderr) && !fs.existsSync(path.join(tmp, 'never.pikelet')),
+        JSON.stringify(short).slice(0, 200));
+    const shortWord = failure(['compile', '-source', docs]);
+    check('a single-dash long name points at the two-dash flag', shortWord && /\(--source\)/.test(shortWord.stderr), JSON.stringify(shortWord).slice(0, 200));
+    const { parseArgs } = await import('../packages/pikelet/src/cli.mjs');
+    check('--flag=value is --flag value, and keeps any later =',
+        parseArgs(['compile', '--out=a.pikelet', '--name=x=y']).flags.out === 'a.pikelet' && parseArgs(['compile', '--name=x=y']).flags.name === 'x=y');
+    check('a boolean flag given a value is refused', /--force takes no value/.test((() => { try { parseArgs(['--force=yes']); } catch (e) { return e.message; } return ''; })()));
+    const missingFolder = failure(['compile', path.join(tmp, 'no-such-folder'), '--out', path.join(tmp, 'never.pikelet')]);
+    check('compile <path> reads the path as --source', missingFolder && /Source folder not found: .*no-such-folder/.test(missingFolder.stderr),
+        JSON.stringify(missingFolder).slice(0, 200));
+    const twoSources = failure(['compile', docs, '--source', docs]);
+    check('compile refuses a source given both ways', twoSources && /give one/.test(twoSources.stderr), JSON.stringify(twoSources).slice(0, 200));
+
+    // pikelet query prints what the MCP search tool returns, readably.
+    console.log('cli: pikelet query');
+    const answer = cli(['query', out, 'how do bees tell each other where flowers are']);
+    check('query prints the verdict and numbered results with their source',
+        /^\S+: (strong|weak): the pack (covers|may cover) this topic/.test(answer) && /\n1\. [^\n]+\n   \S+/.test(answer), answer.slice(0, 400));
+    const asJson = JSON.parse(cli(['query', out, 'how', 'do', 'bees', 'dance', '--json', '--limit', '2']));
+    check('query --json is the search tool\'s response, with --limit and an unquoted question',
+        asJson.query === 'how do bees dance' && asJson.sections.length === 1 && asJson.sections[0].results.length === 2,
+        JSON.stringify(asJson).slice(0, 300));
+    const offAnswer = cli(['query', out, 'best mortgage refinance rates']);
+    check('query says plainly when the pack does not cover a question', /: none: the pack does not appear to cover this topic/.test(offAnswer), offAnswer.slice(0, 200));
+    const noPack = failure(['query', path.join(tmp, 'absent.pikelet'), 'anything']);
+    check('query names a missing pack', noPack && /Pack not found: .*absent\.pikelet/.test(noPack.stderr), JSON.stringify(noPack).slice(0, 200));
+    const noQuestion = failure(['query', out]);
+    check('query without a question prints its usage', noQuestion && /Usage: pikelet query <pack>/.test(noQuestion.stderr), JSON.stringify(noQuestion).slice(0, 200));
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

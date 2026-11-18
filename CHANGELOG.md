@@ -86,9 +86,35 @@ first.
   scores with, even when the caller supplies the vector.
 - **A `compact()` that cannot rebuild throws `INVALID_VECTOR`**, not
   `INTERNAL_INVARIANT`, and leaves the index searchable (see Fixed).
+- **Unknown commands and single-dash options are errors.** An
+  unrecognised command (`pikelet query` before it existed, `pikelet
+  compil`, `pikelet -v`) fell through to `create` and stopped at its
+  "Project name:" prompt; it now exits with an error, suggests the
+  nearest command, and prints the overview. A single-dash option other
+  than `-h` and `-v` was taken as a stray argument and ignored, so
+  `compile -o x.pikelet` wrote `search.pikelet`; it is now refused. Flags
+  given with no command still start `create`, as before.
+- **`compile` prints less, and labels sizes MiB.** The calibration fit's
+  diagnostics, the lexical index size, the rerank sweep, the encoder
+  verification vectors and the golden replay now print only with
+  `--verbose`; a one-line calibration summary remains. Sizes are computed
+  in MiB and were labelled MB, here and in `compact`. Scripts that read
+  compile's output should expect the new lines.
 
 ### Changed
 
+- **`pikelet query <pack> "<question>"`** searches a pack from the
+  terminal and prints what the MCP `search` tool returns for the same
+  question: the matchQuality verdict, then each result's title, source and
+  text. `--json` prints the tool's response unchanged and `--limit` sets
+  the number of results. It takes a file, a URL, a `#<sha256>` pin or a
+  layer, like `mcp --pack`. `compile` now ends by naming this command and
+  `mcp install` as next steps.
+- **`pikelet --version`** (or `-v`) prints the version, `--flag=value`
+  works for every flag that takes a value, and `compile ./docs` is
+  `compile --source ./docs`.
+- **The unsupported-Node warning is one line**, naming the version and the
+  supported range.
 - **Shorter help.** `pikelet --help` is a one-screen overview that leads
   with `compile` and `mcp install`. Each command has its own:
   `pikelet <command> --help`, `-h`, or `pikelet help <command>`. `mcp

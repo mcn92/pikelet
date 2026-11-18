@@ -26,8 +26,26 @@ export async function main(argv) {
     printHelp(named);
     return;
   }
+  if (parsed.flags.version) {
+    const { CLI_VERSION } = await import('./common.mjs');
+    console.log(CLI_VERSION);
+    return;
+  }
   if (parsed.positionals.length === 0 && Object.keys(parsed.flags).length === 0) {
     printHelp();
+    return;
+  }
+  // An unrecognised command is a mistake, not a request to scaffold: a typo
+  // used to fall through to create and stop at its "Project name:" prompt.
+  // Bare flags with no command still scaffold, as the old `npm create` did.
+  const command = parsed.positionals[0];
+  if (command !== undefined && !COMMANDS.includes(command)) {
+    const guess = closestCommand(command);
+    throw new CliError(`Unknown command "${command}"${guess ? `. Did you mean "${guess}"?` : ''}\n\n${HELP_OVERVIEW}`);
+  }
+  if (command === 'query') {
+    const { runQueryCommand } = await import('./query-cli.mjs');
+    await runQueryCommand(parsed.positionals.slice(1), parsed.flags);
     return;
   }
   if (parsed.positionals[0] === 'doctor') {
@@ -110,12 +128,20 @@ export async function main(argv) {
   }
   // `pikelet create` is the canonical form; bare flags still scaffold for
   // compatibility with the old `npm create` flow.
-  const command = ['rebuild', 'compile', 'create'].includes(parsed.positionals[0]) ? parsed.positionals[0] : 'create';
   if (command === 'rebuild') {
     await rebuildProject(process.cwd(), parsed.flags);
     return;
   }
   if (command === 'compile') {
+    // `compile ./docs` is `compile --source ./docs`.
+    const rest = parsed.positionals.slice(1);
+    if (rest.length > 1) throw new CliError(`compile takes one source, got ${rest.length}: ${rest.join(' ')}`);
+    if (rest.length === 1) {
+      if (parsed.flags.source !== undefined || parsed.flags.git !== undefined || parsed.flags.conversations !== undefined) {
+        throw new CliError(`compile got the source ${rest[0]} and a --source, --git or --conversations flag; give one`);
+      }
+      parsed.flags.source = rest[0];
+    }
     await compileArtifact(parsed.flags);
     return;
   }
@@ -128,11 +154,13 @@ const HELP_OVERVIEW = `pikelet: compile documents into one searchable .pikelet f
 to an AI agent.
 
 Get started:
-  pikelet compile --source ./docs --out docs.pikelet
-  pikelet mcp install --pack ./docs.pikelet      # add it to Claude Code
+  pikelet compile ./docs --out docs.pikelet
+  pikelet query docs.pikelet "how do I install it"
+  pikelet mcp install --pack docs.pikelet        # add it to Claude Code
 
 Commands:
   compile   Build a .pikelet from a folder, a website, git history or chat exports
+  query     Search a pack from the terminal
   mcp       Serve packs to an MCP client; 'mcp install' writes the client config
   append    Add, remove or replace records as a small layer on top of a pack
   compact   Fold a layered pack back into one file
@@ -142,7 +170,32 @@ Commands:
   create    Scaffold a Cloudflare Worker search project (the older workflow)
   rebuild   Rebuild a scaffolded project's assets
 
-Run 'pikelet <command> --help' for a command's options.`;
+Run 'pikelet <command> --help' for a command's options, and
+'pikelet --version' for the version.`;
+
+const COMMANDS = ['compile', 'query', 'mcp', 'append', 'compact', 'rebase', 'journal', 'doctor', 'create', 'rebuild', 'help'];
+
+// Edit distance of at most 2 to a known command, for "Did you mean".
+function closestCommand(word) {
+  const distance = (a, b) => {
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const row = [i];
+      for (let j = 1; j <= b.length; j++) {
+        row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = row;
+    }
+    return prev[b.length];
+  };
+  let best = null;
+  let bestDistance = 3;
+  for (const command of COMMANDS) {
+    const d = distance(String(word).toLowerCase(), command);
+    if (d < bestDistance) { best = command; bestDistance = d; }
+  }
+  return best;
+}
 
 const LAYER_TEXT = `append, compact and rebase work on layered chains (LAYERED_PROFILE.md).
 append writes a small layer on top of a pack: new records from --source,
@@ -162,7 +215,20 @@ manifest identity. A new layer records where its parent lives, as
 to --out when the parent is a local file under the output directory.`;
 
 const HELP = {
+  query: `Usage:
+  pikelet query <pack> "<question>" [--limit <n>] [--json]
+
+Searches a pack and prints the passages an MCP agent would get for the same
+question: the pack's matchQuality verdict, then each result's title, source
+and text. <pack> is a .pikelet file, an HTTP(S) URL (range-read, not
+downloaded), or either with '#<sha256>' to pin the identity. A layer is
+searched as its whole chain.
+
+Options:
+  --limit <n>   Results to show (default 5, at most 20)
+  --json        Print the search tool's JSON response unchanged`,
   compile: `Usage:
+  pikelet compile <path|url> --out docs.pikelet
   pikelet compile --source <path|url> --out docs.pikelet
   pikelet compile --git <repo> [--git-rev <rev|range>] --out history.pikelet
   pikelet compile --conversations <file|folder> --out conversations.pikelet
@@ -207,7 +273,8 @@ not a guarantee: a conversation pack is private by default, so keep it that
 way. The pack is named conversations unless --name is given.
 
 Options:
-  --source <path|url>   Folder or website to compile
+  --source <path|url>   Folder or website to compile (or give it as the
+                        first argument)
   --out <file>          Output path (default search.pikelet)
   --name <name>         Pack name (default: the folder or host name;
                         <repo>-history for --git, conversations for
@@ -215,6 +282,8 @@ Options:
   --license <spdx>      License of the compiled content, recorded in the
                         pack; packs meant for redistribution should carry one
   --force               Overwrite the output file
+  --verbose             Also print build internals: index sizes, the rerank
+                        sweep and the calibration fit's diagnostics
   --include <glob>      Folder include glob, repeatable
   --exclude <glob>      Folder exclude glob, repeatable
   --include-url <pat>   URL-path include pattern ('*' wildcard), repeatable
@@ -382,7 +451,9 @@ function printHelp(command) {
 
 const BOOLEAN_FLAGS = new Set([
   'deploy', 'yes', 'force', 'verbose', 'skip-abstention', 'skip-calibration',
-  'help', 'h',
+  'help', 'h', 'version',
+  // query
+  'json',
   // append (LAYERED_PROFILE.md 6.1)
   'allow-drift',
   // compact (6.3): ship unscored instead of refitting. Boolean, so it does not
@@ -433,25 +504,34 @@ export function parseArgs(args) {
   const positionals = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
+    // -h and -v are the only short options. Any other single-dash word was
+    // taken as a positional and ignored: `compile -o x.pikelet` wrote
+    // search.pikelet.
+    if (arg === '-h') { flags.help = true; continue; }
+    if (arg === '-v') { flags.version = true; continue; }
+    if (/^-[^-]/.test(arg)) {
+      throw new CliError(`Unknown option ${arg}: pikelet's flags take two dashes${arg.length === 2 ? '' : ` (--${arg.slice(1)})`}\nNext: run pikelet --help for the flags each command takes`);
+    }
     if (!arg.startsWith('--')) {
       positionals.push(arg);
       continue;
     }
-    const name = arg.slice(2);
+    // --name=value is --name value.
+    const eq = arg.indexOf('=');
+    const name = eq === -1 ? arg.slice(2) : arg.slice(2, eq);
+    const inline = eq === -1 ? undefined : arg.slice(eq + 1);
     // Boolean flags take no value. A flag missing here silently swallows the
     // NEXT argument as its value: `--allow-drift --out x` set
     // allow-drift="--out" and left --out unset.
-    if (BOOLEAN_FLAGS.has(name)) {
-      flags[name] = true;
-      continue;
-    }
-    if (name === 'no-deploy') {
-      flags.deploy = false;
+    if (BOOLEAN_FLAGS.has(name) || name === 'no-deploy') {
+      if (inline !== undefined) throw new CliError(`--${name} takes no value`);
+      if (name === 'no-deploy') flags.deploy = false;
+      else flags[name] = true;
       continue;
     }
     if (!VALUE_FLAGS.has(name)) throw new CliError(`Unknown flag --${name}\nNext: run pikelet --help for the flags each command takes`);
-    if (i + 1 >= args.length) throw new CliError(`Missing value for --${name}`);
-    const value = args[++i];
+    if (inline === undefined && i + 1 >= args.length) throw new CliError(`Missing value for --${name}`);
+    const value = inline === undefined ? args[++i] : inline;
     if (repeated.has(name)) {
       if (!flags[name]) flags[name] = [];
       flags[name].push(value);
@@ -789,17 +869,31 @@ export async function compileArtifact(flags) {
   };
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pikelet-compile-'));
   try {
-    await buildAssets(tmpDir, config, { skipBundleSizeCheck: true });
+    await buildAssets(tmpDir, config, { skipBundleSizeCheck: true, verbose: !!flags.verbose });
     const manifest = JSON.parse(await fs.readFile(path.join(tmpDir, 'assets', 'manifest.json'), 'utf8'));
     await fs.mkdir(path.dirname(outPath), { recursive: true });
     // copyFile, not rename: os.tmpdir() and the output may be different mounts.
     await fs.copyFile(path.join(tmpDir, 'assets', config.runtime.fileName), outPath);
-    console.log(`Compiled ${outPath}`);
-    console.log(`  ${(manifest.artifact.bytes / 1024 / 1024).toFixed(2)} MB, ${manifest.chunkCount} records, identity ${manifest.artifact.identity}`);
-    console.log("Query it from any runtime: openPikeletFile from 'pikelet-wasm/complete'");
+    // The pack is named as the user would type it from here.
+    const shown = displayPath(outPath);
+    console.log(`Compiled ${shown}`);
+    console.log(`  ${(manifest.artifact.bytes / 1024 / 1024).toFixed(2)} MiB, ${manifest.chunkCount} records, identity ${manifest.artifact.identity}`);
+    const steps = [
+      [`pikelet query ${shown} "a question"`, 'search it here'],
+      [`pikelet mcp install --pack ${shown}`, 'give it to Claude Code'],
+    ];
+    const width = Math.max(...steps.map(([command]) => command.length));
+    console.log('Next:');
+    for (const [command, what] of steps) console.log(`  ${command.padEnd(width)}   ${what}`);
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+function displayPath(file) {
+  const rel = path.relative(process.cwd(), file);
+  const shown = rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : file;
+  return /[\s"'$`\\]/.test(shown) ? JSON.stringify(shown) : shown;
 }
 
 async function rebuildProject(projectDir, flags = {}) {

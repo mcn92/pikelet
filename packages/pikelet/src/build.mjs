@@ -23,6 +23,9 @@ async function buildAssets(projectDir, config, options = {}) {
     logLines.push(msg);
     console.log(msg);
   };
+  // Build internals (index sizes, the rerank sweep, calibration diagnostics)
+  // print with --verbose and always reach the build log.
+  const logDetail = options.verbose ? log : (msg) => { logLines.push(msg); };
   const sourceRoot = config.source.type === 'url'
     ? config.source.url
     : path.resolve(options.sourceBaseDir || projectDir, config.source.path);
@@ -126,6 +129,7 @@ async function buildAssets(projectDir, config, options = {}) {
       vectors,
       ...(rowOffsets ? { rowOffsets, windowSize } : {}),
       log,
+      logDetail,
     });
     manifest.artifactSha256 = artifactInfo.sha256;
     manifest.artifact = artifactInfo;
@@ -167,13 +171,13 @@ async function buildAssets(projectDir, config, options = {}) {
   await fs.writeFile(path.join(projectDir, '.pikelet', 'last-build.log'), `${logLines.join('\n')}\n`);
   const gzipBytes = options.skipBundleSizeCheck ? null : await projectedGzipBytes(projectDir);
   if (config.runtime?.mode === 'complete') {
-    log(`Built complete .pikelet artifact with ${(artifactInfo.bytes / 1024 / 1024).toFixed(2)} MB`);
+    log(`Built complete .pikelet artifact with ${(artifactInfo.bytes / 1024 / 1024).toFixed(2)} MiB`);
   } else if (config.runtime?.mode === 'artifact') {
-    log(`Built corpus assets with ${(artifact.byteLength / 1024 / 1024).toFixed(2)} MB Search Artifact`);
+    log(`Built corpus assets with ${(artifact.byteLength / 1024 / 1024).toFixed(2)} MiB Search Artifact`);
   } else {
-    log(`Built index: ${(snapshot.byteLength / 1024 / 1024).toFixed(2)} MB snapshot`);
+    log(`Built index: ${(snapshot.byteLength / 1024 / 1024).toFixed(2)} MiB snapshot`);
   }
-  if (gzipBytes !== null) log(`Projected bundled gzip size: ${(gzipBytes / 1024 / 1024).toFixed(2)} MB`);
+  if (gzipBytes !== null) log(`Projected bundled gzip size: ${(gzipBytes / 1024 / 1024).toFixed(2)} MiB`);
   if (gzipBytes !== null && gzipBytes > 3 * 1024 * 1024) {
     throw new CliError('Projected Worker bundle exceeds the free-plan 3 MB compressed limit. Next: reduce source scope or wait for the R2-backed tier.', 2);
   }

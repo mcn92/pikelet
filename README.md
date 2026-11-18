@@ -15,18 +15,40 @@ It is built for corpora that are static or change on a release cycle: documentat
 The `pikelet` CLI requires Node 22.23.4+, 24.22.1+ or 26.12.1+ (earlier releases' fetch decompresses whatever a server labels as encoded; 18.x and 20.x are end-of-life and cannot be fixed); the `pikelet-wasm` library runs on Node 18+, browsers, and Cloudflare Workers.
 
 ```bash
-npx pikelet compile --source ./docs --out docs.pikelet
+npx pikelet compile ./docs --out docs.pikelet
 ```
 
 ```text
-Ingested 3 docs -> 3 chunks
-Embedded 3/3 chunks with inline transformer
-Built complete .pikelet artifact with 24.5 MB
+Ingested 3 docs -> 27 chunks
+Embedded 27/27 chunks with inline transformer
+4/27 chunks exceeded the 512-token encoder window and were mean-pooled across windows
+Validated self-recall@1 on 27 sampled chunks
+Calibrated matchQuality: cross-validated AUC 1.000 separating 72 on-topic from 104 off-topic questions
+Built complete .pikelet artifact with 24.64 MiB
 Compiled docs.pikelet
-  24.5 MB, 3 records, identity 8d731a...
+  24.64 MiB, 27 records, identity dbe8be15c79e...
+Next:
+  pikelet query docs.pikelet "a question"       search it here
+  pikelet mcp install --pack docs.pikelet       give it to Claude Code
 ```
 
 Every `.pikelet` is at least ~25 MiB, because the query encoder ships inside it: a 5-file folder and a 500-file folder both start around that size. The first run downloads the encoder from a GitHub release and caches it.
+
+Compiling is mostly embedding, at about two chunks a second per CPU core, plus roughly 20 to 30 seconds of calibration: 655 chunks took 83 seconds on 8 cores, so a few thousand chunks take several minutes, and longer on a 2-core machine.
+
+Search it from the terminal:
+
+```bash
+npx pikelet query docs.pikelet "why is a pack one file"
+```
+
+```text
+docs: strong: the pack covers this topic (confidence 1.00)
+
+1. Why make knowledge a file
+   why-a-file.md#why-make-knowledge-a-file
+   The reasoning behind the single-artifact design. ...
+```
 
 Give it to an LLM — Claude Code, Claude Desktop, or any MCP client:
 

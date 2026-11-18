@@ -256,7 +256,7 @@ export async function compactChain(flags, options = {}) {
     const written = assemble(calibration, outPath);
 
     log(`Wrote ${outPath}`);
-    log(`  ${(written.fileBytes / 1024 / 1024).toFixed(2)} MB, ${plan.liveRecords} records, depth 0, `
+    log(`  ${(written.fileBytes / 1024 / 1024).toFixed(2)} MiB, ${plan.liveRecords} records, depth 0, `
       + `identity ${written.identity}`);
     log(`  compacted from ${info.identity.slice(0, 12)}… at depth ${info.layers - 1}`);
     return { outPath, identity: written.identity, records: plan.liveRecords };

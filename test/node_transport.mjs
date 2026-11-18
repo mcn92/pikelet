@@ -435,7 +435,7 @@ for (const [v, want] of [
     check(`${v} is ${want ? '' : 'not '}supported`, isSupportedNode(v) === want);
 }
 check('a supported version gets no warning', nodeSupportWarning('24.22.1') === null);
-check('an unsupported version gets one naming the range', /does not support Node 20\.20\.2.*>=22\.23\.4/.test(nodeSupportWarning('20.20.2') || ''));
+check('an unsupported version gets one line naming the range', /Node 20\.20\.2 is unsupported.*>=22\.23\.4/.test(nodeSupportWarning('20.20.2') || '') && !nodeSupportWarning('20.20.2').includes('\n'));
 
 console.log(`\nNode transport: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

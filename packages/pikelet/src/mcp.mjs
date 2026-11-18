@@ -29,6 +29,7 @@
 // logging goes to stderr.
 
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import crypto from 'node:crypto';
@@ -914,6 +915,27 @@ async function mountPack(packs, spec, { openPikeletFile, httpRangeSource, log, b
   log(`mounted ${name} (${info.records} records, identity ${info.identity.slice(0, 12)}…, ${spec.identity ? 'identity-pinned' : 'unpinned'}) from ${spec.location}`);
 }
 
+
+/**
+ * `pikelet query`: mount one pack the way the server does (a file, a URL, a
+ * `#<sha256>`-pinned location, or a layer whose chain is walked to its
+ * base) and search it with the server's own search tool, so the terminal
+ * shows exactly what an agent would get.
+ */
+export async function queryOnce(raw, question, { k = 5, ...deps }) {
+  const packs = new Map();
+  const hash = /^(.*)#([0-9a-f]{64})$/i.exec(raw);
+  const spec = hash ? { location: hash[1], identity: hash[2].toLowerCase() } : { location: raw };
+  if (!/^https?:\/\//i.test(spec.location) && !fsSync.existsSync(spec.location)) {
+    throw new Error(`Pack not found: ${path.resolve(spec.location)}`);
+  }
+  await mountPack(packs, spec, { log: () => {}, ...deps });
+  try {
+    return await callSearch(packs, { query: question, k });
+  } finally {
+    for (const mounted of packs.values()) await mounted.search.close().catch(() => {});
+  }
+}
 
 /**
  * Write (or merge) an MCP client config entry that launches this server —

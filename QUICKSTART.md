@@ -32,29 +32,28 @@ CHANGELOG lists what changed between releases.
 Point `compile` at a folder (Markdown, MDX, HTML or text) or a live site:
 
 ```bash
-pikelet compile --source ./docs --out docs.pikelet \
+pikelet compile ./docs --out docs.pikelet \
   --name ferry-docs --license MIT \
   --calibration-queries questions.jsonl
 # or crawl a site:
-pikelet compile --source https://docs.example.com --out docs.pikelet
+pikelet compile https://docs.example.com --out docs.pikelet
 ```
 
 ```text
 Ingested 8 docs -> 8 chunks
 Embedded 8/8 chunks with inline transformer
 Validated self-recall@1 on 8 sampled chunks
-Built lexical index: 199 terms over 8 records (5 KiB)
-Embedded 3 encoder verification vectors in the declaration
-Calibrated relevance: 67 on-topic / 81 off-domain + 24 gibberish off-topic / 0 weak queries,
-  5-fold CV AUC 0.999858 vs off-topic (fit AUC 1, in-sample), validation: 5 human queries:
-  AUC 1, abstention rate 0%
-  ...
-Measured rerank operating point: C=8 (recall@8 1 over 8 corpus-embeddings queries)
-Golden replay against the assembled artifact: 24/24 reproduce
-Built complete .pikelet artifact with 24.55 MB
+Calibrated matchQuality: cross-validated AUC 1.000 separating 67 on-topic from 105 off-topic questions; your 5 questions: AUC 1.000
+Built complete .pikelet artifact with 24.55 MiB
 Compiled docs.pikelet
-  24.55 MB, 8 records, identity cbec6b68845d34d9e48bf43f4192110eb0f90219124342129dd051fe2143eece
+  24.55 MiB, 8 records, identity cbec6b68845d34d9e48bf43f4192110eb0f90219124342129dd051fe2143eece
+Next:
+  pikelet query docs.pikelet "a question"       search it here
+  pikelet mcp install --pack docs.pikelet       give it to Claude Code
 ```
+
+`--verbose` also prints the build's internals: index sizes, the rerank
+sweep, and the calibration fit's diagnostics.
 
 The file carries the corpus records, the semantic index, a BM25 lexical
 index, the inline MiniLM query encoder, integrity commitments, the
@@ -63,14 +62,14 @@ service, no model host and no vector database behind it. The `identity` on
 the last line is the sha256 that names this exact pack; keep it, because
 you pin it when you publish (step 5).
 
-Every pack is at least ~24 MB regardless of corpus size, because the query
+Every pack is at least ~25 MiB regardless of corpus size, because the query
 encoder ships inside it. The first `compile` fetches that encoder (~25 MiB)
 from a GitHub release and caches it; later runs are offline.
 
 The flags in the example are optional but worth setting:
 
 - `--name` is the pack name an LLM sees in `list_packs` and in every search
-  result (default: the output file name).
+  result (default: the source folder's name, or the site's host name).
 - `--license` is recorded in the manifest and surfaced by `list_packs`; set it
   on anything you will redistribute.
 - `--calibration-queries` takes questions a reader would really ask, one JSON
@@ -83,6 +82,23 @@ The flags in the example are optional but worth setting:
 
   They validate the abstention fit (they are never training data for it) and
   become golden queries stored in the pack, which `verify_pack` replays.
+
+Try it from the terminal before giving it to anything else:
+
+```bash
+pikelet query docs.pikelet "how do I roll back to an earlier snapshot"
+```
+
+```text
+ferry-docs: strong: the pack covers this topic (confidence 0.97)
+
+1. Snapshots and restore
+   snapshots.md#snapshots-and-restore
+   Every write creates a new snapshot. To return the bucket to an earlier state, ...
+```
+
+`query` prints what the MCP `search` tool would return for the same question
+(`--json` prints that response unchanged, `--limit` sets how many results).
 
 Other flags: `--force` overwrites the output, `--max-pages` caps a crawl, and
 `--include`/`--exclude` filter a folder. `pikelet compile --help` lists the
@@ -310,7 +326,7 @@ pikelet compact --head docs.pikelet --head docs.0001.pikelet --out docs-v2.pikel
 Compacting to 9 live record(s), reclaiming 0 id(s)
 Refitting calibration over 9 live record(s) with the base's own encoder ...
 Wrote docs-v2.pikelet
-  24.55 MB, 9 records, depth 0, identity 363c71e6b1f48066025f705f2ef366e8df64bce2ca61ad2473a981f50f938846
+  24.55 MiB, 9 records, depth 0, identity 363c71e6b1f48066025f705f2ef366e8df64bce2ca61ad2473a981f50f938846
 ```
 
 The compacted file is an ordinary pack: open it with `openPikeletFile`, mount

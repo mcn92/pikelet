@@ -9,7 +9,7 @@ import { publicChunk, ingestDeclaration, SENTENCE_WINDOWS_KIND } from './ingest.
 import { calibrateRetrievalAbstention } from './calibrate.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
 
-async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, snapshot, vectors, rowOffsets = null, windowSize = 0, log = () => {} }) {
+async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, snapshot, vectors, rowOffsets = null, windowSize = 0, log = () => {}, logDetail = log }) {
   const artifactContract = await loadArtifactContract();
   const {
     assemblePikeletFile, buildCorpusSegment, buildInlineTransformerEncoderSegment, PROFILE_V2,
@@ -41,7 +41,7 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
   // fused vector+BM25 ranking the reader serves, not a vector-only
   // approximation of it.
   const lexical = buildLexicalSegment(chunks.map((chunk) => chunk.text || ''));
-  log(`Built lexical index: ${lexical.meta.terms.toLocaleString()} terms over ${lexical.meta.docCount.toLocaleString()} records (${(lexical.bytes.length / 1024).toFixed(0)} KiB)`);
+  logDetail(`Built lexical index: ${lexical.meta.terms.toLocaleString()} terms over ${lexical.meta.docCount.toLocaleString()} records (${(lexical.bytes.length / 1024).toFixed(0)} KiB)`);
   let calibrationBytes = null;
   let goldenQueries = [];
   let calibrationSummary = null;
@@ -52,7 +52,7 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
       // encoder before serving. One probe exceeds the kernel window to pin
       // the windowed mean-pool path.
       declaration.testVectors = await buildInlineTestVectors(await getEmbedder());
-      log(`Embedded ${declaration.testVectors.length} encoder verification vectors in the declaration`);
+      logDetail(`Embedded ${declaration.testVectors.length} encoder verification vectors in the declaration`);
     }
   } catch (error) {
     embedder?.dispose();
@@ -74,7 +74,7 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
     queryVectors: vectors,
     snapshotBytes: snapshot,
   });
-  log(`Measured rerank operating point: C=${rerankSweep.recommendedRerank} `
+  logDetail(`Measured rerank operating point: C=${rerankSweep.recommendedRerank} `
     + `(recall@${rerankSweep.k} ${rerankSweep.recall} over ${rerankSweep.queries} ${rerankSweep.querySource} queries)`);
   if (rerankSweep.targetReached === false) {
     log(`warn: recall@${rerankSweep.k} target ${rerankSweep.targetRecall} not reached at the reader's default `
@@ -239,10 +239,15 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
         const validation = humanCalibrationQueries
           ? `${humanCalibrationQueries} human queries: AUC ${realQueryAuc ?? 'n/a'}, abstention rate ${((realQueryAbstentionRate ?? 0) * 100).toFixed(0)}%`
           : 'no human queries (runtime.calibrationQueries) — validated by cross-validation only';
-        log(`Calibrated relevance: ${verifiedPositiveQueries} on-topic / ${foreignNegativeQueries} off-domain + `
+        // One line by default; the fit's diagnostics follow with --verbose.
+        const auc = (v) => (typeof v === 'number' ? v.toFixed(3) : 'n/a');
+        log(`Calibrated matchQuality: cross-validated AUC ${auc(cvAuc)} separating ${verifiedPositiveQueries} on-topic from `
+          + `${foreignNegativeQueries + syntheticGibberishQueries} off-topic questions`
+          + (humanCalibrationQueries ? `; your ${humanCalibrationQueries} questions: AUC ${auc(realQueryAuc)}` : ''));
+        logDetail(`Calibrated relevance: ${verifiedPositiveQueries} on-topic / ${foreignNegativeQueries} off-domain + `
           + `${syntheticGibberishQueries} gibberish off-topic / ${weakQueries} weak queries, `
-          + `5-fold CV AUC ${cvAuc ?? 'n/a'} vs off-topic (fit AUC ${fitAuc}, in-sample), validation: ${validation}`);
-        log(`  in-domain-unanswerable diagnostic (not used in the fit): AUC ${cvAucHard ?? 'n/a'} vs `
+          + `5-fold CV AUC ${auc(cvAuc)} vs off-topic (fit AUC ${auc(fitAuc)}, in-sample), validation: ${validation}`);
+        logDetail(`  in-domain-unanswerable diagnostic (not used in the fit): AUC ${auc(cvAucHard)} vs `
           + `${ablationNegativeQueries} ablation + ${entitySwapNegativeQueries} entity-swap + ${heldOutNegativeQueries} held-out-doc `
           + 'hard negatives; matchQuality measures relevance, so "strong" does not by itself mean the passage holds the fact');
         // maxSim1 is comparison-only (see calibrate.mjs's GROUNDING_FEAT
@@ -252,16 +257,16 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
         // better AUC number). Logged so it's visible without pulling
         // apart the artifact.
         if (maxSimVsCoverage?.maxSimSeparationAuc !== null && maxSimVsCoverage !== undefined) {
-          log(`  maxSim1 vs coverage1 vs ablation hard negatives (comparison only, not used in the fit): separation AUC `
-            + `${maxSimVsCoverage.maxSimSeparationAuc ?? 'n/a'} vs ${maxSimVsCoverage.coverageSeparationAuc ?? 'n/a'}; `
+          logDetail(`  maxSim1 vs coverage1 vs ablation hard negatives (comparison only, not used in the fit): separation AUC `
+            + `${auc(maxSimVsCoverage.maxSimSeparationAuc)} vs ${auc(maxSimVsCoverage.coverageSeparationAuc)}; `
             + `mean positive/hard-negative ${maxSimVsCoverage.meanMaxSimPositive}/${maxSimVsCoverage.meanMaxSimHardNegative} `
             + `vs ${maxSimVsCoverage.meanCoveragePositive}/${maxSimVsCoverage.meanCoverageHardNegative}`);
           const para = maxSimVsCoverage.paraphrase;
           if (para?.coverage1) {
-            log(`  maxSim1 vs coverage1 on real paraphrases (base vs. substituted positives, lower AUC = more `
-              + `paraphrase-robust): maxSim1 ${para.maxSim1 ? para.maxSim1.separationAuc : 'n/a'} `
+            logDetail(`  maxSim1 vs coverage1 on real paraphrases (base vs. substituted positives, lower AUC = more `
+              + `paraphrase-robust): maxSim1 ${para.maxSim1 ? auc(para.maxSim1.separationAuc) : 'n/a'} `
               + `(mean ${para.maxSim1 ? para.maxSim1.meanBase : 'n/a'} -> ${para.maxSim1 ? para.maxSim1.meanSubstituted : 'n/a'}) `
-              + `vs coverage1 ${para.coverage1.separationAuc} (mean ${para.coverage1.meanBase} -> ${para.coverage1.meanSubstituted})`);
+              + `vs coverage1 ${auc(para.coverage1.separationAuc)} (mean ${para.coverage1.meanBase} -> ${para.coverage1.meanSubstituted})`);
           }
         }
       }
@@ -296,10 +301,10 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
       await replay.close();
     }
     if (kept.length !== goldenQueries.length) {
-      log(`Golden replay against the assembled artifact: ${kept.length}/${goldenQueries.length} reproduce; embedding the ${kept.length} that do`);
+      logDetail(`Golden replay against the assembled artifact: ${kept.length}/${goldenQueries.length} reproduce; embedding the ${kept.length} that do`);
       result = assemble(kept, calibrationBytes);
     } else {
-      log(`Golden replay against the assembled artifact: ${kept.length}/${kept.length} reproduce`);
+      logDetail(`Golden replay against the assembled artifact: ${kept.length}/${kept.length} reproduce`);
     }
   }
   return {
