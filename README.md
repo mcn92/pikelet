@@ -2,9 +2,11 @@
 
 **Knowledge that ships as a file.**
 
-Pikelet compiles a corpus into one self-contained `.pikelet` file that can be searched without a vector database, an embedding API, or a retrieval server. Put it on disk, S3, R2, a CDN, or any static HTTP host; a browser, Node process, edge worker, or LLM agent mounts it locally or over HTTP Range and reads only the parts a query needs.
+A `.pikelet` file is a searchable corpus in a single file. It holds the source text, a vector index and a keyword (BM25) index, the neural encoder that turns a question into a vector, a calibration model that judges how well the corpus covers a question, and the tests the pack was built to pass. Its identity is a SHA-256 digest that commits to all of it, so the file fixes not just what the corpus says but how it is queried: the model that encodes a question, the indexes that find candidates, and when the honest answer is "this corpus doesn't say." **The format makes retrieval semantics part of the versioned knowledge artifact.**
 
-The file carries the source text, semantic and keyword indexes, the query encoder, retrieval calibration, evaluation fixtures, and integrity commitments over all of them, and its identity is a hash that commits to all of it. So the file fixes not just what the corpus says but how it is queried: the model that turns a question into a vector, how candidates are ranked, and when the honest answer is "this corpus doesn't say." **Pikelet makes retrieval semantics part of the versioned knowledge artifact.**
+The layout is built for byte-range reads. A reader opens the file from a small prefix and then fetches only the index rows and records a query needs, verifying each against the identity, so a pack can sit on disk, S3, R2, a CDN or any static HTTP host, with no vector database, embedding API or retrieval server behind it. [FORMAT.md](FORMAT.md) describes the binary structure, the embedded encoder, the indexes, the integrity commitments, versioning, compatibility and the format's limits.
+
+**Pikelet** is the open-source toolchain for the format: a compiler (`pikelet compile`) that builds packs from folders, websites, git history or exported chats; a reader library (`pikelet-wasm`) for browsers, Node and edge workers; and an MCP server (`pikelet mcp`) that mounts packs for LLM agents.
 
 It is built for corpora that are static or change on a release cycle: documentation, API references, manuals, standards, legal and policy texts, research corpora, and reference packs for agents.
 
