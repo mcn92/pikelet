@@ -120,6 +120,7 @@
     "LICENSE",
     "README.md",
     "CHANGELOG.md",
+    "FORMAT.md",
     "NOTICE"
   ],
   "scripts": {

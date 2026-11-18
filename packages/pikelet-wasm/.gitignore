@@ -1,6 +1,7 @@
 # Copied in from the repository root by scripts/stage-package-docs.mjs during
 # npm prepack (so the tarball carries them) and removed by postpack.
 /CHANGELOG.md
+/FORMAT.md
 /LICENSE
 /NOTICE
 /README.md

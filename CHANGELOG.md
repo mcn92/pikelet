@@ -84,6 +84,10 @@ first.
   command's `--help` printed all 176 lines. `compile --help` now also
   lists `--license`, `--calibration`, `--calibration-queries` and
   `--skip-calibration`.
+- **`pikelet-wasm` ships `FORMAT.md`,** the guide to the `.pikelet`
+  format (binary structure, embedded encoder, indexes, integrity,
+  versioning, compatibility and limits), next to its README and
+  CHANGELOG.
 
 ### Fixed
 

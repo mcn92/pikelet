@@ -1,7 +1,8 @@
 // usage: node scripts/stage-package-docs.mjs <package-dir-name> [--clean]
-// npm prepack/postpack helper: copies the repository's CHANGELOG.md, LICENSE,
-// NOTICE and README.md into packages/<name>/ so the published tarball carries
-// them without the repo keeping duplicate copies; --clean removes them again.
+// npm prepack/postpack helper: copies the repository's CHANGELOG.md,
+// FORMAT.md, LICENSE, NOTICE and README.md into packages/<name>/ so the
+// published tarball carries them without the repo keeping duplicate copies;
+// --clean removes them again.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +18,7 @@ if (!fs.existsSync(path.join(target, 'package.json'))) {
   console.error(`no package at ${target}`);
   process.exit(2);
 }
-const FILES = ['CHANGELOG.md', 'LICENSE', 'NOTICE', 'README.md'];
+const FILES = ['CHANGELOG.md', 'FORMAT.md', 'LICENSE', 'NOTICE', 'README.md'];
 for (const file of FILES) {
   const dest = path.join(target, file);
   if (flag === '--clean') {
