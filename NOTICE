@@ -3,3 +3,28 @@ Copyright 2026 Matthew Noonan
 
 This product includes software and file-format specifications developed as
 part of the Pikelet project (https://github.com/mcn92/pikelet).
+
+------------------------------------------------------------------------
+Third-party material redistributed in every compiled .pikelet pack
+------------------------------------------------------------------------
+
+`pikelet compile` embeds a query encoder in each pack it writes, and the
+pikelet package downloads the same encoder on first use. A pack therefore
+redistributes the following, each under the Apache License, Version 2.0
+(the same license as Pikelet; see LICENSE):
+
+all-MiniLM-L6-v2
+  Model weights from sentence-transformers/all-MiniLM-L6-v2
+  (https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2),
+  licensed under the Apache License, Version 2.0.
+  Modified: the weights are quantized to 8-bit integers in blocks of 64
+  and repacked into Pikelet's encoder blob format. Packs compiled with
+  --encoder-model carry that model instead, under its own license.
+
+BERT WordPiece vocabulary
+  vocab.txt from bert-base-uncased (https://github.com/google-research/bert,
+  https://huggingface.co/google-bert/bert-base-uncased), Copyright Google,
+  licensed under the Apache License, Version 2.0. Redistributed unmodified.
+
+The content a pack is compiled from is the compiler's user's, under
+whatever license they record with --license.

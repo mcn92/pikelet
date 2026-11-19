@@ -142,6 +142,10 @@ first.
   command's `--help` printed all 176 lines. `compile --help` now also
   lists `--license`, `--calibration`, `--calibration-queries` and
   `--skip-calibration`.
+- **NOTICE credits the encoder every pack carries:** the
+  all-MiniLM-L6-v2 weights (quantized) and the bert-base-uncased WordPiece
+  vocabulary, both Apache-2.0. It named only Pikelet before. Both npm
+  packages ship it.
 - **`pikelet-wasm` ships `FORMAT.md`,** the guide to the `.pikelet`
   format (binary structure, embedded encoder, indexes, integrity,
   versioning, compatibility and limits), next to its README and

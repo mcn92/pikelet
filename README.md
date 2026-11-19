@@ -165,3 +165,5 @@ Previously known as **Pancake** (renamed September 2026); files from before the 
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+Every `.pikelet` carries its query encoder, so a pack redistributes the all-MiniLM-L6-v2 weights (quantized) and the BERT WordPiece vocabulary, both Apache-2.0. [NOTICE](NOTICE) credits them; keep it with packs you publish.

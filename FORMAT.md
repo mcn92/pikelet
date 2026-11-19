@@ -275,6 +275,9 @@ weights quantized to u8 in blocks of 64 (a 24.3 MiB blob and a
 30,522-token vocabulary). Text longer than the 512-token window is embedded in windows
 whose vectors are mean-pooled (`longInputs: "windowed-mean-pool"`).
 Packs compiled before that declared `maxTokens: 128`.
+The vocabulary is bert-base-uncased's (Apache-2.0, Google), unmodified.
+A pack therefore redistributes both under Apache-2.0; the repository's
+NOTICE file credits them.
 
 The declaration carries **test vectors**: query texts with the embeddings
 the build produced. When the reader loads the encoder it embeds each one
