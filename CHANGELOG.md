@@ -23,8 +23,10 @@ first.
   --no-refit` are accepted and change nothing, and `--calibration <file>`
   still embeds a prebuilt asset. Builds skip the 20 to 30 seconds the fit
   took; a 21-chunk corpus now compiles in 9 s. Recompiling a pack changes its
-  identity. `append` on a chain whose base was calibrated by an earlier
-  build still checks that calibration's drift.
+  identity. `append` checks drift only on a chain whose base was
+  calibrated by an earlier build; on a base without a fit it no longer
+  refuses past 20% of the base's records, needs no `--allow-drift`, and
+  prints no drift figures.
 - **`pikelet mcp` and `pikelet query` no longer report a relevance
   verdict.** Search results drop `matchQuality` and `confidence`, the
   response drops its `note` and `unscoredWarning`, and the `search` tool no

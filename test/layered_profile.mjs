@@ -3719,6 +3719,23 @@ console.log('mcp: a mounted chain embeds queries with the query prefix');
                     JSON.stringify(vp && { v: vp.verdict, g: vp.goldenQueries?.total, note: vp.note }).slice(0, 200));
             }
         }
+        // The drift gate protects an inherited fit. compile ships no fit, so
+        // a 3-record base takes a 1-record append (drift 0.33, past the
+        // reader's 0.2) without --allow-drift, and says nothing about drift.
+        const moreDocs = path.join(mt, 'more');
+        fs.mkdirSync(moreDocs);
+        fs.writeFileSync(path.join(moreDocs, 'glaciers.md'), body('Glaciers', 'Snow packs into ice that flows slowly downhill.'));
+        let appendOut;
+        try {
+            appendOut = { ok: true, text: execFileSync(process.execPath, [path.resolve('packages/pikelet/bin/pikelet.mjs'), 'append',
+                '--parent', basePath, '--source', moreDocs, '--out', path.join(mt, 'grow.pikelet')],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
+        } catch (err) {
+            appendOut = { ok: false, text: String(err.stdout || '') + String(err.stderr || '') };
+        }
+        check('append to an uncalibrated base is not drift-gated and reports no drift',
+            appendOut.ok && !/calibrationDrift|drift/i.test(appendOut.text) && /Wrote /.test(appendOut.text),
+            appendOut.text.slice(-240));
     } finally {
         fs.rmSync(mt, { recursive: true, force: true });
     }

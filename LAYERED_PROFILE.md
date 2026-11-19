@@ -987,9 +987,12 @@ complete profile never promised:
    (section 7).
 
 `append` MUST be byte-deterministic for identical inputs and parent, as
-`compile` is. It MUST refuse to produce a layer whose drift would exceed
-the chain's effective limit (5.5, computed with the producer's own
-`readerLimit` policy) unless `--allow-drift` is given.
+`compile` is. On a chain whose base carries a fit, it MUST refuse to
+produce a layer whose drift would exceed the chain's effective limit (5.5,
+computed with the producer's own `readerLimit` policy) unless
+`--allow-drift` is given. A chain whose status is `none` has no fit to
+outgrow, so its drift gates nothing; the reference `compile` ships every
+base that way.
 
 **A layer must do something.** `append` MUST refuse to emit a layer that
 introduces neither a record nor a new tombstone — `records == 0` and

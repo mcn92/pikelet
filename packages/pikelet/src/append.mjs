@@ -245,19 +245,24 @@ export async function appendLayer(flags, options = {}) {
     });
 
     // Drift: append MUST refuse past the effective limit unless --allow-drift.
+    // The gate protects an inherited fit; a base without one (every pack
+    // compile builds today) has nothing to outgrow, so it is not gated (5.5).
+    const gated = info.calibrationStatus !== 'none';
     const drift = checkAppendDrift({
       baseRecords: head.baseRecords,
       appendedBefore: head.appendedBefore,
       newRecords: plan.records,
       headTombstones: plan.tombstones,
-      effectiveLimit: info.driftLimit,
+      effectiveLimit: gated ? info.driftLimit : Infinity,
       allowDrift: flags['allow-drift'] === true,
     });
 
     log(`Planned layer: depth ${plan.depth}, rowBase ${plan.rowBase}, +${plan.records} record(s), `
       + `${plan.delta.length} new tombstone(s), ${plan.supersessions.length} supersession(s)`);
-    log(`  calibrationDrift would be ${drift.drift.toFixed(4)} against limit ${info.driftLimit}`
-      + `${drift.exceedsLimit ? ' — EXCEEDED, the chain will serve unscored' : ''}`);
+    if (gated) {
+      log(`  calibrationDrift would be ${drift.drift.toFixed(4)} against limit ${info.driftLimit}`
+        + `${drift.exceedsLimit ? ' — EXCEEDED, the chain will serve unscored' : ''}`);
+    }
 
     // --- 6. Embed with the BASE's encoder (6.1 step 3) ----------------------
     // Not this CLI's packaged weights: the base's own, resolved by the base's
@@ -339,7 +344,7 @@ export async function appendLayer(flags, options = {}) {
       log(`Built the layer's vocabulary bloom: ${built.keptWords} term(s) at the base's geometry `
         + `(${geom.bits} bits)`);
     } else if (chunks.length) {
-      log('The base carries no vocabulary bloom, so this layer ships none (the chain stays unscored)');
+      log('The base carries no calibration, so this layer ships no vocabulary bloom');
     }
 
     const { buildLayerSegments } = await import('pikelet-wasm/complete/layer-append.mjs');
@@ -371,8 +376,10 @@ export async function appendLayer(flags, options = {}) {
     log(`Wrote ${outPath}`);
     log(`  ${(written.fileBytes / 1024).toFixed(1)} KiB, depth ${plan.depth}, +${plan.records} record(s), `
       + `identity ${written.identity}`);
-    log(`  calibrationDrift ${drift.drift.toFixed(4)}`
-      + `${drift.exceedsLimit ? ' (drift-exceeded: the chain serves unscored)' : ''}`);
+    if (gated) {
+      log(`  calibrationDrift ${drift.drift.toFixed(4)}`
+        + `${drift.exceedsLimit ? ' (drift-exceeded: the chain serves unscored)' : ''}`);
+    }
     // Mounting the newest layer walks its parent locators down to the base, and
     // the head identity pins every member. (The library's openPikeletChain
     // takes a query vector, not text, so it is no copy-paste next step.)
