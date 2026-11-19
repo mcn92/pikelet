@@ -2028,15 +2028,10 @@ console.log('row map: index rows group into records');
 }
 
 // ---------------------------------------------------------------------------
-// Compile-time calibration: matchQuality is retrieval relevance (v6)
+// Compile: no calibration, golden queries verified against the shipped file
 // ---------------------------------------------------------------------------
-console.log('calibration: a compiled pack scores relevance, fit against off-topic queries');
+console.log('compile: an uncalibrated pack with golden queries that reproduce');
 {
-    // The calibrator fits verified on-topic probes against off-topic ones
-    // (foreign bank + gibberish); in-domain-unanswerable hard negatives are
-    // only a reported diagnostic. So an off-topic query is "none", while a
-    // question about a covered topic stays visible even when the corpus
-    // lacks its specific fact — telling those apart is the reader's job.
     const { execFileSync } = await import('node:child_process');
     const docs = path.join(tmp, 'calibration-docs');
     fs.mkdirSync(docs);
@@ -2054,40 +2049,52 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
         fs.writeFileSync(path.join(docs, `${file}.md`), `# ${title}\n\n${a}\n\n${b}\n\n${a} ${b}\n`);
     }
     const out = path.join(tmp, 'calibrated.pikelet');
-    execFileSync(process.execPath, [path.join(ROOT, 'packages', 'pikelet', 'bin', 'pikelet.mjs'),
-        'compile', '--source', docs, '--out', out], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const compileLog = execFileSync(process.execPath, [path.join(ROOT, 'packages', 'pikelet', 'bin', 'pikelet.mjs'),
+        'compile', '--source', docs, '--out', out], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    check('compile fits no calibration and says how many golden queries it embedded',
+        !/Calibrat/.test(compileLog) && /Embedded \d+ golden queries, each verified to retrieve its source/.test(compileLog), compileLog.slice(-500));
     const pack = await openPikeletFile(out);
-    const cal = (await pack.evaluation()).calibration;
-    check('the evaluation segment records the relevance target',
-        cal?.method === 'self-templates-v6' && cal?.target === 'relevance', JSON.stringify(cal && { method: cal.method, target: cal.target }));
-    check('the cross-validated AUC against off-topic clears the gate', cal?.cvAuc >= 0.85, String(cal?.cvAuc));
-    check('the in-domain-unanswerable diagnostic is reported',
-        cal?.cvAucHard === null || (cal?.cvAucHard >= 0 && cal?.cvAucHard <= 1), String(cal?.cvAucHard));
-    const verdict = async (q) => (await pack.query(q, { k: 5, showAbstained: true })).matchQuality;
-    for (const q of ['why are there two high tides a day', 'what makes bread dough rise',
-        'how do bees tell each other where flowers are']) {
-        const v = await verdict(q);
-        check(`an on-topic question is not "none": ${q}`, v === 'strong' || v === 'weak', v);
+    const evaluation = await pack.evaluation();
+    check('the evaluation segment carries no calibration figures', evaluation.calibration === undefined, JSON.stringify(evaluation.calibration));
+    check('a compiled pack is unscored', (await pack.query('what makes bread dough rise', { k: 5 })).matchQuality === 'unscored');
+    const goldens = evaluation.goldenQueries;
+    let reproduced = 0;
+    for (const g of goldens) {
+        const results = (await pack.query(g.text, { k: 10 })).results;
+        if (g.expectId !== undefined ? results.some((r) => r.id === g.expectId) : results.some((r) => (r.title || '').trim() === g.expectTitle)) reproduced++;
     }
-    // Covered topic, absent fact: relevance keeps these visible.
-    for (const q of ['how many eggs does a honeybee queen lay per day', 'what temperature should bread be baked at']) {
-        const v = await verdict(q);
-        check(`a covered topic with an absent fact stays visible: ${q}`, v === 'strong' || v === 'weak', v);
-    }
-    for (const q of ['how do I renew my passport', 'best mortgage refinance rates', 'nginx 502 bad gateway fix']) {
-        const v = await verdict(q);
-        check(`an off-topic question is "none": ${q}`, v === 'none', v);
-    }
-    // The show/hide gate: shipped, capped at 0.15, and a paraphrase that
-    // shares almost no words with its passage is not hidden.
-    check('the asset ships a distance-only show/hide gate capped at 0.15',
-        cal?.gate?.hard > 0 && cal.gate.hard <= 0.15 && JSON.stringify(cal.gate.features) === '["d0","margin","mean10"]',
-        JSON.stringify(cal?.gate));
-    for (const q of ['why does the sea come in and go out twice daily', 'what makes a loaf puff up before it goes in the oven']) {
-        const v = await verdict(q);
-        check(`a paraphrase sharing few words with its passage is not "none": ${q}`, v === 'strong' || v === 'weak', v);
-    }
+    check('between 1 and 24 golden queries ship, and every one retrieves its source from the shipped file',
+        goldens.length >= 1 && goldens.length <= 24 && reproduced === goldens.length, `${reproduced}/${goldens.length}`);
+    check('the goldens come from both generators: title questions and chunk content words',
+        goldens.some((g) => g.expectTitle !== undefined) && goldens.some((g) => g.expectId !== undefined));
     await pack.close();
+
+    // Author-written questions: embedded first when they retrieve their
+    // source, skipped by name when they name no record.
+    const authored = path.join(tmp, 'golden-questions.jsonl');
+    fs.writeFileSync(authored, `${JSON.stringify({ text: 'why does dough get bigger before baking', expectTitle: 'Bread' })}\n`
+        + `${JSON.stringify({ text: 'what is a sourdough starter', expectTitle: 'Sourdough' })}\n`);
+    const withAuthored = path.join(tmp, 'authored.pikelet');
+    const authoredLog = execFileSync(process.execPath, [path.join(ROOT, 'packages', 'pikelet', 'bin', 'pikelet.mjs'),
+        'compile', docs, '--out', withAuthored, '--golden-queries', authored], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const authoredPack = await openPikeletFile(withAuthored);
+    const authoredGoldens = (await authoredPack.evaluation()).goldenQueries;
+    await authoredPack.close();
+    check('--golden-queries embeds the author\'s question first and names the one that matches no record',
+        authoredGoldens[0]?.text === 'why does dough get bigger before baking' && authoredGoldens.length <= 24
+        && /no record is titled "Sourdough"/.test(authoredLog) && /\(1 of your 2 questions\)/.test(authoredLog), authoredLog.slice(-600));
+    const legacyName = execFileSync(process.execPath, [path.join(ROOT, 'packages', 'pikelet', 'bin', 'pikelet.mjs'),
+        'compile', docs, '--out', path.join(tmp, 'legacy-flags.pikelet'), '--calibration-queries', authored, '--skip-calibration'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    check('--calibration-queries still works as the old name, and --skip-calibration is accepted',
+        /\(1 of your 2 questions\)/.test(legacyName), legacyName.slice(-300));
+    let bothNames = '';
+    try {
+        execFileSync(process.execPath, [path.join(ROOT, 'packages', 'pikelet', 'bin', 'pikelet.mjs'),
+            'compile', docs, '--out', path.join(tmp, 'both.pikelet'), '--calibration-queries', authored, '--golden-queries', authored],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (error) { bothNames = String(error.stderr); }
+    check('giving both --golden-queries and its old name is refused', /old name for --golden-queries/.test(bothNames), bothNames.slice(0, 200));
 
     // Calibration retrieves through __calibrationEvidence, the same code
     // query() serves from, so the evidence a fit sees is the evidence a
@@ -2170,10 +2177,9 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     try { compileAt(path.join(tmp, 'reproducible-bad.pikelet'), 'yesterday'); } catch (error) { refused = String(error.stderr); }
     check('a malformed SOURCE_DATE_EPOCH is refused', /SOURCE_DATE_EPOCH must be a whole number/.test(refused || ''), refused);
 
-    // Compaction refits calibration (LAYERED_PROFILE 6.3) through the
-    // compacted pack's own retrieval, so the refit runs end to end here
-    // rather than only its --no-refit fallback.
-    console.log('compaction: the refit fits through the compacted pack and scores');
+    // Compaction ships the folded base unscored: the inherited fit may not
+    // cross it (LAYERED_PROFILE 6.3), and nothing refits one.
+    console.log('compaction: the folded base ships unscored and serves every live record');
     const more = path.join(tmp, 'calibration-more');
     fs.mkdirSync(more);
     fs.writeFileSync(path.join(more, 'comets.md'), '# Comets\n\nA comet is a ball of ice and dust that grows a glowing coma and a long tail as it nears the sun.\n\n'
@@ -2184,22 +2190,18 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     cli(['append', '--parent', out, '--source', more, '--out', layer]);
     const compacted = path.join(tmp, 'compacted.pikelet');
     const compactLog = cli(['compact', '--head', out, '--head', layer, '--out', compacted]);
-    check('compaction refits rather than shipping unscored', /Calibration: refit over the compacted corpus/.test(compactLog), compactLog.slice(-300));
-    check('the refit leaves no uncalibrated scratch file behind', !fs.existsSync(`${compacted}.uncalibrated`));
+    check('compaction refits nothing', !/Refitting|refit over/.test(compactLog) && !fs.existsSync(`${compacted}.uncalibrated`), compactLog.slice(-300));
     const folded = await openPikeletFile(compacted);
-    const foldedVerdict = async (q) => (await folded.query(q, { k: 5, showAbstained: true })).matchQuality;
-    for (const q of ['why does a comet grow a tail', 'what makes bread dough rise']) {
-        const v = await foldedVerdict(q);
-        check(`the compacted pack scores an on-topic question: ${q}`, v === 'strong' || v === 'weak', v);
+    for (const [q, title] of [['why does a comet grow a tail', 'Comets'], ['what makes bread dough rise', 'Bread']]) {
+        const out = await folded.query(q, { k: 5 });
+        check(`the compacted pack is unscored and ranks the base's and the layer's records: ${q}`,
+            out.matchQuality === 'unscored' && out.results[0]?.title === title, `${out.matchQuality} ${out.results[0]?.title}`);
     }
-    const offTopic = await foldedVerdict('best mortgage refinance rates');
-    check('the compacted pack scores an off-topic question "none"', offTopic === 'none', offTopic);
     await folded.close();
 
     // Sentence windows: compile indexes each chunk plus its 2-sentence
-    // windows, maps the rows back to chunks, and calibrates through the same
-    // windowed retrieval it serves.
-    console.log('sentence windows: compile, serve and calibrate over windowed rows');
+    // windows and maps the rows back to chunks.
+    console.log('sentence windows: compile and serve over windowed rows');
     const windowedOut = path.join(tmp, 'windowed.pikelet');
     // The source as the first argument and --flag=value are the documented
     // shorthands for --source and --flag value.
@@ -2220,8 +2222,8 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
             && new Set(served.results.map((r) => r.id)).size === served.results.length) wSame++;
     }
     check('windowed calibration evidence matches what query() serves, one result per record', wSame === probes.length, `${wSame}/${probes.length}`);
-    const wverdict = (await wpack.query('how do bees tell each other where flowers are', { k: 5, showAbstained: true })).matchQuality;
-    check('a windowed pack is calibrated and scores an on-topic question', wverdict === 'strong' || wverdict === 'weak', wverdict);
+    const wtop = (await wpack.query('how do bees tell each other where flowers are', { k: 5 })).results[0]?.title;
+    check('a windowed pack ranks the passage that answers first', wtop === 'Honeybees', wtop);
     await wpack.close();
     let appendRefusal = '';
     try { cli(['append', '--parent', windowedOut, '--source', more, '--out', path.join(tmp, 'windowed.0001.pikelet')]); } catch (error) { appendRefusal = String(error.stderr); }
@@ -2280,7 +2282,7 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     check('mcp --help prints mcp\'s help instead of asking for a pack', /pikelet mcp --pack/.test(cli(['mcp', '--help'])));
     check('-h and help <command> reach a command\'s help',
         /pikelet append --parent/.test(cli(['append', '-h'])) && cli(['help', 'append']) === cli(['append', '--help']));
-    check('compile --help lists the flags compile takes', ['--license', '--calibration-queries', '--skip-calibration', '--sentence-windows']
+    check('compile --help lists the flags compile takes', ['--license', '--golden-queries', '--calibration', '--sentence-windows']
         .every((flag) => cli(['compile', '--help']).includes(flag)));
 
     // Mistyped commands and flags fail with a message instead of starting the

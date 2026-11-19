@@ -6,7 +6,7 @@ import fssync from 'node:fs';
 import path from 'node:path';
 import { sha256, loadCompleteModules, CliError, packBuildTimestamp, loadArtifactContract } from './common.mjs';
 import { publicChunk, ingestDeclaration, SENTENCE_WINDOWS_KIND } from './ingest.mjs';
-import { calibrateRetrievalAbstention } from './calibrate.mjs';
+import { pickGoldenQueries, GOLDEN_K } from './goldens.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
 
 async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, snapshot, vectors, rowOffsets = null, windowSize = 0, log = () => {}, logDetail = log }) {
@@ -22,8 +22,8 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
   const declaration = inlineEncoderDeclaration(config, encoder);
   const vocabText = await fs.readFile(vocabPath, 'utf8');
   const weightBytes = await fs.readFile(weightsPath);
-  // One embedder serves both the declaration's verification vectors and
-  // abstention calibration; created on first need, disposed after both.
+  // The embedder for the declaration's verification vectors; created on
+  // first need, disposed once they are built.
   let embedder = null;
   const getEmbedder = async () => {
     if (!embedder) {
@@ -36,15 +36,8 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
     }
     return embedder;
   };
-  // Built early (before calibration, not in its usual position after
-  // corpusSegment below) so calibration can fit coverage against the same
-  // fused vector+BM25 ranking the reader serves, not a vector-only
-  // approximation of it.
   const lexical = buildLexicalSegment(chunks.map((chunk) => chunk.text || ''));
   logDetail(`Built lexical index: ${lexical.meta.terms.toLocaleString()} terms over ${lexical.meta.docCount.toLocaleString()} records (${(lexical.bytes.length / 1024).toFixed(0)} KiB)`);
-  let calibrationBytes = null;
-  let goldenQueries = [];
-  let calibrationSummary = null;
   try {
     if (!Array.isArray(declaration.testVectors) || declaration.testVectors.length === 0) {
       // Contract section 4.4 mode 1: an inline encoder carries verification
@@ -54,9 +47,8 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
       declaration.testVectors = await buildInlineTestVectors(await getEmbedder());
       logDetail(`Embedded ${declaration.testVectors.length} encoder verification vectors in the declaration`);
     }
-  } catch (error) {
+  } finally {
     embedder?.dispose();
-    throw error;
   }
   const inlineEncoderBytes = buildInlineTransformerEncoderSegment({
     declaration,
@@ -94,64 +86,20 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
     kind: 'docs-site-build-v1',
     ...(generatedAt ? { generatedAt } : {}),
     querySet: runtime.evaluation?.queries || [],
-    // Each verified at build time to retrieve its source — first by
-    // calibration, through the uncalibrated artifact's own retrieval, then
-    // replayed through the assembled artifact's query() (below), so the
-    // tests the file carries are true of the file by construction. expectId names a chunk id, expectTitle any chunk
-    // of the titled document.
+    // Each verified at build time to retrieve its source through the
+    // assembled file's own query() (goldens.mjs), so the tests the file
+    // carries are true of it by construction. expectId names a chunk id,
+    // expectTitle any chunk of the titled document.
     goldenQueries: goldens,
     // COMPLETE_PROFILE.md section 5.4: the recall-vs-C measurements behind
     // this artifact's recommendedRerank.
     rerankSweep,
-    // Calibration quality, kept for audit after the file ships. method and
-    // target say what matchQuality measures (self-templates-v6: relevance,
-    // fit against off-topic queries). fitAuc is in-sample and optimistic;
-    // cvAuc is the pooled 5-fold held-out AUC against off-topic queries
-    // (the gate); cvAucHard is the in-domain-unanswerable diagnostic,
-    // never fit or gated. realQueryAuc/realQueryAbstentionRate are the
-    // only real validation this asset can have: human-written queries
-    // (runtime.calibrationQueries), held out of the fit entirely. null
-    // when the corpus shipped none. A pack that shipped without
-    // calibration (encoder.calibrationPath set, or the corpus failed the
-    // fit gates) carries calibration: null here.
-    ...(calibrationSummary ? {
-      calibration: {
-        method: calibrationSummary.method,
-        target: calibrationSummary.target,
-        fitAuc: calibrationSummary.fitAuc,
-        cvAuc: calibrationSummary.cvAuc,
-        cvAucHard: calibrationSummary.cvAucHard,
-        // A regression specific to the substituted (low-coverage) class is
-        // exactly the failure the pooled numbers above can hide — see
-        // calibrate.mjs's design note.
-        cvAucByGenKind: calibrationSummary.cvAucByGenKind,
-        verifiedPositiveQueries: calibrationSummary.verifiedPositiveQueries,
-        positivesByGenKind: calibrationSummary.positivesByGenKind,
-        ablationNegativeQueries: calibrationSummary.ablationNegativeQueries,
-        entitySwapNegativeQueries: calibrationSummary.entitySwapNegativeQueries,
-        weakQueries: calibrationSummary.weakQueries,
-        humanCalibrationQueries: calibrationSummary.humanCalibrationQueries,
-        realQueryAuc: calibrationSummary.realQueryAuc,
-        realQueryAbstentionRate: calibrationSummary.realQueryAbstentionRate,
-        // The distance-only show/hide gate's threshold (capped and uncapped)
-        // and features; null when the pack shipped without one.
-        gate: calibrationSummary.gate ?? null,
-        // Comparison-only: how a semantic (embedding) word-grounding signal
-        // would separate positives from hard negatives versus the lexical
-        // coverage1 feature that actually feeds the fit. Not used for
-        // scoring — two attempts at blending it in (see calibrate.mjs's
-        // GROUNDING_FEAT design note) both made real-query behavior worse.
-        maxSimVsCoverage: calibrationSummary.maxSimVsCoverage,
-        maxSimInFit: calibrationSummary.maxSimInFit,
-      },
-    } : { calibration: null }),
   }), 'utf8');
   const outPath = path.join(assetsDir, runtime.fileName || 'search.pikelet');
   const corpusSegment = buildCorpusSegment(records);
   const rowMapBytes = rowOffsets ? buildRowMapSegment(rowOffsets) : null;
-  // lexical (BM25 segment for hybrid retrieval, kind 5) was built earlier,
-  // above, so calibration could fit against the same fused ranking it backs
-  // at serve time. Older readers skip the segment.
+  // lexical: the BM25 segment for hybrid retrieval (kind 5), built above.
+  // Older readers skip the segment.
   const assemble = (goldens, calibration, target = outPath) => assemblePikeletFile({
     profile: PROFILE_V2,
     corpus: {
@@ -191,122 +139,31 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
     { kind: 'lexical', bytes: lexical.bytes },
     ...(rowMapBytes ? [{ kind: 'rowmap', bytes: Buffer.from(rowMapBytes) }] : []),
   ], target);
+  // A pack carries a calibration only when one is supplied prebuilt
+  // (encoder.calibrationPath: compile --calibration, the Docusaurus
+  // plugin's completeProfile.calibration); compile fits none, and the
+  // reader reports such a pack "unscored".
+  const calibrationBytes = encoder.calibrationPath
+    ? await fs.readFile(path.resolve(projectDir, encoder.calibrationPath))
+    : unscored;
+  let result = assemble([], calibrationBytes);
+  // Golden queries are verified against the assembled file's own retrieval,
+  // then embedded by reassembling it; the evaluation segment feeds no
+  // retrieval, so they stay true of the final bytes.
+  const pack = await openPikeletFile(outPath);
+  let picked;
   try {
-    if (encoder.calibrationPath) {
-      calibrationBytes = await fs.readFile(path.resolve(projectDir, encoder.calibrationPath));
-    } else if (runtime.calibration === 'auto') {
-      const embedQuery = async (text) => (await (await getEmbedder()).embed(`${declaration.prefixPolicy?.query || ''}${text}`)).vector;
-      // Word-level vectors for maxSimFrac (comparison feature — see
-      // calibrate.mjs's design note): no query/passage prefix, since a
-      // single word is not itself a query needing an instruction prefix —
-      // that would distort the word's own meaning vector for no benefit.
-      const embedWordVecs = async (text) => (await getEmbedder()).embedWords(text);
-      // Calibration retrieves through the artifact itself: the complete
-      // file is assembled unscored, opened with the reader, and every probe
-      // runs the reader's own retrieval (sketch scan, BM25 candidates,
-      // exact rerank, fusion, phrase pin). The calibration segment feeds
-      // none of that, so the evidence gathered here is exactly what the
-      // calibrated file below serves.
-      const uncalibratedPath = `${outPath}.uncalibrated`;
-      let calibrated;
-      try {
-        assemble([], unscored, uncalibratedPath);
-        const uncalibrated = await openPikeletFile(uncalibratedPath);
-        try {
-          const evidence = (text, options) => uncalibrated.__calibrationEvidence(text, options);
-          calibrated = await calibrateRetrievalAbstention({ chunks, config, embedQuery, embedWordVecs, evidence, log, projectDir });
-        } finally {
-          await uncalibrated.close();
-        }
-      } finally {
-        fssync.rmSync(uncalibratedPath, { force: true });
-      }
-      if (calibrated) {
-        calibrationBytes = Buffer.from(JSON.stringify(calibrated.calibrationJson), 'utf8');
-        // Retrieval-verified positives double as golden queries: embedded
-        // in the evaluation segment, so any later reader can re-run the
-        // pack's own tests from inside the file (mcp verify_pack).
-        goldenQueries = calibrated.goldenQueries || [];
-        // Kept for the evaluation segment (below) so a shipped pack's own
-        // calibration quality is auditable after the fact — verify_pack can
-        // report it instead of the numbers being build-log-only.
-        calibrationSummary = calibrated.summary;
-        const {
-          verifiedPositiveQueries, foreignNegativeQueries, syntheticGibberishQueries,
-          ablationNegativeQueries, entitySwapNegativeQueries, heldOutNegativeQueries, weakQueries, fitAuc, cvAuc, cvAucHard,
-          humanCalibrationQueries, realQueryAuc, realQueryAbstentionRate, maxSimVsCoverage, maxSimInFit,
-        } = calibrated.summary;
-        const validation = humanCalibrationQueries
-          ? `${humanCalibrationQueries} human queries: AUC ${realQueryAuc ?? 'n/a'}, abstention rate ${((realQueryAbstentionRate ?? 0) * 100).toFixed(0)}%`
-          : 'no human queries (runtime.calibrationQueries) — validated by cross-validation only';
-        // One line by default; the fit's diagnostics follow with --verbose.
-        const auc = (v) => (typeof v === 'number' ? v.toFixed(3) : 'n/a');
-        log(`Calibrated matchQuality: cross-validated AUC ${auc(cvAuc)} separating ${verifiedPositiveQueries} on-topic from `
-          + `${foreignNegativeQueries + syntheticGibberishQueries} off-topic questions`
-          + (humanCalibrationQueries ? `; your ${humanCalibrationQueries} questions: AUC ${auc(realQueryAuc)}` : ''));
-        logDetail(`Calibrated relevance: ${verifiedPositiveQueries} on-topic / ${foreignNegativeQueries} off-domain + `
-          + `${syntheticGibberishQueries} gibberish off-topic / ${weakQueries} weak queries, `
-          + `5-fold CV AUC ${auc(cvAuc)} vs off-topic (fit AUC ${auc(fitAuc)}, in-sample), validation: ${validation}`);
-        logDetail(`  in-domain-unanswerable diagnostic (not used in the fit): AUC ${auc(cvAucHard)} vs `
-          + `${ablationNegativeQueries} ablation + ${entitySwapNegativeQueries} entity-swap + ${heldOutNegativeQueries} held-out-doc `
-          + 'hard negatives; matchQuality measures relevance, so "strong" does not by itself mean the passage holds the fact');
-        // maxSim1 is comparison-only (see calibrate.mjs's GROUNDING_FEAT
-        // design note: max(coverage1, maxSim1) has been tried twice —
-        // unrescaled, then rescaled and damped — and reverted both times,
-        // the second time for making real-query behavior worse despite a
-        // better AUC number). Logged so it's visible without pulling
-        // apart the artifact.
-        if (maxSimVsCoverage?.maxSimSeparationAuc !== null && maxSimVsCoverage !== undefined) {
-          logDetail(`  maxSim1 vs coverage1 vs ablation hard negatives (comparison only, not used in the fit): separation AUC `
-            + `${auc(maxSimVsCoverage.maxSimSeparationAuc)} vs ${auc(maxSimVsCoverage.coverageSeparationAuc)}; `
-            + `mean positive/hard-negative ${maxSimVsCoverage.meanMaxSimPositive}/${maxSimVsCoverage.meanMaxSimHardNegative} `
-            + `vs ${maxSimVsCoverage.meanCoveragePositive}/${maxSimVsCoverage.meanCoverageHardNegative}`);
-          const para = maxSimVsCoverage.paraphrase;
-          if (para?.coverage1) {
-            logDetail(`  maxSim1 vs coverage1 on real paraphrases (base vs. substituted positives, lower AUC = more `
-              + `paraphrase-robust): maxSim1 ${para.maxSim1 ? auc(para.maxSim1.separationAuc) : 'n/a'} `
-              + `(mean ${para.maxSim1 ? para.maxSim1.meanBase : 'n/a'} -> ${para.maxSim1 ? para.maxSim1.meanSubstituted : 'n/a'}) `
-              + `vs coverage1 ${auc(para.coverage1.separationAuc)} (mean ${para.coverage1.meanBase} -> ${para.coverage1.meanSubstituted})`);
-          }
-        }
-      }
-    }
+    picked = await pickGoldenQueries({
+      chunks, config, projectDir, log,
+      query: async (text) => (await pack.query(text, { k: GOLDEN_K, showAbstained: true })).results,
+    });
   } finally {
-    embedder?.dispose();
+    await pack.close();
   }
-  calibrationBytes ??= unscored;
-  let result = assemble(goldenQueries, calibrationBytes);
-  // Replay the candidate goldens through the assembled artifact's own
-  // retrieval (sketch scan + rerank + hybrid ordering, inline encoder) —
-  // the configuration a reader will actually run, at k = 10, which the
-  // calibration's own checks need not match. A golden that does not
-  // reproduce there is dropped and the file reassembled (with the same
-  // calibration): verify_pack and acceptance tests
-  // must pass by construction on the shipped bytes. (The evaluation
-  // segment does not feed retrieval, so the replay stays valid across
-  // the reassembly.)
-  if (goldenQueries.length) {
-    const replay = await openPikeletFile(outPath);
-    let kept;
-    try {
-      kept = [];
-      for (const golden of goldenQueries) {
-        const out = await replay.query(golden.text, { k: 10 });
-        const hit = golden.expectId !== undefined
-          ? out.results.some((r) => r.id === golden.expectId)
-          : out.results.some((r) => (r.title || '').trim() === golden.expectTitle);
-        if (hit) kept.push(golden);
-      }
-    } finally {
-      await replay.close();
-    }
-    if (kept.length !== goldenQueries.length) {
-      logDetail(`Golden replay against the assembled artifact: ${kept.length}/${goldenQueries.length} reproduce; embedding the ${kept.length} that do`);
-      result = assemble(kept, calibrationBytes);
-    } else {
-      logDetail(`Golden replay against the assembled artifact: ${kept.length}/${kept.length} reproduce`);
-    }
-  }
+  if (picked.goldens.length) result = assemble(picked.goldens, calibrationBytes);
+  log(`Embedded ${picked.goldens.length} golden queries, each verified to retrieve its source`
+    + (picked.authored ? ` (${picked.authoredKept} of your ${picked.authored} questions)` : ''));
+  logDetail(`  ${picked.generatedKept} of ${picked.generated} generated questions retrieved their source in the top ${GOLDEN_K}`);
   return {
     profile: PROFILE_V2,
     kind: 'inline-transformer-v1',

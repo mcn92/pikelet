@@ -53,7 +53,7 @@ section('calibration: questions that name no record are reported');
       await loadCalibrationQueries({ runtime: { calibrationQueries: 'nope.jsonl' } }, dir, () => {});
     } catch (e) { err = e; }
     check('a questions file that does not exist is an error naming it, not an empty list',
-      /calibration queries file not found: .*nope\.jsonl/.test(err?.message || ''), err?.message);
+      /golden queries file not found: .*nope\.jsonl/.test(err?.message || ''), err?.message);
     await fs.writeFile(path.join(dir, 'q.jsonl'), `${JSON.stringify({ text: 'how do restores work', expectTitle: 'Snapshot restore' })}\n`);
     const loaded = await loadCalibrationQueries({ runtime: { calibrationQueries: 'q.jsonl' } }, dir, () => {});
     check('an existing questions file loads', loaded.length === 1 && loaded[0].sourceTitle === 'Snapshot restore');

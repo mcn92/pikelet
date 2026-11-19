@@ -1,7 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-// Build-time matchQuality calibration for complete kind-3 artifacts.
+// matchQuality calibration for complete kind-3 artifacts. compile and
+// compact no longer run it (docs/calibration.md, "Why the verdict was
+// dropped"); calibrateRetrievalAbstention stays for the research harness
+// (scripts/calibration-harness.mjs) and the BEIR measurements, its question
+// generators make golden queries (goldens.mjs), and append ships a
+// layer's vocabulary bloom for chains on calibrated bases.
 //
 // Fits a logistic model on the reader's own retrieval signals (d0, margin,
 // mean10, known_frac) plus coverage1, so matchQuality measures retrieval
@@ -190,7 +195,7 @@ function chooseHeldOutTitles(chunks, titles, seed) {
   return { titles: heldOut, chunks: count };
 }
 
-function titleQuestions(titles, n, seed) {
+export function titleQuestions(titles, n, seed) {
   const per = Math.min(TEMPLATES.length, Math.max(1, Math.floor(n / titles.length)));
   const seen = new Set();
   return sample(titles, Math.min(n, titles.length * TEMPLATES.length), seed)
@@ -215,7 +220,7 @@ const CONTENT_FRAMES = [
   (w) => `is anything said about ${w}`,
 ];
 
-function contentWordQuestions(chunks, n, seed, eligiblePos = null) {
+export function contentWordQuestions(chunks, n, seed, eligiblePos = null) {
   const next = rng(seed);
   const pool = (eligiblePos ?? chunks.map((_, pos) => pos)).map((pos) => ({ chunk: chunks[pos], pos }));
   const picked = sample(pool, Math.min(n, pool.length * 2), seed ^ 0x77aa11);
@@ -565,7 +570,7 @@ export async function loadCalibrationQueries(config, projectDir, log) {
   } catch (err) {
     // The path is set only when someone asked for it, so a missing file is an
     // error, not a corpus without human questions.
-    if (err.code === 'ENOENT') throw new Error(`calibration queries file not found: ${file}`);
+    if (err.code === 'ENOENT') throw new Error(`golden queries file not found: ${file}`);
     throw err;
   }
   const out = [];
@@ -574,7 +579,7 @@ export async function loadCalibrationQueries(config, projectDir, log) {
     if (!trimmed) continue;
     let row;
     try { row = JSON.parse(trimmed); } catch {
-      log(`Calibration: skipping malformed line in ${rel}: ${trimmed.slice(0, 80)}`);
+      log(`Golden queries: skipping malformed line in ${rel}: ${trimmed.slice(0, 80)}`);
       continue;
     }
     if (typeof row?.text !== 'string' || !row.text.trim()) continue;

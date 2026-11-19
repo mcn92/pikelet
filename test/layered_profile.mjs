@@ -3539,6 +3539,15 @@ console.log('mcp: verify_pack on a chain runs the base\'s tests and says so');
         && out.chain.calibrationStatus === undefined && out.calibration === undefined && out.abstentionProbes === undefined
         && /base pack's tests run against the whole chain/.test(out.note || ''),
         JSON.stringify({ chain: out.chain, note: out.note }));
+    // A base built before packs carried goldens has no evaluation segment.
+    const untested = new Map([['docs', {
+        chain: true, identity: 'c'.repeat(64),
+        search: { ...packs.get('docs').search, evaluation: async () => null },
+    }]]);
+    const bare = await callVerifyPack(untested, {});
+    check('verify_pack on a chain whose base carries no tests says so without blaming an older build',
+        bare.verdict === 'no-tests' && /chain-level tests are not assembled yet/.test(bare.note || '')
+        && !/older build/.test(bare.note || ''), String(bare.note).slice(0, 160));
 }
 
 console.log('mcp: a mounted chain embeds queries with the query prefix');
@@ -3563,7 +3572,7 @@ console.log('mcp: a mounted chain embeds queries with the query prefix');
     fs.writeFileSync(path.join(docs, 'bread.md'), body('Bread', 'Yeast ferments sugar so dough rises before baking.'));
     const basePath = path.join(mt, 'base.pikelet');
     execFileSync(process.execPath, [path.resolve('packages/pikelet/bin/pikelet.mjs'), 'compile',
-        '--source', docs, '--out', basePath, '--skip-calibration', '--encoder-query-prefix', 'query: '],
+        '--source', docs, '--out', basePath, '--encoder-query-prefix', 'query: '],
     { stdio: ['ignore', 'pipe', 'pipe'] });
     const readManifestOf = (p) => {
         const buf = fs.readFileSync(p);
@@ -3696,19 +3705,18 @@ console.log('mcp: a mounted chain embeds queries with the query prefix');
                     : sp?.text ? String(sp.text).slice(0, 140)
                         : JSON.stringify({ d: sec?.results?.[0]?.distance, id: listed?.identity?.slice(0, 12) }));
             if (label === 'bare') {
-                // The base was compiled --skip-calibration, so it carries no
-                // tests; the chain must still report its members, encoder and
-                // integrity state, and must not blame an "older build".
+                // The chain must report its members, encoder and integrity
+                // state, and run its base's golden queries as the base's.
                 const vp = out.verify ? parse(out.verify) : null;
                 check('verify_pack on a chain reports its members, encoder and integrity state',
                     vp?.chain?.members?.length === 2 && vp.chain.members[1].tombstoneOnly === true
                     && vp.encoderVerified === true && typeof vp.corpusIntegrity === 'string'
                     && typeof vp.indexRowIntegrity === 'string',
                     JSON.stringify(vp && { chain: vp.chain, encoderVerified: vp.encoderVerified, ci: vp.corpusIntegrity }).slice(0, 200));
-                check('verify_pack on an untested chain says so without blaming an older build',
-                    vp?.verdict === 'no-tests' && /chain-level tests are not assembled yet/.test(vp.note || '')
-                    && !/older build/.test(vp.note || ''),
-                    String(vp?.note || vp?.text).slice(0, 160));
+                check('verify_pack on a mounted chain runs the base\'s golden queries and says whose they are',
+                    vp?.goldenQueries?.total > 0 && vp.chain?.testsFrom?.scope === 'base'
+                    && /base pack's tests run against the whole chain/.test(vp.note || ''),
+                    JSON.stringify(vp && { v: vp.verdict, g: vp.goldenQueries?.total, note: vp.note }).slice(0, 200));
             }
         }
     } finally {

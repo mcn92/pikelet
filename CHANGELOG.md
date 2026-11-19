@@ -12,6 +12,19 @@ first.
 
 ### Compatibility
 
+- **`compile` no longer fits a calibration, and `compact` no longer
+  refits one.** New and compacted packs are `unscored` in the
+  `pikelet-wasm` library, and their evaluation segment carries no
+  `calibration` figures. `compile` still embeds up to 24 golden queries:
+  title and content-word questions generated from the corpus, each kept
+  only when the finished pack retrieves its source in the top 10, as
+  before. `--calibration-queries` is now `--golden-queries` (the old name
+  still works; giving both is refused), `--skip-calibration` and `compact
+  --no-refit` are accepted and change nothing, and `--calibration <file>`
+  still embeds a prebuilt asset. Builds skip the 20 to 30 seconds the fit
+  took; a 21-chunk corpus now compiles in 9 s. Recompiling a pack changes its
+  identity. `append` on a chain whose base was calibrated by an earlier
+  build still checks that calibration's drift.
 - **`pikelet mcp` and `pikelet query` no longer report a relevance
   verdict.** Search results drop `matchQuality` and `confidence`, the
   response drops its `note` and `unscoredWarning`, and the `search` tool no

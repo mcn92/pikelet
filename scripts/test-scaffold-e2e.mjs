@@ -136,13 +136,15 @@ console.log('\n--- compile ---');
     const out = await search.query('how does bread rise without yeast', { k: 2 });
     ok(out.results[0]?.sourcePath?.includes('sourdough') || out.results[0]?.title?.includes('sourdough'),
       'compiled artifact answers a natural-language query with no host encoder', JSON.stringify(out.results[0] || {}).slice(0, 200));
-    ok(out.matchQuality === 'strong', 'on-topic query scores strong via the self-calibrated abstention model', `got ${out.matchQuality} conf ${out.confidence}`);
-    const offDomain = await search.query('medicare part d formulary exception', { k: 2 });
-    ok(offDomain.matchQuality === 'none' && offDomain.results.length === 0,
-      'off-domain query abstains with no results', `got ${offDomain.matchQuality} with ${offDomain.results.length} results`);
-    const gibberish = await search.query('xqzvw plorth grimbleflax snorp', { k: 2 });
-    ok(gibberish.matchQuality === 'none' && gibberish.results.length === 0,
-      'gibberish query abstains with no results', `got ${gibberish.matchQuality} with ${gibberish.results.length} results`);
+    ok(out.matchQuality === 'unscored', 'compile ships the pack uncalibrated', `got ${out.matchQuality}`);
+    const goldens = (await search.evaluation())?.goldenQueries || [];
+    let reproduced = 0;
+    for (const g of goldens) {
+      const results = (await search.query(g.text, { k: 10 })).results;
+      if (g.expectId !== undefined ? results.some((r) => r.id === g.expectId) : results.some((r) => (r.title || '').trim() === g.expectTitle)) reproduced++;
+    }
+    ok(goldens.length > 0 && reproduced === goldens.length, 'the pack carries golden queries that retrieve their source',
+      `${reproduced}/${goldens.length}`);
   } finally {
     await search.close();
   }
@@ -206,20 +208,16 @@ console.log('\n--- compile ---');
       const hit = (await callTool(4, 'search', { query: 'how does bread rise without yeast', pack: packName, k: 2 })).body;
       const section = hit.sections[0];
       const top = section.results[0];
-      ok(section.matchQuality === 'strong' && top && top.pack === packName
+      ok(section.matchQuality === undefined && top && top.pack === packName
         && top.packIdentity === packs[0].identity && typeof top.text === 'string'
         && Number.isFinite(top.distance) && (top.source || top.title),
-        'mcp search returns provenanced results with calibrated quality', JSON.stringify({ q: section.matchQuality, top: { ...top, text: (top.text || '').slice(0, 40) } }));
+        'mcp search returns provenanced results with distances and no verdict', JSON.stringify({ q: section.matchQuality, top: { ...top, text: (top.text || '').slice(0, 40) } }));
 
-      // showAbstained defaults true at the MCP layer: a 'none' verdict
-      // still ships results (with a caveat note), it does not withhold
-      // them — see pikelet/src/mcp.mjs.
+      // An off-domain question still gets results, with the words no top
+      // passage contains, in every pack.
       const off = (await callTool(5, 'search', { query: 'medicare part d formulary exception' })).body;
-      ok(off.sections.every((s) => s.matchQuality === 'none') && typeof off.note === 'string',
-        'off-domain query abstains in every pack and says so', JSON.stringify(off).slice(0, 160));
-      const offStrict = (await callTool(11, 'search', { query: 'medicare part d formulary exception', showAbstained: false })).body;
-      ok(offStrict.sections.every((s) => s.matchQuality === 'none' && s.results.length === 0) && typeof offStrict.note === 'string',
-        'showAbstained: false withholds results on an off-domain query', JSON.stringify(offStrict).slice(0, 160));
+      ok(off.sections.every((s) => s.results.length > 0 && s.grounding?.uncovered?.includes('medicare')) && off.note === undefined,
+        'an off-domain question lists its uncovered words in every pack', JSON.stringify(off).slice(0, 160));
 
       const record = (await callTool(6, 'get_record', { pack: packName, id: top.id })).body;
       ok(record.pack === packName && record.id === top.id && typeof record.text === 'string' && record.text.length >= top.text.length,
@@ -233,8 +231,7 @@ console.log('\n--- compile ---');
       ok(ambiguous.isError === true, 'get_record without pack errors when multiple packs are mounted');
 
       // verify_pack: the compiled fixture embeds retrieval-verified golden
-      // queries (calibration positives), runnable as tests from inside the
-      // file.
+      // queries, runnable as tests from inside the file.
       const verify = (await callTool(10, 'verify_pack', { pack: packName })).body;
       ok(verify.verdict === 'pass' && verify.goldenQueries.total > 0
         && verify.goldenQueries.passed === verify.goldenQueries.total

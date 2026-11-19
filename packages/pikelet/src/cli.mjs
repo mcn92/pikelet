@@ -204,11 +204,11 @@ append writes a small layer on top of a pack: new records from --source,
 tombstones from --remove (one id per flag), and replacements from
 --supersede <oldId>=<path>, which retires oldId in favour of the record
 ingested from that source path. --parent names the chain base-first, or
-just its head, whose ancestors are found by locator. It refuses when the
-chain's calibration would drift past its limit unless --allow-drift (the
-chain then serves unscored); --max-depth caps the chain depth. compact folds a
-chain into one fresh base (--no-refit skips recalibration and ships it
-unscored). rebase moves a layer onto a different head, replaying only what
+just its head, whose ancestors are found by locator. On a chain whose base
+carries a calibration, it refuses when that calibration would drift past
+its limit unless --allow-drift (the chain then serves unscored);
+--max-depth caps the chain depth. compact folds a
+chain into one fresh base. rebase moves a layer onto a different head, replaying only what
 that layer itself did; its original parent is found by the layer's locator
 or named with --old-parent. Every chain-member flag (--parent, --head,
 --onto, --old-parent, --layer) takes '#<sha256>' to pin that member's
@@ -237,16 +237,12 @@ Options:
 
 compile builds a complete kind-3 .pikelet artifact from the source and stops:
 no project, no Worker, no Cloudflare. The file carries the corpus, index,
-inline MiniLM query encoder, calibrated abstention, and evaluation data; open
-it with pikelet-wasm/complete on any runtime. Abstention is self-calibrated
-from the corpus at build time (skipped with a logged reason when the corpus
-cannot support a trustworthy fit); --calibration <file> supplies a prebuilt
-retrieval-signals asset instead, --skip-calibration ships the artifact
-unscored. --calibration-queries <file> supplies real, corpus-author-written
-questions (JSON-lines, one {text, expectId} or {text, expectTitle} object
-per line) used only to validate the self-calibrated fit and as the
-artifact's embedded golden queries — never as training data for the fit
-itself. compile also takes --source, --out, --name, --max-pages, --include,
+inline MiniLM query encoder, and up to 24 golden queries, each verified at
+build time to retrieve its source, that verify_pack replays; open it with
+pikelet-wasm/complete on any runtime. --golden-queries <file> supplies
+questions you wrote (JSON-lines, one {text, expectId} or {text,
+expectTitle} object per line), embedded ahead of the generated ones when
+they retrieve their source. compile also takes --source, --out, --name, --max-pages, --include,
 --exclude, --force (overwrite the output file), and --encoder-model/
 --encoder-weights/--encoder-vocab/--encoder-pooling/--encoder-query-prefix/
 --encoder-passage-prefix to swap the packaged MiniLM-L6 encoder for another
@@ -285,7 +281,7 @@ Options:
                         pack; packs meant for redistribution should carry one
   --force               Overwrite the output file
   --verbose             Also print build internals: index sizes, the rerank
-                        sweep and the calibration fit's diagnostics
+                        sweep and how many generated golden queries verified
   --include <glob>      Folder include glob, repeatable
   --exclude <glob>      Folder exclude glob, repeatable
   --include-url <pat>   URL-path include pattern ('*' wildcard), repeatable
@@ -301,11 +297,12 @@ Options:
   --conversations <file|folder>
                         Build from Claude Code, Claude.ai or ChatGPT
                         conversation exports
-  --calibration-queries <file>
-                        Real questions (JSON-lines) that validate the
-                        calibration and are embedded as golden queries
-  --calibration <file>  Use a prebuilt calibration instead of fitting one
-  --skip-calibration    Ship the pack unscored
+  --golden-queries <file>
+                        Your own questions (JSON-lines), embedded as golden
+                        queries when they retrieve their source
+  --calibration <file>  Embed a prebuilt retrieval-signals calibration;
+                        pikelet-wasm's query() reports its matchQuality
+                        (pikelet mcp and query do not)
   --sentence-windows <n>
                         Also index every run of n consecutive sentences of
                         each chunk (2 recommended), so a one-sentence answer
@@ -461,9 +458,8 @@ const BOOLEAN_FLAGS = new Set([
   'json',
   // append (LAYERED_PROFILE.md 6.1)
   'allow-drift',
-  // compact (6.3): ship unscored instead of refitting. Boolean, so it does not
-  // consume the next argument -- an unregistered flag here set itself to
-  // '--out' and left --out unset.
+  // compact: accepted and ignored since compact stopped refitting
+  // calibration. Boolean, so it does not consume the next argument.
   'no-refit',
   // mcp: skip the on-disk cache of URL packs' committed regions.
   'no-cache',
@@ -476,7 +472,7 @@ const BOOLEAN_FLAGS = new Set([
 const VALUE_FLAGS = new Set([
   'name', 'source', 'runtime', 'mode', 'artifact', 'out', 'license', 'model', 'epochs',
   'include', 'exclude', 'include-url', 'exclude-url', 'max-pages',
-  'calibration', 'calibration-queries', 'git', 'git-rev', 'conversations', 'sentence-windows',
+  'calibration', 'calibration-queries', 'golden-queries', 'git', 'git-rev', 'conversations', 'sentence-windows',
   'encoder-model', 'encoder-vocab', 'encoder-weights', 'encoder-pooling',
   'encoder-query-prefix', 'encoder-passage-prefix',
   'student-model', 'student-vectors', 'student-abstention',
@@ -761,9 +757,14 @@ export async function compileArtifact(flags) {
   if (unsupported.length) {
     throw new CliError(`compile does not take --${unsupported.join(', --')}: it always builds a complete kind-3 .pikelet with the inline transformer encoder`);
   }
-  if (flags.calibration && flags['skip-calibration']) {
-    throw new CliError('--calibration and --skip-calibration are mutually exclusive');
+  // compile no longer fits a calibration; these name what it used to do.
+  if (flags['skip-calibration']) {
+    process.stderr.write('note: compile no longer fits a calibration, so --skip-calibration has no effect\n');
   }
+  if (flags['calibration-queries'] !== undefined && flags['golden-queries'] !== undefined) {
+    throw new CliError('--calibration-queries is the old name for --golden-queries; give one');
+  }
+  const goldenQueries = flags['golden-queries'] ?? flags['calibration-queries'];
   // A non-default encoder needs its own weights: the packaged
   // encoder-weights.bin is MiniLM-L6's blob specifically, and the only
   // kind of mismatch that fails loudly is a wrong-sized blob (dim/vocab
@@ -833,8 +834,8 @@ export async function compileArtifact(flags) {
       // ("Represent this sentence for searching relevant passages: ")
       // with no passage prefix; skipping it doesn't error, it just quietly
       // forfeits the retrieval quality the fine-tune was trained for; the
-      // query() reader and calibration's embedQuery both read this from
-      // the declaration automatically, so setting it here is sufficient.
+      // query() reader reads this from the declaration automatically, so
+      // setting it here is sufficient.
       prefixPolicy: {
         passage: flags['encoder-passage-prefix'] || '',
         query: flags['encoder-query-prefix'] || '',
@@ -848,21 +849,13 @@ export async function compileArtifact(flags) {
       profile: 'kind3',
       storage: 'bundled',
       fileName: path.basename(outPath),
-      // Self-calibrated abstention by default; --calibration supplies a
-      // prebuilt retrieval-signals asset instead, --skip-calibration ships
-      // the unscored placeholder.
-      ...(flags['skip-calibration'] || flags.calibration ? {} : { calibration: 'auto' }),
-      // --calibration-queries: real, corpus-author-written questions used
-      // ONLY as held-out validation and as the artifact's embedded golden
-      // queries (see calibrate.mjs's loadCalibrationQueries and the v5
-      // design note at the top of that file) — never as fit positives.
-      // Resolved to an absolute path here, not left relative: compile's
-      // projectDir is a temp directory deleted at the end of this
-      // function, so a path relative to it would not survive past the
-      // build even though loadCalibrationQueries always resolves relative
-      // to projectDir for the scaffolded (create/rebuild) flow.
-      ...(flags['calibration-queries']
-        ? { calibrationQueries: path.resolve(process.cwd(), flags['calibration-queries']) }
+      // --golden-queries: the author's own questions, embedded as golden
+      // queries ahead of the generated ones (goldens.mjs). Resolved to an
+      // absolute path here: compile's projectDir is a temp directory
+      // deleted at the end of this function, and loadCalibrationQueries
+      // resolves a relative path against it.
+      ...(goldenQueries !== undefined
+        ? { calibrationQueries: path.resolve(process.cwd(), goldenQueries) }
         : {}),
       inlineEncoder: {
         vocabPath: flags['encoder-vocab']
