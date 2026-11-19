@@ -6,6 +6,55 @@ behind that design, including the approaches that were tried and dropped,
 so the source comments can stay focused on what the code does now. Release-
 visible changes are recorded in the [CHANGELOG](../CHANGELOG.md).
 
+## Why the verdict was dropped (2026-11)
+
+`pikelet mcp` and `pikelet query` no longer report `matchQuality`; results
+carry their distances and `grounding` instead. Three measurements led there.
+
+**A broad corpus breaks the fit.** A 1,377-article English Wikipedia pack
+(RAGPerf's text workload: its first 1,000 articles plus 377 articles that
+answer Natural Questions) calibrated with a cross-validated AUC of 1.000
+against its self-generated off-topic probes. On 512 real Natural Questions
+whose answer article is not in the corpus it said `strong` 278 times,
+`weak` 164 and `none` 70. Hand-checking 30 of the `strong` ones, about 4
+were answered by the pack and 2 partly; the rest were confident misses
+("how many cylinders does a v8 engine have" → *Honda N360*). In a focused
+docs pack an off-topic question has nothing nearby; in an encyclopedia
+something is always topically close, and probes made from foreign text are
+far easier to reject than real questions.
+
+**The signals do not hold the answer.** On those 512 unanswerable and 512
+answerable questions (5-fold cross-validation, labels from the data set),
+the shipped `confidence` separated them with AUC 0.896 and was badly
+overconfident (Brier 0.294, log loss 1.40). Raw top-1 distance alone did
+better (0.919). A logistic model over every signal the reader has (distance,
+margin, spread, BM25 scores and their ratios, coverage, uncovered words,
+vector and lexical agreement) reached 0.930 with honest probabilities
+(Brier 0.101), and gradient-boosted trees did no better (0.926): at 95% of
+answerable questions kept, 31% of unanswerable ones still passed. Deciding
+whether a passage answers needs a model that reads the question and passage
+together.
+
+**Agents did not use it.** The same pack, served to headless Claude Code
+over MCP, 40 answerable and 40 unanswerable questions, once with the shipped
+response and once with `matchQuality`, `confidence` and the verdict notes
+removed (instructions reworded, every other caution kept); a separate model
+graded each cited record's text.
+
+| | Sonnet, verdict | Sonnet, none | Haiku, verdict | Haiku, none |
+|---|---|---|---|---|
+| Answerable: correct and supported | 31 | 29 | 27 | 25 |
+| Unanswerable: declined | 34 | 35 | 37 | 36 |
+| Unanswerable: answered without support | 3 | 1 | 0 | 1 |
+
+Every difference is one or two questions, within noise, and none of the 320
+runs fabricated an answer. Of the unanswerable questions the verdict called
+`strong`, the agents declined 20 to 23 of 25 anyway: they read the passage.
+What keeps an agent honest is the instruction to cite only a passage that
+states the answer, plus `grounding.uncovered`, which every pack now returns.
+Both tests used general-knowledge questions; a private corpus the model
+knows nothing about was not tested.
+
 ## What is fit today (v6, `self-templates-v6`)
 
 - **Signals.** Four topic features (`d0`, `margin`, `mean10`, `known_frac`)

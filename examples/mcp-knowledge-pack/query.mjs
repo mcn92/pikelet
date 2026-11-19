@@ -9,7 +9,7 @@ const QUERIES = [
   {
     label: 'Straightforward',
     question: 'What does the author propose doing with poor children?',
-    note: 'A direct question about the essay\'s stated content. Retrieval should surface the proposal itself with strong support.',
+    note: 'A direct question about the essay\'s stated content. Retrieval should surface the proposal itself.',
   },
   {
     label: 'False premise (adversarial)',
@@ -18,8 +18,8 @@ const QUERIES = [
       "This assumes the essay is a sincere farming manual. It is satire: Swift's actual point is the " +
       "opposite of the literal proposal. Retrieval still surfaces passages that describe the proposal in " +
       "concrete, confident-sounding detail (yields, culinary uses) — because that content is genuinely in " +
-      "the corpus. matchQuality measures whether the pack covers the topic, and it does, so it does not " +
-      "flag the false premise either; only reading the passage does.",
+      "the corpus. A close distance says the passage is on the topic, and it is, so it does not flag " +
+      "the false premise; only reading the passage does.",
   },
 ];
 
@@ -39,7 +39,7 @@ async function main() {
     console.log(`Q: ${question}`);
     const result = await client.call('search', { query: question, k: 3 });
     const section = Array.isArray(result?.results) ? result : result?.sections?.[0];
-    console.log(`matchQuality: ${section?.matchQuality}   confidence: ${section?.confidence}`);
+    console.log(`question words no top passage contains: ${section?.grounding?.uncovered?.join(', ') || '(none)'}`);
     for (const r of section?.results ?? []) {
       const preview = (r.text || '').replace(/\s+/g, ' ').slice(0, 160);
       console.log(`  [${r.distance?.toFixed(4)}] ${r.title} — ${preview}...`);

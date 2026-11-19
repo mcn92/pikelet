@@ -221,8 +221,8 @@ const HELP = {
   pikelet query <pack> "<question>" [--limit <n>] [--json]
 
 Searches a pack and prints the passages an MCP agent would get for the same
-question: the pack's matchQuality verdict, then each result's title, source
-and text. <pack> is a .pikelet file, an HTTP(S) URL (range-read, not
+question: each result's title, source, distance and text, then the
+question's words that no top passage contains. <pack> is a .pikelet file, an HTTP(S) URL (range-read, not
 downloaded), or either with '#<sha256>' to pin the identity. A layer is
 searched as its whole chain.
 
@@ -349,10 +349,10 @@ Custom encoder (advanced):
 
 mcp serves knowledge packs over the Model Context Protocol on stdio, so an
 MCP client (Claude Code, Claude Desktop, an agent framework) can attach
-them as a retrieval tool: search (per-pack results with provenance and
-calibrated abstention), list_packs (names + immutable identities for
-citation pinning), get_record, verify_pack (runs the golden queries and
-abstention probes stored inside the pack). --pack takes a local file or an
+them as a retrieval tool: search (per-pack results with provenance,
+distances and the question words no passage contains), list_packs (names
++ immutable identities for citation pinning), get_record, verify_pack
+(runs the golden queries stored inside the pack). --pack takes a local file or an
 HTTP(S) URL — URL packs are range-read, never downloaded whole — and
 either form takes '#<sha256>' to pin the manifest identity (mismatches
 refuse to serve). --shelf mounts every pack on a static packs.json listing

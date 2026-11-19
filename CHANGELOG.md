@@ -12,6 +12,22 @@ first.
 
 ### Compatibility
 
+- **`pikelet mcp` and `pikelet query` no longer report a relevance
+  verdict.** Search results drop `matchQuality` and `confidence`, the
+  response drops its `note` and `unscoredWarning`, and the `search` tool no
+  longer takes `showAbstained` (a client that still sends it is not
+  refused). Results always ship, including from packs calibrated by
+  earlier builds, which carry on unchanged in the `pikelet-wasm` library.
+  Each result keeps its `distance` and each section its `grounding`; the
+  tool description and server instructions now tell the model to cite only
+  a passage that states the answer and to check `grounding.uncovered`.
+  `verify_pack` drops `abstentionProbes`, its `calibration` figures and
+  the chain's calibration fields, and passes or fails on the golden
+  queries alone; `list_packs` drops a chain's `calibrationStatus`. `pikelet
+  query` prints each result's distance instead of a verdict line. The
+  reason: on a 1,377-article Wikipedia pack the verdict called 278 of 512
+  unanswerable questions `strong`, and Sonnet and Haiku agents answered no
+  better with it than without it (`docs/calibration.md`).
 - **Every pack returns `grounding`, and it grades short tokens like
   "v8".** The reader computed `grounding` (which query words the top
   passages contain and which none does) only inside a fitted calibrator,

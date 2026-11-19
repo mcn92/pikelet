@@ -3534,9 +3534,9 @@ console.log('mcp: verify_pack on a chain runs the base\'s tests and says so');
         out.verdict === 'pass' && out.goldenQueries.total === 1 && out.goldenQueries.passed === 1
         && out.goldenQueries.skipped?.length === 1 && /record 2 was removed or superseded/.test(out.goldenQueries.skipped[0].reason),
         JSON.stringify(out.goldenQueries));
-    check('verify_pack on a chain names the tests as the base\'s and carries its calibration figures',
+    check('verify_pack on a chain names the tests as the base\'s and reports no calibration figures',
         out.chain?.testsFrom?.scope === 'base' && out.chain.testsFrom.identity === baseId
-        && out.chain.calibrationStatus === 'inherited' && out.calibration?.cvAucHard === 0.8
+        && out.chain.calibrationStatus === undefined && out.calibration === undefined && out.abstentionProbes === undefined
         && /base pack's tests run against the whole chain/.test(out.note || ''),
         JSON.stringify({ chain: out.chain, note: out.note }));
 }

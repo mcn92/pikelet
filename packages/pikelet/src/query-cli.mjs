@@ -38,25 +38,19 @@ export async function runQueryCommand(positionals, flags) {
   console.log(formatSearch(out));
 }
 
-const VERDICT = {
-  strong: 'strong: the pack covers this topic',
-  weak: 'weak: the pack may cover this topic',
-  none: 'none: the pack does not appear to cover this topic; results shown anyway',
-  unscored: 'unscored: this pack has no calibration, so there is no relevance signal',
-};
-
 export function formatSearch(out) {
   const lines = [];
   for (const section of out.sections) {
-    const confidence = typeof section.confidence === 'number' ? ` (confidence ${section.confidence.toFixed(2)})` : '';
-    lines.push(`${section.pack}: ${VERDICT[section.matchQuality] ?? section.matchQuality}${confidence}`);
-    if (!section.results.length) lines.push('  no results');
+    if (lines.length) lines.push('');
+    lines.push(`${section.pack}: ${section.results.length} result${section.results.length === 1 ? '' : 's'}`);
     section.results.forEach((r, i) => {
       const heading = [r.title, ...(r.headingPath || []).filter((h) => h !== r.title)].filter(Boolean).join(' › ');
       const source = r.source ? `${r.source}${r.anchor && !String(r.source).includes('#') ? `#${r.anchor}` : ''}` : null;
       lines.push('');
       lines.push(`${i + 1}. ${heading || `record ${r.id}`}`);
-      if (source) lines.push(`   ${source}`);
+      const distance = typeof r.distance === 'number' ? `distance ${r.distance.toFixed(3)}` : null;
+      const where = [source, distance].filter(Boolean).join(' · ');
+      if (where) lines.push(`   ${where}`);
       // A chunk's text opens with its own heading, already printed above.
       const last = [r.title, ...(r.headingPath || [])].filter(Boolean).pop();
       let text = String(r.text ?? '').replace(/\s+/g, ' ').trim();
@@ -66,7 +60,7 @@ export function formatSearch(out) {
     const uncovered = section.grounding?.uncovered;
     if (Array.isArray(uncovered) && uncovered.length) {
       lines.push('');
-      lines.push(`Question words the best-covering passage lacks: ${uncovered.join(', ')}`);
+      lines.push(`Question words no top passage contains: ${uncovered.join(', ')}`);
     }
   }
   return lines.join('\n');

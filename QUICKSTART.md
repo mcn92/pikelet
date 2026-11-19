@@ -186,11 +186,12 @@ with absolute paths. Any other
 MCP client can run `pikelet mcp --pack ./docs.pikelet` directly, with no
 install step. The server offers four tools:
 
-- `search`: per-pack results with provenance and calibrated abstention
+- `search`: per-pack results with provenance, distances, and the question
+  words no top passage contains
 - `list_packs`: names, licenses and immutable identities, for citation pinning
 - `get_record`: one record's full text
-- `verify_pack`: replays the golden queries and abstention probes stored
-  inside the pack, and reports encoder and integrity checks
+- `verify_pack`: replays the golden queries stored inside the pack, and
+  reports encoder and integrity checks
 
 Asked to `verify_pack` the pack above, the server answers with
 `"encoderVerified": true`, `"corpusIntegrity": "per-record-sha256"` and
@@ -201,7 +202,6 @@ I keep snapshots forever" returns, trimmed:
 {
   "pack": "ferry-docs",
   "packIdentity": "cbec6b68845d34d9e48bf43f4192110eb0f90219124342129dd051fe2143eece",
-  "matchQuality": "strong",
   "grounding": { "recordId": 5, "covered": ["snapshots"], "uncovered": ["keep", "forever"] },
   "results": [
     { "id": 5, "title": "Snapshots and restore", "source": "snapshots.md", "text": "..." }
@@ -209,9 +209,11 @@ I keep snapshots forever" returns, trimmed:
 }
 ```
 
-The pack is on topic (`strong`), but "keep" and "forever" are in
+The passage is about snapshots, but "keep" and "forever" are in
 `uncovered`: no passage says how to keep snapshots forever, and the model is
-told not to claim one does. Step 6 adds the missing page.
+told not to claim one does. There is no relevance verdict: the model reads
+the passages and decides, which measured as well as a verdict did (see
+`docs/calibration.md`). Step 6 adds the missing page.
 
 ## 5. Publish it
 

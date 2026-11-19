@@ -118,8 +118,8 @@ const search = await openPikeletFile('search.pikelet');
 const out = await search.query('how do I configure auth', { k: 5 });
 ```
 
-or search it from the terminal, which prints the matchQuality verdict and
-each result's title, source and text, exactly what the MCP `search` tool
+or search it from the terminal, which prints each result's title, source,
+distance and text, exactly what the MCP `search` tool
 returns for the same question (`--json` prints that response unchanged,
 `--limit <n>` sets the result count):
 
@@ -296,21 +296,17 @@ only comparable within one pack's encoder and corpus) and every result carries i
 pack name, the pack's immutable manifest identity (sha256), title,
 heading path, anchor, and source — so an answer can cite the exact
 knowledge state it was derived from, and a pinned identity means the
-citation survives pack rebuilds detectably. Calibrated match quality
-crosses the protocol intact: a pack that does not cover the question's
-topic says `matchQuality: "none"`, and the tool result tells the model
-the support is at best indirect; on any verdict, an asked-for value in
-`grounding.uncovered` is one no passage states. The results still ship
-under `none` by default, because the calibrator can misjudge a
-paraphrase; pass
-`showAbstained: false` to withhold them. (The library's `query()` does the
-reverse: it withholds under `none` unless asked.) `list_packs` reports names, identities, record counts, licenses,
+citation survives pack rebuilds detectably. Each result carries its
+distance, and each pack's section carries `grounding`: which of the
+question's words the best of the top passages contains, and which none of
+them does. An asked-for value in `grounding.uncovered` is one no passage
+states. There is no relevance verdict: whether a passage answers is left
+to the model reading it, and with Sonnet and Haiku a distance-based
+verdict changed nothing the model did (`docs/calibration.md`). `list_packs` reports names, identities, record counts, licenses,
 and each pack's sample queries; `get_record` hydrates one full chunk
 (integrity-verified from the pack) by the id a search result reported.
 `verify_pack` runs the tests the pack carries inside itself — golden
-queries, each verified at build time to retrieve its source (compile
-embeds a sample of the calibration's retrieval-verified positives), and
-abstention probes the pack must answer or refuse — so an agent can audit
+queries, each verified at build time to retrieve its source — so an agent can audit
 a newly attached knowledge source with tests stored in the file it is
 auditing.
 

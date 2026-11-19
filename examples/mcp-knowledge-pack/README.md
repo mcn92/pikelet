@@ -2,7 +2,7 @@
 
 The smallest full loop from source text to an LLM agent citing it: compile a
 `.pikelet`, mount it over MCP, and query it — including a query whose premise
-is false, to show what `matchQuality` does and does not tell you.
+is false, to show what retrieval does and does not tell you.
 
 The source is Jonathan Swift's *A Modest Proposal* (1729, public domain),
 split into five titled sections under `sources/modest-proposal/`. It's a
@@ -17,9 +17,7 @@ proposal at face value is a built-in false-premise test.
 
 Runs `pikelet compile` and writes `modest-proposal.pikelet` (~25 MB — almost
 entirely the bundled query encoder; the 21 text records are a few KB).
-`compile` fits the pack's relevance calibration from the corpus itself, so
-even a pack this small reports `matchQuality` as strong/weak/none, and it
-stores 24 golden queries that `verify_pack` replays. The manifest identity
+`compile` stores 24 golden queries in the pack that `verify_pack` replays. The manifest identity
 changes on every rebuild (nothing pins it here); for a real pack you'd
 publish once and cite `#<sha256>`.
 
@@ -37,15 +35,18 @@ the same protocol any real MCP client (Claude Code, Claude Desktop) speaks.
 The two searches:
 
 - **Straightforward** — "What does the author propose doing with poor
-  children?" Retrieval surfaces the proposal itself, `strong`.
+  children?" Retrieval surfaces the proposal itself.
 - **False premise** — "What farming techniques does Swift recommend for
   raising healthier children to eat?" This assumes the essay is a sincere
   farming manual. It isn't — Swift's point is the opposite of the literal
   proposal. Retrieval still returns passages that describe the proposal in
   concrete, confident-sounding detail, because that content is genuinely
-  in the corpus, and `matchQuality` comes back `weak`, not `none`: the
-  pack does cover the topic. **Distance and matchQuality tell you the pack has
-  relevant-looking text. They do not tell you the premise is true.** Only
+  in the corpus, at close distances: the pack does cover the topic. What
+  gives it away is `grounding.uncovered`: "farming, techniques, swift,
+  raising, healthier, eat" appear in none of the top passages, so they
+  are on the subject without stating what was asked.
+  **Distance tells you the pack has relevant-looking text. It does not
+  tell you the premise is true.** Only
   reading the passage does. That's the thing an agent citing a pack has to
   do — inspect the evidence, not just trust a high-ranked result.
 

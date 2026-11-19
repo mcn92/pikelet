@@ -2345,14 +2345,15 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     // pikelet query prints what the MCP search tool returns, readably.
     console.log('cli: pikelet query');
     const answer = cli(['query', out, 'how do bees tell each other where flowers are']);
-    check('query prints the verdict and numbered results with their source',
-        /^\S+: (strong|weak): the pack (covers|may cover) this topic/.test(answer) && /\n1\. [^\n]+\n   \S+/.test(answer), answer.slice(0, 400));
+    check('query prints numbered results with their source and distance, and no verdict',
+        /^\S+: 5 results\n\n1\. [^\n]+\n   \S+ · distance \d\.\d{3}\n/.test(answer) && !/strong|weak|matchQuality/.test(answer), answer.slice(0, 400));
     const asJson = JSON.parse(cli(['query', out, 'how', 'do', 'bees', 'dance', '--json', '--limit', '2']));
     check('query --json is the search tool\'s response, with --limit and an unquoted question',
         asJson.query === 'how do bees dance' && asJson.sections.length === 1 && asJson.sections[0].results.length === 2,
         JSON.stringify(asJson).slice(0, 300));
     const offAnswer = cli(['query', out, 'best mortgage refinance rates']);
-    check('query says plainly when the pack does not cover a question', /: none: the pack does not appear to cover this topic/.test(offAnswer), offAnswer.slice(0, 200));
+    check('an off-topic question still lists its results, then the words no top passage contains',
+        /\n1\. /.test(offAnswer) && /\nQuestion words no top passage contains: [^\n]*mortgage/.test(offAnswer), offAnswer.slice(-300));
     const noPack = failure(['query', path.join(tmp, 'absent.pikelet'), 'anything']);
     check('query names a missing pack', noPack && /Pack not found: .*absent\.pikelet/.test(noPack.stderr), JSON.stringify(noPack).slice(0, 200));
     const noQuestion = failure(['query', out]);

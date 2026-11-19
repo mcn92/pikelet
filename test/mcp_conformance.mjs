@@ -183,61 +183,34 @@ await withServer(async ({ send, waitFor }) => {
     check('unknown method is -32601', (await waitFor(5)).error?.code === -32601);
 });
 
-console.log('\nsearch tool: showAbstained');
+console.log('\nsearch tool: no relevance verdict');
 await withServer(async ({ send, waitFor }) => {
     const call = async (id, args) => {
         send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'search', arguments: args } });
         const result = (await waitFor(id)).result;
         return JSON.parse(result.content[0].text);
     };
+    send({ jsonrpc: '2.0', id: 100, method: 'tools/list' });
+    const searchTool = (await waitFor(100)).result.tools.find((t) => t.name === 'search');
+    check('search declares no showAbstained and its description names no verdict',
+        searchTool.inputSchema.properties.showAbstained === undefined
+        && !/matchQuality|"strong"|unscored/.test(searchTool.description) && /grounding\.uncovered/.test(searchTool.description));
+    const noVerdict = (out) => out.note === undefined && out.unscoredWarning === undefined
+        && out.sections.every((sec) => sec.matchQuality === undefined && sec.confidence === undefined);
 
-    const inputSchemaList = () => new Promise((resolve) => {
-        send({ jsonrpc: '2.0', id: 100, method: 'tools/list' });
-        waitFor(100).then((r) => resolve(r.result.tools.find((t) => t.name === 'search')));
-    });
-    const searchTool = await inputSchemaList();
-    check('search inputSchema declares showAbstained as boolean',
-        searchTool.inputSchema.properties.showAbstained?.type === 'boolean');
-
+    // The stub answers 'abstained query' with a 'none' verdict and withholds
+    // its results unless asked not to, as a pack calibrated by an older build
+    // does; the server always asks, and reports no verdict.
     const shown = await call(1, { query: 'abstained query' });
-    check('a none verdict shows results by default (showAbstained defaults true)',
-        shown.sections[0].matchQuality === 'none' && shown.sections[0].results.length === 1
-        && shown.sections[0].results[0].id === 1);
-    check('default-shown response carries a caveat note, not a withholding one',
-        typeof shown.note === 'string' && shown.note.includes('weigh'));
-
-    const withheld = await call(2, { query: 'abstained query', showAbstained: false });
-    check('showAbstained: false withholds results under none',
-        withheld.sections[0].matchQuality === 'none' && withheld.sections[0].results.length === 0);
-    check('showAbstained never changes matchQuality or confidence',
-        shown.sections[0].matchQuality === withheld.sections[0].matchQuality
-        && shown.sections[0].confidence === withheld.sections[0].confidence);
-    check('withheld response points back at showAbstained: false to recover the note',
-        typeof withheld.note === 'string' && withheld.note.includes('showAbstained: false'));
-
-    const answered = await call(3, { query: 'what is a stub' });
-    check('a strong verdict carries no note', answered.note === undefined && answered.sections[0].matchQuality === 'strong');
-
-    // A rejected call is a tool error (isError, plain text), not JSON — call
-    // its own protocol round trip directly instead of the JSON-parsing helper.
-    send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'search', arguments: { query: 'q', showAbstained: 'yes' } } });
-    const bad = (await waitFor(4)).result;
-    check('non-boolean showAbstained is rejected as a tool error',
-        bad.isError === true && bad.content[0].text.includes('showAbstained'));
-
-    const unscored = await call(5, { query: 'unscored query' });
-    check('an unscored section always ships its results',
-        unscored.sections[0].matchQuality === 'unscored' && unscored.sections[0].results.length === 1);
-    check('an unscored section carries an unscoredWarning naming the pack',
-        typeof unscored.unscoredWarning === 'string' && unscored.unscoredWarning.includes('stub-pack')
-        && unscored.unscoredWarning.includes('no calibrated abstention'));
-    check('unscored does not also trigger the none-verdict note',
-        unscored.note === undefined);
-
-    const unscoredStrict = await call(6, { query: 'unscored query', showAbstained: false });
-    check('showAbstained: false has no effect on an unscored section',
-        unscoredStrict.sections[0].matchQuality === 'unscored' && unscoredStrict.sections[0].results.length === 1
-        && typeof unscoredStrict.unscoredWarning === 'string');
+    check('results from an older calibrated pack ship under its "none" verdict, which is not reported',
+        shown.sections[0].results.length === 1 && shown.sections[0].results[0].id === 1 && noVerdict(shown), JSON.stringify(shown).slice(0, 300));
+    const legacyClient = await call(2, { query: 'abstained query', showAbstained: false });
+    check('a client still sending showAbstained: false is not refused, and results still ship',
+        legacyClient.sections[0].results.length === 1 && noVerdict(legacyClient));
+    const strong = await call(3, { query: 'what is a stub' });
+    const unscored = await call(4, { query: 'unscored query' });
+    check('no section reports matchQuality or confidence, and no response carries a verdict note or warning',
+        noVerdict(strong) && noVerdict(unscored) && unscored.sections[0].results.length === 1);
 });
 
 
