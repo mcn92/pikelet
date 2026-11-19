@@ -4,21 +4,36 @@
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
 import path from 'node:path';
-import { CliError } from './common.mjs';
+import { CliError, CLI_VERSION } from './common.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
 
 // Internal provenance survives object spreads, but never JSON serialization.
 export const LOCAL_SOURCE_FILE = Symbol('localSourceFile');
 
 const MAX_CRAWL_BODY_BYTES = 2 * 1024 * 1024;
+// What a site operator sees in their logs, and the token robots.txt rules
+// name to address this crawler.
+const CRAWL_USER_AGENT = `pikelet/${CLI_VERSION} (+https://github.com/mcn92/pikelet)`;
+const ROBOTS_TOKEN = 'pikelet';
+// The pause between two requests to the site; a robots.txt Crawl-delay
+// that asks for more gets more.
+const DEFAULT_CRAWL_DELAY_MS = 250;
+const MAX_ROBOTS_BYTES = 512 * 1024;
 // Per-file ceiling for folder sources, the counterpart of the crawl cap: a
 // misclassified asset or a generated dump in the source tree is skipped with
 // a warning instead of being read whole into the single-threaded build.
 const MAX_SOURCE_FILE_BYTES = 16 * 1024 * 1024;
 async function ingestFolder(root, source, log) {
-  const docs = [];
   if (!fssync.existsSync(root)) {
     throw new CliError(`Source folder not found: ${root}\nNext: check --source or source.path in pikelet.config.json.`, 1);
+  }
+  // A single file is a one-document source. It was handed to readdir and
+  // failed with a raw ENOTDIR.
+  if (!fssync.statSync(root).isDirectory()) {
+    if (!SOURCE_FILE_TYPES.test(root)) {
+      throw new CliError(`${root} is not a folder, or a Markdown, MDX, HTML or text file\nNext: pass a folder, or one .md, .mdx, .html or .txt file`, 1);
+    }
+    return readSourceFiles([{ file: root, rel: path.basename(root) }], () => true, log);
   }
   // readdir order is the filesystem's (hash order on ext4, name order on
   // NTFS), so the same tree on two machines would get different record ids
@@ -27,8 +42,15 @@ async function ingestFolder(root, source, log) {
   const files = (await walk(root, log))
     .map((file) => ({ file, rel: path.relative(root, file).split(path.sep).join('/') }))
     .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  return readSourceFiles(files, (rel) => matchesSource(rel, source), log);
+}
+
+const SOURCE_FILE_TYPES = /\.(md|mdx|html?|txt)$/i;
+
+async function readSourceFiles(files, wanted, log) {
+  const docs = [];
   for (const { file, rel } of files) {
-    if (!matchesSource(rel, source)) continue;
+    if (!wanted(rel)) continue;
     try {
       const { size } = await fs.stat(file);
       if (size > MAX_SOURCE_FILE_BYTES) {
@@ -157,13 +179,14 @@ function metaRefreshTarget(html, baseHref) {
 // origin: sites often send their root to a canonical host or localized
 // landing page. Mid-crawl redirects are still skipped; the crawl finds
 // their targets through links.
-async function resolveSeedUrl(seed, log) {
+async function resolveSeedUrl(seed, log, pace = async () => {}) {
   let current = seed;
   for (let hop = 0; hop < 5; hop++) {
     let response;
+    await pace();
     try {
       response = await nodeFetch(current.href, {
-        headers: { 'User-Agent': 'pikelet/0.1.0' },
+        headers: { 'User-Agent': CRAWL_USER_AGENT },
         redirect: 'manual',
         signal: AbortSignal.timeout(15000),
         // HTML only: a server that gzips despite Accept-Encoding: identity
@@ -204,8 +227,169 @@ async function resolveSeedUrl(seed, log) {
   return current;
 }
 
-async function ingestUrl(source, log) {
-  const seed = await resolveSeedUrl(new URL(source.url), log);
+// The crawl stays under the seed's path: --source https://example.com/docs/
+// reads /docs/ and below, not the blog. A seed without a trailing slash
+// whose last segment has no extension (/docs) is read as a directory; one
+// naming a page (/docs/index.html) scopes to that page's directory. Seeding
+// at the site root crawls the whole origin.
+export function crawlScope(url) {
+  const seed = new URL(url);
+  let prefix = seed.pathname;
+  let exact = null;
+  if (!prefix.endsWith('/')) {
+    const cut = prefix.lastIndexOf('/') + 1;
+    if (prefix.slice(cut).includes('.')) {
+      prefix = prefix.slice(0, cut);
+    } else {
+      exact = prefix;
+      prefix = `${prefix}/`;
+    }
+  }
+  return {
+    origin: seed.origin,
+    prefix,
+    contains(href) {
+      const u = new URL(href);
+      return u.origin === seed.origin && (u.pathname.startsWith(prefix) || u.pathname === exact);
+    },
+  };
+}
+
+// robots.txt (RFC 9309): the group naming this crawler's token, or else the
+// '*' group; the longest matching Allow/Disallow pattern wins, Allow on a
+// tie; '*' matches any run of characters and a trailing '$' anchors the end.
+// Crawl-delay is not in the RFC but widely used, so it is honoured.
+export function parseRobots(text, token = ROBOTS_TOKEN) {
+  const groups = [];
+  let current = null;
+  let inAgentRun = false;
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, '').trim();
+    const m = /^([A-Za-z-]+)\s*:\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    const value = m[2].trim();
+    if (key === 'user-agent') {
+      if (!inAgentRun) {
+        current = { agents: [], rules: [], delay: null };
+        groups.push(current);
+      }
+      current.agents.push(value.toLowerCase().split('/')[0].trim());
+      inAgentRun = true;
+      continue;
+    }
+    inAgentRun = false;
+    if (!current) continue;
+    if ((key === 'allow' || key === 'disallow') && value) {
+      current.rules.push({ allow: key === 'allow', length: value.length, pattern: robotsPattern(value) });
+    } else if (key === 'crawl-delay') {
+      const seconds = Number(value);
+      if (Number.isFinite(seconds) && seconds >= 0) current.delay = seconds;
+    }
+  }
+  const named = groups.filter((g) => g.agents.includes(token));
+  const chosen = named.length ? named : groups.filter((g) => g.agents.includes('*'));
+  const rules = chosen.flatMap((g) => g.rules);
+  const delays = chosen.map((g) => g.delay).filter((d) => d !== null);
+  return {
+    crawlDelayMs: delays.length ? Math.max(...delays) * 1000 : null,
+    allows(href) {
+      const u = new URL(href);
+      const target = `${u.pathname}${u.search}`;
+      let best = null;
+      for (const rule of rules) {
+        if (!rule.pattern.test(target)) continue;
+        if (!best || rule.length > best.length || (rule.length === best.length && rule.allow)) best = rule;
+      }
+      return !best || best.allow;
+    },
+  };
+}
+
+function robotsPattern(value) {
+  const anchored = value.endsWith('$');
+  const body = (anchored ? value.slice(0, -1) : value)
+    .split('*')
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+  return new RegExp(`^${body}${anchored ? '$' : ''}`);
+}
+
+const ALLOW_ALL = { crawlDelayMs: null, allows: () => true };
+
+// A missing robots.txt (any 4xx) allows everything. A server error or an
+// unreachable file stops the crawl, as RFC 9309 asks, rather than guessing.
+async function loadRobots(origin, log) {
+  const url = `${origin}/robots.txt`;
+  let response;
+  try {
+    response = await nodeFetch(url, {
+      headers: { 'User-Agent': CRAWL_USER_AGENT },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(15000),
+      inflateGzip: true,
+    });
+  } catch (error) {
+    throw new CliError(`Could not read ${url}: ${error.message}\nNext: check the site is reachable, or compile a local copy of the pages`, 1);
+  }
+  if (response.status >= 400 && response.status < 500) {
+    await response.body?.cancel?.().catch(() => {});
+    return ALLOW_ALL;
+  }
+  if (!response.ok) {
+    await response.body?.cancel?.().catch(() => {});
+    throw new CliError(`${url} answered HTTP ${response.status}, so what it allows is unknown and the crawl stops\nNext: retry later, or compile a local copy of the pages`, 1);
+  }
+  let text;
+  try {
+    text = await readLimitedText(response, MAX_ROBOTS_BYTES);
+  } catch (error) {
+    // Past the limit, RFC 9309 lets a crawler use what it read; the reader
+    // here keeps nothing, so treat it as unreadable.
+    throw new CliError(`Could not read ${url}: ${error.message}`, 1);
+  }
+  const robots = parseRobots(text);
+  log(`read ${url}`);
+  return robots;
+}
+
+async function ingestUrl(source, log, { delayMs = DEFAULT_CRAWL_DELAY_MS } = {}) {
+  const typed = new URL(source.url);
+  const robotsByOrigin = new Map();
+  const robotsFor = async (origin) => {
+    if (!robotsByOrigin.has(origin)) robotsByOrigin.set(origin, await loadRobots(origin, log));
+    return robotsByOrigin.get(origin);
+  };
+  const refuseUnlessAllowed = (robots, href) => {
+    if (!robots.allows(href)) {
+      throw new CliError(`${new URL(href).origin}/robots.txt does not allow crawling ${href}\nNext: compile a local copy of the pages, or ask the site's owner`, 1);
+    }
+  };
+  // One request at a time, with a pause between them that a robots.txt
+  // Crawl-delay can lengthen.
+  let lastRequest = 0;
+  let pause = delayMs;
+  const pace = async () => {
+    const wait = lastRequest + pause - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    lastRequest = Date.now();
+  };
+  const obey = (robots, href) => {
+    refuseUnlessAllowed(robots, href);
+    if (robots.crawlDelayMs !== null && robots.crawlDelayMs > pause) {
+      pause = robots.crawlDelayMs;
+      log(`robots.txt asks for ${robots.crawlDelayMs / 1000} s between requests; waiting that long`);
+    }
+  };
+  obey(await robotsFor(typed.origin), typed.href);
+  const seed = await resolveSeedUrl(typed, log, pace);
+  const robots = await robotsFor(seed.origin);
+  obey(robots, seed.href);
+  // The scope comes from the URL as typed; a seed that redirected out of it
+  // (a root that sends visitors to /en/docs/) scopes to where it landed.
+  let scope = crawlScope(typed);
+  if (!scope.contains(seed.href)) scope = crawlScope(seed);
+  log(`crawling ${scope.origin}${scope.prefix} and below, honouring robots.txt, ${pause} ms between requests`);
   // A URL enters `seen` when it is queued, not when it is fetched: a link
   // repeated on every page (site navigation) is queued once, rather than
   // once per page with each copy taking a slot of the maxPages budget.
@@ -214,6 +398,15 @@ async function ingestUrl(source, log) {
   const docs = [];
   const allowed = urlCrawlFilter(source);
   let filtered = 0;
+  let outOfScope = 0;
+  let robotsBlocked = 0;
+  // Out-of-scope and robots-disallowed links are dropped before they reach
+  // the queue, so they take no page budget.
+  const admissible = (link) => {
+    if (!scope.contains(link)) { outOfScope++; return false; }
+    if (!robots.allows(link)) { robotsBlocked++; return false; }
+    return true;
+  };
   const enqueue = (link) => {
     if (queue.length + docs.length >= (source.maxPages || 500)) return;
     seen.add(link);
@@ -222,9 +415,10 @@ async function ingestUrl(source, log) {
   while (queue.length && docs.length < (source.maxPages || 500)) {
     const href = queue.shift();
     let response;
+    await pace();
     try {
       response = await nodeFetch(href, {
-        headers: { 'User-Agent': 'pikelet/0.1.0' },
+        headers: { 'User-Agent': CRAWL_USER_AGENT },
         redirect: 'manual',
         signal: AbortSignal.timeout(15000),
         inflateGzip: true,
@@ -255,7 +449,9 @@ async function ingestUrl(source, log) {
     if (refresh && extracted.text.split(/\s+/).filter(Boolean).length < 25) {
       log(`warn: ${href} is a meta-refresh redirect page -> ${refresh.href}`);
       if (refresh.origin === seed.origin && !seen.has(refresh.href)) {
-        if (!allowed(refresh.href)) {
+        if (!admissible(refresh.href)) {
+          seen.add(refresh.href);
+        } else if (!allowed(refresh.href)) {
           seen.add(refresh.href);
           filtered++;
         } else {
@@ -272,6 +468,10 @@ async function ingestUrl(source, log) {
     // directly above.
     for (const link of extractLinks(html, href, seed.origin)) {
       if (seen.has(link)) continue;
+      if (!admissible(link)) {
+        seen.add(link);
+        continue;
+      }
       if (!allowed(link)) {
         seen.add(link);
         filtered++;
@@ -287,6 +487,10 @@ async function ingestUrl(source, log) {
     ];
     log(`URL filters skipped ${filtered} pages (${filters.join('; ')})`);
   }
+  if (outOfScope > 0) {
+    log(`skipped ${outOfScope} same-site links outside ${scope.prefix}; seed the crawl at ${scope.origin}/ to include them`);
+  }
+  if (robotsBlocked > 0) log(`robots.txt kept ${robotsBlocked} pages out of the crawl`);
   // A crawl that discovers almost nothing usually means the site renders its
   // navigation client-side; the crawler only follows server-rendered anchors.
   if (docs.length > 0 && docs.length < 5) {

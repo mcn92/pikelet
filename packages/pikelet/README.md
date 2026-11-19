@@ -135,8 +135,8 @@ roughly 20 to 30 seconds of calibration (655 chunks took 83 seconds on 8
 cores). Each worker holds its own kernel and weight copy, so the pool
 trades a few hundred MB of build-time memory for the near-linear speedup;
 `PIKELET_EMBED_WORKERS` overrides the pool size (0 forces
-sequential). `compile` accepts `--source` (folder or URL, or the first
-argument), `--out`,
+sequential). `compile` accepts `--source` (folder, single file or URL, or
+the first argument), `--out`,
 `--name` (corpus name recorded in the artifact), and `--force` to
 overwrite the output file. Folder sources take `--include`/`--exclude`
 filesystem globs; URL sources take `--max-pages` and
@@ -419,16 +419,28 @@ project's layout.
 crawler runs locally under your account and follows the URL *you* typed —
 including through the seed's own redirects (HTTP and meta-refresh, bounded
 at 5 hops), since sites routinely send their root to a canonical host or a
-localized landing page. The final seed URL defines the crawl origin; every
-other fetch skips redirects (contentless meta-refresh pages are followed
-through the normal frontier filters instead of wasting page budget). It
-keeps the crawl frontier on that origin, enforces timeouts and
+localized landing page. Every other fetch skips redirects (contentless
+meta-refresh pages are followed through the normal frontier filters instead
+of wasting page budget). The crawl stays under the seed's path:
+`https://example.com/docs/` (or `/docs`) reads `/docs/` and below, a seed
+naming a page reads that page's directory, and a seed at the site root
+reads the whole origin. When the seed redirects out of that path, the
+scope is taken from where it landed. It enforces timeouts and
 per-page/body caps, and never runs at query time — the deployed Worker
 makes no outbound fetches at all. It deliberately does not block
 private-network addresses: it is a local developer tool, and pointing it at
 your own intranet docs is a supported use. Do not lift the crawl code into a
 deployed service without adding SSRF protections (scheme allowlist,
 private/link-local IP rejection, redirect pinning).
+
+Toward the site, the crawler makes one request at a time, 250 ms apart, and
+identifies itself as `pikelet/<version> (+https://github.com/mcn92/pikelet)`.
+It reads `/robots.txt` first and follows it (RFC 9309): the group for
+`pikelet`, or else `*`; the longest matching rule wins; `Crawl-delay`
+lengthens the pause. A seed robots.txt disallows is refused, a missing
+robots.txt (any 4xx) allows everything, and a robots.txt that answers with
+a server error or cannot be reached stops the crawl. There is no override:
+to compile pages robots.txt keeps out, compile a local copy of them.
 
 ## Self-contained query embedding (`--mode student`)
 
@@ -468,8 +480,9 @@ embeddings.
 In Search Artifact mode, `/search` responses include per-query and cumulative
 range-read stats so cold-load and warm-cache behavior are visible directly.
 
-URL ingestion is intentionally conservative: crawls stay on the seed origin,
-skip redirects, and cap HTML response bodies before parsing.
+URL ingestion is intentionally conservative: crawls stay under the seed's
+path, follow robots.txt, pace their requests, skip redirects, and cap HTML
+response bodies before parsing.
 
 ## Package layout
 

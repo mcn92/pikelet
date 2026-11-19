@@ -228,7 +228,7 @@ console.log('crawler');
     await new Promise((resolve) => site.listen(0, '127.0.0.1', resolve));
     const siteBase = `http://127.0.0.1:${site.address().port}`;
     const lines = [];
-    const docs = await ingestUrl({ url: `${siteBase}/docs/`, maxPages: 10 }, (line) => lines.push(line));
+    const docs = await ingestUrl({ url: `${siteBase}/docs/`, maxPages: 10 }, (line) => lines.push(line), { delayMs: 0 });
     site.close();
     const titles = docs.map((d) => d.title).sort().join(',');
     check('the crawler reads a page a server gzipped despite identity', titles === 'Gzipped,Index', titles);
@@ -253,10 +253,76 @@ console.log('crawler');
         res.end(`<html><title>page ${page}</title><body>${nav}${kids}<p>page ${page} ${words}</p></body></html>`);
     });
     await new Promise((resolve) => site.listen(0, '127.0.0.1', resolve));
-    const docs = await ingestUrl({ url: `http://127.0.0.1:${site.address().port}/`, maxPages: 60 }, () => {});
+    const docs = await ingestUrl({ url: `http://127.0.0.1:${site.address().port}/`, maxPages: 60 }, () => {}, { delayMs: 0 });
     site.close();
     check('a crawl over repeated nav links fills its maxPages budget', docs.length === 60, String(docs.length));
     check('a crawl fetches each page once', new Set(docs.map((d) => d.url)).size === docs.length);
+}
+
+{
+    // Scope, robots.txt, pacing and the User-Agent. The site has docs under
+    // /docs/, a blog beside them, a /docsx sibling that shares the prefix
+    // string, and a /docs/private/ section robots.txt disallows.
+    const body = (title, links = '') => `<html><title>${title}</title><body><p>${title} describes how the bucket stores `
+        + `snapshots and restores them on request.</p>${links}</body></html>`;
+    const pages = {
+        '/docs/': body('Index', '<a href="/docs/a">a</a><a href="/docs/private/b">b</a><a href="/blog/c">c</a><a href="/docsx">x</a><a href="/docs/c">c</a>'),
+        '/docs/a': body('A'), '/docs/c': body('C'), '/docs/private/b': body('Private'), '/blog/c': body('Blog'), '/docsx': body('Sibling'),
+    };
+    let robotsText = 'User-agent: *\nDisallow: /\n\nUser-agent: pikelet\nDisallow: /docs/private/\nCrawl-delay: 0.3\n';
+    let robotsStatus = 200;
+    const requests = [];
+    const site = http.createServer((req, res) => {
+        requests.push({ url: req.url, at: Date.now(), agent: req.headers['user-agent'] });
+        if (req.url === '/robots.txt') {
+            res.writeHead(robotsStatus, { 'content-type': 'text/plain' });
+            res.end(robotsStatus === 200 ? robotsText : '');
+            return;
+        }
+        if (req.url === '/docs') { res.writeHead(301, { location: '/docs/' }); res.end(); return; }
+        const html = pages[req.url];
+        if (!html) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end(html);
+    });
+    await new Promise((resolve) => site.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${site.address().port}`;
+    const lines = [];
+    const docs = await ingestUrl({ url: `${base}/docs`, maxPages: 20 }, (line) => lines.push(line));
+    const fetched = requests.map((r) => r.url);
+    check('a crawl seeded at /docs reads only /docs/ and below',
+        docs.map((d) => d.title).sort().join(',') === 'A,C,Index' && !fetched.includes('/blog/c') && !fetched.includes('/docsx'), fetched.join(' '));
+    check('a page robots.txt disallows for pikelet is never fetched', !fetched.includes('/docs/private/b'), fetched.join(' '));
+    check('the skipped links are reported',
+        lines.some((l) => /skipped 2 same-site links outside \/docs\//.test(l)) && lines.some((l) => /robots\.txt kept 1 pages/.test(l)), lines.join(' | '));
+    const pageGaps = requests.filter((r) => r.url !== '/robots.txt').map((r, i, all) => (i ? r.at - all[i - 1].at : Infinity));
+    check('robots.txt Crawl-delay spaces the requests', Math.min(...pageGaps) >= 280, pageGaps.join(','));
+    check('every request names pikelet, its version and where to read about it',
+        requests.every((r) => /^pikelet\/\d+\.\d+\.\d+\S* \(\+https:\/\/github\.com\/mcn92\/pikelet\)$/.test(r.agent || '')), requests[0]?.agent);
+
+    // The default pause, with no Crawl-delay.
+    robotsText = 'User-agent: *\nAllow: /\n';
+    requests.length = 0;
+    await ingestUrl({ url: `${base}/docs/`, maxPages: 3 }, () => {});
+    const gaps = requests.filter((r) => r.url !== '/robots.txt').map((r, i, all) => (i ? r.at - all[i - 1].at : Infinity));
+    check('requests are 250 ms apart by default', gaps.length >= 3 && Math.min(...gaps) >= 240, gaps.join(','));
+
+    const refusal = async (url) => {
+        try { await ingestUrl({ url, maxPages: 5 }, () => {}, { delayMs: 0 }); return ''; } catch (error) { return error.message; }
+    };
+    robotsText = 'User-agent: pikelet\nDisallow: /docs/\n';
+    requests.length = 0;
+    const disallowed = await refusal(`${base}/docs/`);
+    check('a seed robots.txt disallows is refused before it is fetched',
+        /robots\.txt does not allow crawling .*\/docs\//.test(disallowed) && !requests.some((r) => r.url === '/docs/'), disallowed);
+    robotsStatus = 503;
+    const unavailable = await refusal(`${base}/docs/`);
+    check('a robots.txt server error stops the crawl', /answered HTTP 503/.test(unavailable), unavailable);
+    robotsStatus = 404;
+    requests.length = 0;
+    const open = await ingestUrl({ url: `${base}/docs/`, maxPages: 2 }, () => {}, { delayMs: 0 });
+    check('a missing robots.txt allows the crawl', open.length === 2, String(open.length));
+    site.close();
 }
 
 console.log('range response bounds and retry delays');

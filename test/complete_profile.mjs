@@ -2310,6 +2310,10 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     const missingFolder = failure(['compile', path.join(tmp, 'no-such-folder'), '--out', path.join(tmp, 'never.pikelet')]);
     check('compile <path> reads the path as --source', missingFolder && /Source folder not found: .*no-such-folder/.test(missingFolder.stderr),
         JSON.stringify(missingFolder).slice(0, 200));
+    const oneFile = path.join(docs, 'bees.md');
+    const fileFiltered = failure(['compile', oneFile, '--include', '**/*.md', '--out', path.join(tmp, 'never.pikelet')]);
+    check('a single-file source refuses folder filters', fileFiltered && /the source is a single file/.test(fileFiltered.stderr),
+        JSON.stringify(fileFiltered).slice(0, 200));
     const twoSources = failure(['compile', docs, '--source', docs]);
     check('compile refuses a source given both ways', twoSources && /give one/.test(twoSources.stderr), JSON.stringify(twoSources).slice(0, 200));
 

@@ -29,15 +29,21 @@ CHANGELOG lists what changed between releases.
 
 ## 2. Compile a pack
 
-Point `compile` at a folder (Markdown, MDX, HTML or text) or a live site:
+Point `compile` at a folder (Markdown, MDX, HTML or text), a single file, or
+a live site:
 
 ```bash
 pikelet compile ./docs --out docs.pikelet \
   --name ferry-docs --license MIT \
   --calibration-queries questions.jsonl
-# or crawl a site:
-pikelet compile https://docs.example.com --out docs.pikelet
+# or crawl a site's docs:
+pikelet compile https://docs.example.com/guide/ --out docs.pikelet
 ```
+
+A crawl stays under the path you give it (`/guide/` and below; start at the
+site root to crawl everything), follows the site's robots.txt, and waits
+250 ms between requests, longer if robots.txt asks. It stops at 500 pages
+unless `--max-pages` says otherwise.
 
 ```text
 Ingested 8 docs -> 8 chunks

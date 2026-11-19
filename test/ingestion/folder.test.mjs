@@ -67,3 +67,23 @@ section('ingestFolder: files are taken in a fixed order');
     await fs.rm(root, { recursive: true, force: true });
   }
 }
+
+section('ingestFolder: a single file is a one-document source');
+{
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'pikelet-ingest-file-'));
+  try {
+    const file = path.join(root, 'install.md');
+    await fs.writeFile(file, '# Install\n\nRun the installer, then restart the service so it reads the new configuration.\n');
+    const docs = await ingestFolder(file, { include: ['**/*.html'] }, () => {});
+    check('a .md file passed as the source is ingested as one document, whatever the include globs say',
+      docs.length === 1 && docs[0].sourcePath === 'install.md' && docs[0].title === 'Install', JSON.stringify(docs.map((d) => d.sourcePath)));
+    const other = path.join(root, 'notes.pdf');
+    await fs.writeFile(other, 'not text');
+    let refused = '';
+    try { await ingestFolder(other, {}, () => {}); } catch (error) { refused = error.message; }
+    check('a file of another type is refused by name, not with ENOTDIR',
+      refused.includes('notes.pdf') && /Markdown, MDX, HTML or text/.test(refused) && !/ENOTDIR/.test(refused), refused);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}

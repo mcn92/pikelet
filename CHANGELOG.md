@@ -86,6 +86,17 @@ first.
   scores with, even when the caller supplies the vector.
 - **A `compact()` that cannot rebuild throws `INVALID_VECTOR`**, not
   `INTERNAL_INVARIANT`, and leaves the index searchable (see Fixed).
+- **A crawl stays under the seed's path and follows robots.txt.**
+  `--source https://example.com/docs/` followed every same-origin link,
+  so it read the blog and marketing pages up to the 500-page cap; it now
+  reads `/docs/` and below (seed at the site root for the whole site).
+  The crawler reads robots.txt first and follows it (RFC 9309, plus
+  `Crawl-delay`): a disallowed seed is refused, disallowed pages are
+  skipped, and a robots.txt that answers with a server error stops the
+  crawl. Requests are 250 ms apart, and the User-Agent is
+  `pikelet/<version> (+https://github.com/mcn92/pikelet)` instead of
+  `pikelet/0.1.0`. The same applies to `append --source <url>`. A crawl
+  that used to wander may now produce a smaller pack, and takes longer.
 - **Unknown commands and single-dash options are errors.** An
   unrecognised command (`pikelet query` before it existed, `pikelet
   compil`, `pikelet -v`) fell through to `create` and stopped at its
@@ -110,6 +121,9 @@ first.
   the number of results. It takes a file, a URL, a `#<sha256>` pin or a
   layer, like `mcp --pack`. `compile` now ends by naming this command and
   `mcp install` as next steps.
+- **A single file is a source.** `compile --source ./docs/install.md`
+  (or `.mdx`, `.html`, `.txt`) compiles that one file; it failed with a
+  raw ENOTDIR. The pack is named after the file without its extension.
 - **`pikelet --version`** (or `-v`) prints the version, `--flag=value`
   works for every flag that takes a value, and `compile ./docs` is
   `compile --source ./docs`.

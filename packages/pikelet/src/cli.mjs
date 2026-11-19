@@ -273,10 +273,10 @@ not a guarantee: a conversation pack is private by default, so keep it that
 way. The pack is named conversations unless --name is given.
 
 Options:
-  --source <path|url>   Folder or website to compile (or give it as the
-                        first argument)
+  --source <path|url>   Folder, file or website to compile (or give it as
+                        the first argument)
   --out <file>          Output path (default search.pikelet)
-  --name <name>         Pack name (default: the folder or host name;
+  --name <name>         Pack name (default: the folder, file or host name;
                         <repo>-history for --git, conversations for
                         --conversations)
   --license <spdx>      License of the compiled content, recorded in the
@@ -290,7 +290,10 @@ Options:
   --exclude-url <pat>   URL-path exclude pattern ('*' wildcard), repeatable;
                         aggregate pages like mdBook's print.html are always
                         excluded
-  --max-pages <n>       URL crawl cap
+  --max-pages <n>       URL crawl cap (default 500). A crawl reads the
+                        seed's path and below (start at the site root
+                        for all of it), follows robots.txt, and waits
+                        250 ms between requests
   --git <repo>          Build from a repository's commit history
   --git-rev <rev|range> With --git: revision or range (default HEAD)
   --conversations <file|folder>
@@ -783,10 +786,16 @@ export async function compileArtifact(flags) {
   const isConversations = !!flags.conversations;
   const isUrl = !isGit && !isConversations && /^https?:\/\//i.test(flags.source);
   if (!isGit && !isConversations) assertSourceFilterFlags(flags, isUrl);
+  const sourcePath = !isGit && !isConversations && !isUrl ? path.resolve(process.cwd(), flags.source) : null;
+  const singleFile = sourcePath !== null && fssync.existsSync(sourcePath) && !fssync.statSync(sourcePath).isDirectory();
+  if (singleFile && (flags.include || flags.exclude)) {
+    throw new CliError('--include/--exclude filter a folder; the source is a single file');
+  }
   const name = flags.name
     || (isGit ? `${await gitRepoName(path.resolve(process.cwd(), flags.git))}-history`
       : isConversations ? 'conversations'
-      : isUrl ? new URL(flags.source).hostname : path.basename(path.resolve(process.cwd(), flags.source)));
+      : isUrl ? new URL(flags.source).hostname
+      : singleFile ? path.basename(sourcePath).replace(/\.[^.]+$/, '') : path.basename(sourcePath));
   const config = {
     $schema: CONFIG_SCHEMA_URL,
     version: 1,
