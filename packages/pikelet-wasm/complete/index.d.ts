@@ -156,17 +156,18 @@ export interface CompleteQueryResult {
    */
   results: Array<{ id: number; distance: number } & Record<string, unknown>>;
   /**
-   * Which passage grounded the verdict and which of the query's content
-   * words it contains. Present when a fitted calibrator scored the query
-   * (absent on 'unscored'). An asked-for value in `uncovered` is one no top
-   * passage states, whatever matchQuality says.
+   * Which of the query's content words the best of the top five passages
+   * contains (covered) and which none of them does (uncovered). Computed for
+   * every pack, calibrated or not; absent only when the query has no
+   * gradable word. An asked-for value in `uncovered` is one no top passage
+   * states, whatever matchQuality says.
    */
   grounding?: {
-    /** Id of the passage the coverage score was taken from. */
+    /** Id of the passage that covered the most query words. */
     recordId: number | null;
     /** Index of that passage in the fused (or distance-ordered) window. */
     passageIndex: number;
-    /** Weighted share of the query's content words the passage contains, 0-1. */
+    /** Share of the query's content words the passage contains, 0-1 (a heading-only match counts half). */
     coverage: number;
     covered: string[];
     uncovered: string[];

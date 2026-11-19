@@ -3607,6 +3607,10 @@ console.log('mcp: a mounted chain embeds queries with the query prefix');
     check('the fixture separates the two sides of the prefix contract',
         asQuery.results[0].distance !== asPassage.results[0].distance,
         `${asQuery.results[0].distance} vs ${asPassage.results[0].distance}`);
+    check('an uncalibrated chain still grades every query word against its top passages',
+        asQuery.matchQuality === 'unscored' && Number.isSafeInteger(asQuery.grounding?.recordId)
+        && JSON.stringify([...asQuery.grounding.covered, ...asQuery.grounding.uncovered].sort()) === JSON.stringify(['fall', 'rise', 'sea']),
+        JSON.stringify({ mq: asQuery.matchQuality, g: asQuery.grounding }));
 
     const stdin = new PassThrough();
     const stdout = new PassThrough();

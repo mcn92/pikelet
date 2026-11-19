@@ -26,6 +26,7 @@ import { resolveParentLocation, assertConfined } from './layer-locator.mjs';
 import { httpRangeSource } from './sources.mjs';
 import { fuseCandidates, FUSION_DEFAULTS } from './fusion.mjs';
 import { parseTombstoneSegment, firstSupersetViolation } from './tombstones.mjs';
+import { groundQuery, GROUNDING_PASSAGES } from './grounding.mjs';
 import { validateAgainstParent, chainIngestDeclaration, validateIngestAgainstChain, LAYER_PROFILE, MAX_DEPTH } from './layer-manifest.mjs';
 import { parseInheritedQuerySegment, unionBloom } from './layer-encoder.mjs';
 import {
@@ -573,16 +574,21 @@ export async function openPikeletChain(members, options = {}) {
                     if (scored && scored.match_quality) {
                         matchQuality = scored.match_quality;
                         if (Number.isFinite(scored.confidence)) confidence = scored.confidence;
-                        // Which passage grounded the verdict and which query
-                        // words no passage contains, as the single-file
-                        // reader returns it; recordId is the chain-global id
-                        // of the passage coverage scored.
-                        if (scored.grounding) {
-                            grounding = { ...scored.grounding, recordId: passageOrder[scored.grounding.passageIndex]?.id ?? null };
-                        }
                     }
                 } else if (calibration.status === 'none') {
                     matchQuality = 'unscored';
+                }
+                // Grounding for every chain, calibrated or not (grounding.mjs),
+                // from the passages fusion ranks first; recordId is the
+                // chain-global id of the graded passage.
+                {
+                    const passageOrder = (fusedFull?.length ? fusedFull : searched).slice(0, GROUNDING_PASSAGES);
+                    const passageTexts = await Promise.all(passageOrder.map(async (hit) => {
+                        const owner = ownerOf(table, hit.id);
+                        return (await searchTiers[owner.tier.tier].reader.hydrate(owner.localId))?.text ?? '';
+                    }));
+                    const graded = groundQuery(queryOptions.text ?? '', passageTexts);
+                    if (graded) grounding = { ...graded, recordId: passageOrder[graded.passageIndex]?.id ?? null };
                 }
                 // A 'none' verdict withholds results, exactly as the
                 // single-file reader does: the calibrated abstention signal is

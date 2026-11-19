@@ -25,6 +25,7 @@ import { loadStudentModel, embedTextWithStudent } from './student-embedder.mjs';
 import { computeMatchQuality, computePreSearchAbstention } from './student-abstention.mjs';
 import { createAbstentionScorer } from './retrieval-abstention.mjs';
 import { openLexicalIndex, openLexicalIndexLazy } from './lexical.mjs';
+import { groundQuery, GROUNDING_PASSAGES } from './grounding.mjs';
 import { parseRowMapSegment } from './rowmap.mjs';
 import { PikeletSketchArtifact } from '../src/artifact/pikelet-artifact.js';
 import { blobCacheGet, blobCachePut, verifySegmentSha256 } from '../src/artifact/pikelet-artifact-common.js';
@@ -1525,11 +1526,15 @@ export async function openPikeletFile(input, options = {}) {
                     const record = await hydrate(hit.id);
                     return { ...record, id: hit.id, distance: hit.distance, ...(hit.fusedRank ? { fusedRank: hit.fusedRank, lexicalRank: hit.lexicalRank, vectorRank: hit.vectorRank } : {}) };
                 }));
-                // Grounding transparency: which record's text grounded the verdict
-                // and which query words it covered, so a consumer can tell a
-                // topical match ("much money darcy make year") from an answer.
-                const passageOrder = fusedFull?.length ? fusedFull : (searched ?? hits);
-                const grounding = quality.grounding ? { ...quality.grounding, recordId: passageOrder[quality.grounding.passageIndex]?.id ?? null } : null;
+                // Grounding: which query words the best of the top passages
+                // contains and which none does, so a consumer can tell a topical
+                // match ("much money darcy make year") from an answer. Computed
+                // for every pack (grounding.mjs), calibrated or not, from the
+                // passages fusion ranks first; recordId names the graded passage.
+                const passageOrder = (fusedFull?.length ? fusedFull : (searched ?? hits)).slice(0, GROUNDING_PASSAGES);
+                const passageTexts = await Promise.all(passageOrder.map(async (hit) => (await hydrate(hit.id))?.text ?? ''));
+                const graded = groundQuery(trimmed, passageTexts);
+                const grounding = graded ? { ...graded, recordId: passageOrder[graded.passageIndex]?.id ?? null } : null;
                 return { matchQuality: quality.match_quality, confidence: quality.confidence, results, ...(grounding ? { grounding } : {}) };
             },
 

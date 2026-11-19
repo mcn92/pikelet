@@ -29,6 +29,7 @@ import {
 } from 'pikelet-wasm/complete/builder';
 import { openPikeletFile, verifyHostEncoder, fuseCandidates, FUSION_DEFAULTS } from 'pikelet-wasm/complete';
 import { openLexicalIndex } from '../packages/pikelet-wasm/complete/lexical.mjs';
+import { groundQuery, groundingWords } from '../packages/pikelet-wasm/complete/grounding.mjs';
 
 const require = createRequire(import.meta.url);
 const Pikelet = require('pikelet-wasm');
@@ -2316,6 +2317,30 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
         JSON.stringify(fileFiltered).slice(0, 200));
     const twoSources = failure(['compile', docs, '--source', docs]);
     check('compile refuses a source given both ways', twoSources && /give one/.test(twoSources.stderr), JSON.stringify(twoSources).slice(0, 200));
+
+    // Grounding needs only the passages' text, so every pack gets it.
+    console.log('grounding: computed for every pack, calibrated or not');
+    check('grounding grades short tokens holding a digit and skips question scaffolding',
+        JSON.stringify(groundingWords('How many cylinders does a V8 engine have in 3D?')) === JSON.stringify(['cylinders', 'v8', 'engine', '3d']),
+        JSON.stringify(groundingWords('How many cylinders does a V8 engine have in 3D?')));
+    const graded = groundQuery('how many cylinders does a v8 engine have',
+        ['Straight-six\nA straight-six engine has six cylinders in one row.', 'Comets\nA comet grows a tail near the sun.']);
+    check('grounding picks the best passage and names the words it lacks',
+        graded.passageIndex === 0 && JSON.stringify(graded.uncovered) === JSON.stringify(['v8']) && graded.coverage === 0.667,
+        JSON.stringify(graded));
+    check('a heading-only match counts at half credit, and a query with no gradable word grades nothing',
+        groundQuery('v8 engine', ['V8\nAn engine.']).coverage === 0.75 && groundQuery('what is it', ['anything']) === null);
+    const unscoredPack = path.join(tmp, 'unscored.pikelet');
+    cli(['compile', docs, '--out', unscoredPack, '--skip-calibration']);
+    const unscoredOpen = await openPikeletFile(unscoredPack);
+    const unscoredQuery = 'how do bees tell each other where flowers are';
+    const unscoredOut = await unscoredOpen.query(unscoredQuery, { k: 3 });
+    await unscoredOpen.close();
+    const g = unscoredOut.grounding;
+    check('an uncalibrated pack is unscored but still grades every query word against its top passages',
+        unscoredOut.matchQuality === 'unscored' && g && Number.isSafeInteger(g.recordId)
+        && JSON.stringify([...g.covered, ...g.uncovered].sort()) === JSON.stringify(groundingWords(unscoredQuery).sort()),
+        JSON.stringify(g));
 
     // pikelet query prints what the MCP search tool returns, readably.
     console.log('cli: pikelet query');

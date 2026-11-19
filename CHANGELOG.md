@@ -12,6 +12,18 @@ first.
 
 ### Compatibility
 
+- **Every pack returns `grounding`, and it grades short tokens like
+  "v8".** The reader computed `grounding` (which query words the top
+  passages contain and which none does) only inside a fitted calibrator,
+  so an uncalibrated pack or chain returned none. It now grades the top
+  five fused passages for every pack, calibrated or not. Tokens holding a
+  digit count whatever their length ("v8", "3d"), where three letters
+  was the minimum, so "how many cylinders does a v8 engine have" now
+  reports `v8` uncovered when no passage mentions it. Every word weighs
+  the same: the calibrated coverage term discounts corpus-common words,
+  and on a calibrated pack `coverage` and the chosen passage can differ
+  from before. `matchQuality` and `confidence` are unchanged, since the
+  calibrated verdict keeps its own coverage term.
 - **New packs hide fewer results under "none".** `compile` now fits a
   second, distance-only model (`gate` in the calibration asset) that alone
   decides `matchQuality: "none"`; the existing model, which weighs word
