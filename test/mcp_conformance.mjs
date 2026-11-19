@@ -7,7 +7,10 @@
 // run — no compile, no encoder, no network.
 
 import { PassThrough } from 'node:stream';
-import { runMcpServer, mountName } from '../packages/pikelet/src/mcp.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { runMcpServer, mountName, installMcpConfig } from '../packages/pikelet/src/mcp.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -653,6 +656,47 @@ console.log('verify_pack lexical integrity');
         check('a segment that fails the full check is a tool error, not a verdict',
             /lexical segment failed hash verification/.test(out.error || ''), JSON.stringify(out).slice(0, 160));
     }, { openPikeletFile: async () => lazyPack({ fail: true }) });
+}
+
+console.log('mcp install: checked paths, project-relative for Claude Code');
+{
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pikelet-install-'));
+    const project = path.join(root, 'project');
+    fs.mkdirSync(path.join(project, 'packs'), { recursive: true });
+    fs.writeFileSync(path.join(project, 'packs', 'docs.pikelet'), 'stub');
+    fs.writeFileSync(path.join(root, 'outside.pikelet'), 'stub');
+    const pin = 'b'.repeat(64);
+    const argsOf = (written) => JSON.parse(fs.readFileSync(written.configPath, 'utf8')).mcpServers[written.serverName].args;
+    const packsOf = (args) => args.filter((_, i) => args[i - 1] === '--pack');
+
+    let missing = '';
+    try {
+        await installMcpConfig({ packPaths: ['./packs/nope.pikelet'], cwd: project, homedir: root });
+    } catch (error) { missing = error.message; }
+    check('a pack file that does not exist is refused and nothing is written',
+        /no pack at .*nope\.pikelet; nothing was written/.test(missing) && !fs.existsSync(path.join(project, '.mcp.json')), missing);
+
+    const code = await installMcpConfig({
+        packPaths: ['./packs/docs.pikelet', `packs/docs.pikelet#${pin.toUpperCase()}`, '../outside.pikelet', 'https://packs.example.com/a.pikelet'],
+        cwd: project, homedir: root, serverName: 'code',
+    });
+    check('Claude Code: a pack inside the project is written relative to it, pins kept; one outside is absolute; a URL is untouched',
+        JSON.stringify(packsOf(argsOf(code))) === JSON.stringify(['packs/docs.pikelet', `packs/docs.pikelet#${pin}`,
+            path.join(root, 'outside.pikelet'), 'https://packs.example.com/a.pikelet']), argsOf(code).join(' '));
+
+    let missingShelf = '';
+    try {
+        await installMcpConfig({ packPaths: [], shelf: 'shelf.json', cwd: project, homedir: root, serverName: 'shelf' });
+    } catch (error) { missingShelf = error.message; }
+    check('a shelf file that does not exist is refused', /no shelf at .*shelf\.json/.test(missingShelf), missingShelf);
+
+    if (process.platform === 'linux') {
+        const desktop = await installMcpConfig({ packPaths: ['./packs/docs.pikelet'], client: 'claude-desktop', cwd: project, homedir: root });
+        check('Claude Desktop: a pack inside the project is still written absolute',
+            desktop.configPath === path.join(root, '.config', 'Claude', 'claude_desktop_config.json')
+            && packsOf(argsOf(desktop))[0] === path.join(project, 'packs', 'docs.pikelet'), argsOf(desktop).join(' '));
+    }
+    fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\nMCP protocol conformance: ${passed} passed, ${failed} failed`);

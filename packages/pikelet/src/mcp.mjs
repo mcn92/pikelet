@@ -972,15 +972,31 @@ export async function installMcpConfig({ packPaths, shelf, journal = undefined, 
   // immutable, and a reader that silently floats to whatever npm serves
   // next month would undercut exactly that reproducibility.
   const args = ['-y', version ? `pikelet@${version}` : 'pikelet', 'mcp'];
+  // A local file must exist: a config naming a missing pack only fails
+  // later, inside the client, where the error is hard to see.
+  // Claude Code starts a project's servers in the project directory, the
+  // one holding .mcp.json, so a file inside it is written relative to it
+  // and the config still works when committed and cloned elsewhere. Files
+  // outside the project, and every path in Claude Desktop's config (whose
+  // working directory is not the project), are written absolute. URLs
+  // (and #identity pins) pass through untouched.
+  const projectRelative = client === 'claude-code';
+  const localPath = (location, what) => {
+    const absolute = path.resolve(base, location);
+    if (!fsSync.existsSync(absolute)) {
+      throw new Error(`mcp install: no ${what} at ${absolute}; nothing was written`);
+    }
+    const rel = path.relative(base, absolute);
+    const inside = rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+    return projectRelative && inside ? rel.split(path.sep).join('/') : absolute;
+  };
   for (const raw of packPaths || []) {
-    // Local paths are pinned absolute so the config works from any cwd;
-    // URLs (and #identity pins) pass through untouched.
     const hash = /^(.*)#([0-9a-f]{64})$/i.exec(raw);
     const location = hash ? hash[1] : raw;
     const suffix = hash ? `#${hash[2].toLowerCase()}` : '';
-    args.push('--pack', /^https?:\/\//i.test(location) ? `${location}${suffix}` : `${path.resolve(base, location)}${suffix}`);
+    args.push('--pack', /^https?:\/\//i.test(location) ? `${location}${suffix}` : `${localPath(location, 'pack')}${suffix}`);
   }
-  if (shelf) args.push('--shelf', /^https?:\/\//i.test(shelf) ? shelf : path.resolve(base, shelf));
+  if (shelf) args.push('--shelf', /^https?:\/\//i.test(shelf) ? shelf : localPath(shelf, 'shelf'));
   // The journal is pinned absolute, like local packs, so the config works
   // from any cwd.
   if (journal) args.push('--journal', resolveJournalDir(journal));

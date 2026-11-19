@@ -124,6 +124,12 @@ first.
 - **A single file is a source.** `compile --source ./docs/install.md`
   (or `.mdx`, `.html`, `.txt`) compiles that one file; it failed with a
   raw ENOTDIR. The pack is named after the file without its extension.
+- **`mcp install` checks the pack and writes a portable path.** It wrote
+  an entry for a pack file that did not exist and exited 0; a missing
+  local pack or shelf is now refused and nothing is written. For Claude
+  Code, a pack inside the project is written relative to the project, so
+  a committed `.mcp.json` works on another checkout; packs outside it,
+  and every path in Claude Desktop's config, stay absolute.
 - **`pikelet --version`** (or `-v`) prints the version, `--flag=value`
   works for every flag that takes a value, and `compile ./docs` is
   `compile --source ./docs`.
