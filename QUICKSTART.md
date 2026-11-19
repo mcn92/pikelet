@@ -177,9 +177,10 @@ Claude Code picks it up on the next session in this project.
 ```
 
 The pack must exist; `install` refuses a path with no file. A pack inside
-the project is written relative to it (Claude Code starts the server in the
-project directory), so a committed `.mcp.json` works on a teammate's
-checkout; one outside the project is written as an absolute path.
+the project is written relative to it, so a committed `.mcp.json` works on
+a teammate's checkout; the server resolves it against `CLAUDE_PROJECT_DIR`,
+which Claude Code sets to the project root, so it works whichever directory
+the session started in; one outside the project is written as an absolute path.
 `--client claude-desktop` writes Claude Desktop's config instead, always
 with absolute paths. Any other
 MCP client can run `pikelet mcp --pack ./docs.pikelet` directly, with no

@@ -129,7 +129,11 @@ first.
   local pack or shelf is now refused and nothing is written. For Claude
   Code, a pack inside the project is written relative to the project, so
   a committed `.mcp.json` works on another checkout; packs outside it,
-  and every path in Claude Desktop's config, stay absolute.
+  and every path in Claude Desktop's config, stay absolute. The server
+  resolves relative `--pack`, `--shelf` and `--journal` paths against
+  `CLAUDE_PROJECT_DIR`, which Claude Code sets to the project root for
+  the servers it spawns, so they mount wherever the server starts; without
+  it they resolve against the working directory as before.
 - **`pikelet --version`** (or `-v`) prints the version, `--flag=value`
   works for every flag that takes a value, and `compile ./docs` is
   `compile --source ./docs`.

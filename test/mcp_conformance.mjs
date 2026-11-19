@@ -10,7 +10,7 @@ import { PassThrough } from 'node:stream';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runMcpServer, mountName, installMcpConfig } from '../packages/pikelet/src/mcp.mjs';
+import { runMcpServer, mountName, installMcpConfig, anchorServerPaths } from '../packages/pikelet/src/mcp.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -697,6 +697,28 @@ console.log('mcp install: checked paths, project-relative for Claude Code');
             && packsOf(argsOf(desktop))[0] === path.join(project, 'packs', 'docs.pikelet'), argsOf(desktop).join(' '));
     }
     fs.rmSync(root, { recursive: true, force: true });
+}
+
+{
+    console.log('anchorServerPaths: relative paths follow CLAUDE_PROJECT_DIR');
+    const pin = 'ab'.repeat(32);
+    const proj = path.join(os.tmpdir(), 'proj');
+    const elsewhere = path.join(os.tmpdir(), 'elsewhere.pikelet');
+    const anchored = anchorServerPaths({
+        packPaths: ['docs.pikelet', `packs/a.pikelet#${pin}`, elsewhere, 'https://packs.example.com/b.pikelet'],
+        shelf: 'shelf.json', journal: './journal',
+    }, { CLAUDE_PROJECT_DIR: proj });
+    check('relative packs, pinned packs and the shelf resolve against the project; absolute paths and URLs pass through',
+        JSON.stringify(anchored.packPaths) === JSON.stringify([path.join(proj, 'docs.pikelet'), `${path.join(proj, 'packs', 'a.pikelet')}#${pin}`,
+            elsewhere, 'https://packs.example.com/b.pikelet']) && anchored.shelf === path.join(proj, 'shelf.json'),
+        JSON.stringify(anchored));
+    check('a journal path resolves against the project; a bare journal name stays a name',
+        anchored.journal === path.join(proj, 'journal')
+        && anchorServerPaths({ journal: 'notes' }, { CLAUDE_PROJECT_DIR: proj }).journal === 'notes');
+    const unset = { packPaths: ['docs.pikelet'], shelf: 'shelf.json', journal: './journal' };
+    check('without CLAUDE_PROJECT_DIR (or with a relative one) nothing changes',
+        JSON.stringify(anchorServerPaths(unset, {})) === JSON.stringify(unset)
+        && JSON.stringify(anchorServerPaths(unset, { CLAUDE_PROJECT_DIR: 'rel' })) === JSON.stringify(unset));
 }
 
 console.log(`\nMCP protocol conformance: ${passed} passed, ${failed} failed`);

@@ -270,10 +270,12 @@ npx pikelet mcp install --pack astro.pikelet --client claude-code
 (`claude-code` writes `./.mcp.json`, `claude-desktop` the platform's
 Claude Desktop config; `--server-name` names the entry, `--force`
 replaces an existing one. A local pack or shelf that does not exist is
-refused. For Claude Code, which starts the server in the project
-directory, a file inside the project is written relative to it, so the
-config can be committed; other local paths, and all of Claude Desktop's,
-are absolute. Other MCP clients run `pikelet mcp --pack ...` from their
+refused. For Claude Code, a file inside the project is written relative
+to it, so the config can be committed; the server resolves relative
+`--pack`, `--shelf` and `--journal` paths against `CLAUDE_PROJECT_DIR`,
+which Claude Code sets to the project root, and against its working
+directory only when that is unset. Other local paths, and all of Claude
+Desktop's, are absolute. Other MCP clients run `pikelet mcp --pack ...` from their
 own config.) The equivalent JSON, if you'd rather write it
 yourself:
 

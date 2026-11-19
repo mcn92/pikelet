@@ -974,9 +974,10 @@ export async function installMcpConfig({ packPaths, shelf, journal = undefined, 
   const args = ['-y', version ? `pikelet@${version}` : 'pikelet', 'mcp'];
   // A local file must exist: a config naming a missing pack only fails
   // later, inside the client, where the error is hard to see.
-  // Claude Code starts a project's servers in the project directory, the
-  // one holding .mcp.json, so a file inside it is written relative to it
-  // and the config still works when committed and cloned elsewhere. Files
+  // A file inside the project is written relative to it, so the config
+  // still works when committed and cloned elsewhere; the server resolves
+  // it against CLAUDE_PROJECT_DIR, which Claude Code sets for the servers
+  // it spawns (anchorServerPaths), not against its working directory. Files
   // outside the project, and every path in Claude Desktop's config (whose
   // working directory is not the project), are written absolute. URLs
   // (and #identity pins) pass through untouched.
@@ -1018,6 +1019,36 @@ export async function installMcpConfig({ packPaths, shelf, journal = undefined, 
   await fs.mkdir(path.dirname(configPath), { recursive: true });
   await fs.writeFile(configPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
   return { configPath, serverName, hint };
+}
+
+/**
+ * Where the server's relative local paths are anchored. Claude Code gives
+ * the servers it spawns CLAUDE_PROJECT_DIR (the directory holding
+ * .mcp.json), so the project-relative paths mcp install writes resolve
+ * against it rather than the working directory, which need not be the
+ * project root. Without it, paths resolve against the working directory
+ * as before. URLs, absolute paths, #identity pins and bare journal names
+ * pass through untouched.
+ */
+export function anchorServerPaths({ packPaths = [], shelf, journal }, env = process.env) {
+  const base = typeof env.CLAUDE_PROJECT_DIR === 'string' && path.isAbsolute(env.CLAUDE_PROJECT_DIR)
+    ? env.CLAUDE_PROJECT_DIR
+    : null;
+  const anchor = (location) => (!base || /^https?:\/\//i.test(location) || path.isAbsolute(location)
+    ? location
+    : path.resolve(base, location));
+  const anchorPack = (raw) => {
+    const hash = /^(.*)(#[0-9a-f]{64})$/i.exec(raw);
+    return hash ? `${anchor(hash[1])}${hash[2]}` : anchor(raw);
+  };
+  // resolveJournalDir's rule: a value that looks like a path is one.
+  const journalIsPath = typeof journal === 'string'
+    && (journal.includes('/') || journal.includes('\\') || journal.trim().startsWith('.'));
+  return {
+    packPaths: packPaths.map(anchorPack),
+    shelf: typeof shelf === 'string' ? anchor(shelf) : shelf,
+    journal: journalIsPath ? anchor(journal.trim()) : journal,
+  };
 }
 
 /**

@@ -2332,6 +2332,34 @@ console.log('calibration: a compiled pack scores relevance, fit against off-topi
     check('query names a missing pack', noPack && /Pack not found: .*absent\.pikelet/.test(noPack.stderr), JSON.stringify(noPack).slice(0, 200));
     const noQuestion = failure(['query', out]);
     check('query without a question prints its usage', noQuestion && /Usage: pikelet query <pack>/.test(noQuestion.stderr), JSON.stringify(noQuestion).slice(0, 200));
+
+    // mcp install writes project-relative pack paths for Claude Code; the
+    // server it spawns may start in a subdirectory, so it resolves them
+    // against CLAUDE_PROJECT_DIR when that is set.
+    console.log('cli: mcp resolves relative packs against CLAUDE_PROJECT_DIR');
+    const { spawn } = await import('node:child_process');
+    const project = path.join(tmp, 'project');
+    fs.mkdirSync(path.join(project, 'sub'), { recursive: true });
+    fs.copyFileSync(out, path.join(project, 'docs.pikelet'));
+    const listPacks = (env) => new Promise((resolve) => {
+        const child = spawn(process.execPath, [path.join(ROOT, 'packages', 'pikelet', 'bin', 'pikelet.mjs'), 'mcp', '--pack', 'docs.pikelet'],
+            { cwd: path.join(project, 'sub'), env: { ...process.env, CLAUDE_PROJECT_DIR: '', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+        let buf = '';
+        const timer = setTimeout(() => child.kill(), 30000);
+        child.stdout.on('data', (d) => {
+            buf += d;
+            const line = buf.split('\n').find((l) => l.includes('"id":1'));
+            if (line) { clearTimeout(timer); child.stdin.end(); resolve(JSON.parse(line).result?.content?.[0]?.text || ''); }
+        });
+        child.on('exit', () => { clearTimeout(timer); resolve(buf); });
+        child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_packs', arguments: {} } })}\n`);
+    });
+    const anchoredList = await listPacks({ CLAUDE_PROJECT_DIR: project });
+    check('from a subdirectory, a relative --pack mounts against CLAUDE_PROJECT_DIR',
+        /"identity":\s*"[0-9a-f]{64}"/.test(anchoredList), anchoredList.slice(0, 300));
+    const unanchoredList = await listPacks({});
+    check('without CLAUDE_PROJECT_DIR the same path resolves against the working directory',
+        !/"identity":\s*"[0-9a-f]{64}"/.test(unanchoredList) && /docs\.pikelet/.test(unanchoredList), unanchoredList.slice(0, 300));
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

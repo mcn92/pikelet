@@ -77,7 +77,7 @@ export async function main(argv) {
     return;
   }
   if (parsed.positionals[0] === 'mcp') {
-    const { runMcpServer, loadShelf, installMcpConfig } = await import('./mcp.mjs');
+    const { runMcpServer, loadShelf, installMcpConfig, anchorServerPaths } = await import('./mcp.mjs');
     const { loadCompleteModules, CLI_VERSION, plainHttpWarning } = await import('./common.mjs');
     const warnInsecure = (location) => {
       const warning = plainHttpWarning(location);
@@ -102,9 +102,11 @@ export async function main(argv) {
       console.log(written.hint);
       return;
     }
-    if (parsed.flags.shelf) {
-      warnInsecure(parsed.flags.shelf);
-      packPaths.push(...await loadShelf(parsed.flags.shelf));
+    const anchored = anchorServerPaths({ packPaths, shelf: parsed.flags.shelf, journal: parsed.flags.journal });
+    packPaths.splice(0, packPaths.length, ...anchored.packPaths);
+    if (anchored.shelf) {
+      warnInsecure(anchored.shelf);
+      packPaths.push(...await loadShelf(anchored.shelf));
     }
     const { reader } = await loadCompleteModules();
     // diskBlobCache comes from the reader's Node entry; a pikelet-wasm that
@@ -114,7 +116,7 @@ export async function main(argv) {
       : reader.diskBlobCache();
     await runMcpServer({
       packPaths,
-      journal: parsed.flags.journal ?? null,
+      journal: anchored.journal ?? null,
       openPikeletFile: reader.openPikeletFile,
       // Pack bytes never pass through Node fetch's response decoder.
       httpRangeSource: (url, options = {}) => {
