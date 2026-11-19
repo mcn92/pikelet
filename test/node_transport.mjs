@@ -295,10 +295,14 @@ console.log('crawler');
     check('a page robots.txt disallows for pikelet is never fetched', !fetched.includes('/docs/private/b'), fetched.join(' '));
     check('the skipped links are reported',
         lines.some((l) => /skipped 2 same-site links outside \/docs\//.test(l)) && lines.some((l) => /robots\.txt kept 1 pages/.test(l)), lines.join(' | '));
+    // Compared whole, not by pattern: the header is the request's, and a
+    // version pattern ending in \d+\S* backtracks polynomially on it.
+    const ownVersion = JSON.parse(fs.readFileSync(path.join(REPO, 'packages', 'pikelet', 'package.json'), 'utf8')).version;
+    const expectedAgent = `pikelet/${ownVersion} (+https://github.com/mcn92/pikelet)`;
     const pageGaps = requests.filter((r) => r.url !== '/robots.txt').map((r, i, all) => (i ? r.at - all[i - 1].at : Infinity));
     check('robots.txt Crawl-delay spaces the requests', Math.min(...pageGaps) >= 280, pageGaps.join(','));
     check('every request names pikelet, its version and where to read about it',
-        requests.every((r) => /^pikelet\/\d+\.\d+\.\d+\S* \(\+https:\/\/github\.com\/mcn92\/pikelet\)$/.test(r.agent || '')), requests[0]?.agent);
+        requests.every((r) => r.agent === expectedAgent), requests[0]?.agent);
 
     // The default pause, with no Crawl-delay.
     robotsText = 'User-agent: *\nAllow: /\n';
