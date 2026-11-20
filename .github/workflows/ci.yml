@@ -89,8 +89,16 @@ jobs:
 
   test-browser-entry:
     name: Bundled browser consumer (Vite + Playwright)
-    # Playwright 1.60 has no browser builds for ubuntu-latest's 26.04 image.
     runs-on: ubuntu-24.04
+    # Playwright's image ships the three browsers and their system libraries.
+    # Installing them on the runner (playwright install --with-deps) spent
+    # 1 to 20 minutes in apt, depending on the Ubuntu mirror. The tag must
+    # match the playwright version in package-lock.json, or the browsers it
+    # holds are not the ones that version drives. --user 1001 as Playwright's
+    # CI docs give it: Firefox misbehaves when run as root.
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
+      options: --user 1001
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -98,9 +106,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0'
-      - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:browser
       # The inline-encoder kernel in all three engines: bit-identical to the
       # Node build, and still verifying the f32 kernel's test vectors (packs
