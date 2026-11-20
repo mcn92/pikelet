@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pikelet Answers</title>
+<meta name="description" content="A small language model, running in your browser on WebAssembly, answers questions from passages that pikelet range-reads out of one static Wikipedia file. No server, no GPU, no API.">
+<link rel="canonical" href="https://pikelet-wiki-playground.pages.dev/answer">
+<link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="./style.css">
+<style>
+  .model-choice { display: flex; flex-direction: column; gap: 8px; }
+  .model-choice label {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 10px 12px; border: 1px solid var(--rule); border-radius: 8px;
+    background: var(--surface-2); cursor: pointer; font-size: 15px;
+  }
+  .model-choice label:has(input:checked) { border-color: var(--accent); }
+  .model-choice .dim { color: var(--ink-dim); font-size: 14px; }
+  .load-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #load-btn, #anyway-btn { padding: 10px 16px; align-self: flex-start; }
+  progress { width: 100%; height: 8px; accent-color: var(--accent); }
+  .answer-box {
+    min-height: 3em; padding: 14px 16px; border-radius: 8px;
+    background: var(--surface-2); font-size: 17px; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .answer-box.declined { color: var(--weak); }
+  .answer-stats { color: var(--ink-dim); font: 400 13px/1.5 'JetBrains Mono', monospace; overflow-wrap: anywhere; }
+  .hit .excerpt.full { max-height: 12em; overflow: auto; }
+  .back-link { font-size: 14px; }
+  .back-link a, .lede a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .back-link a:hover, .lede a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">pikelet · answers</div>
+    <h1>A language model that answers from the file.</h1>
+    <p class="lede">
+      Your question is searched in <strong>wikipedia.pikelet</strong>, the same 648.5&nbsp;MB static
+      file as the <a href="./">search page</a>. The top three passages go to <strong>SmolLM2</strong>,
+      a small open language model running in this tab on WebAssembly, which answers from them.
+      Nothing is sent to a server: the file is read with byte ranges, and the model runs on your CPU.
+    </p>
+  </header>
+
+  <noscript><p class="lede">This page runs the model in your browser and needs JavaScript.</p></noscript>
+
+  <section class="panel">
+    <div class="panel-label">Model</div>
+    <div class="model-choice" id="model-choice">
+      <label><input type="radio" name="model" value="smollm2-360m" checked>
+        <span><strong>SmolLM2-360M-Instruct</strong> <span class="dim">· 407&nbsp;MB download, once · about 0.5&nbsp;GB of memory · fast on most computers</span></span></label>
+      <label><input type="radio" name="model" value="smollm2-1.7b">
+        <span><strong>SmolLM2-1.7B-Instruct</strong> <span class="dim">· 1.93&nbsp;GB download, once · about 2.4&nbsp;GB of memory · desktop browsers only, slower</span></span></label>
+    </div>
+    <div class="load-row">
+      <button type="button" id="load-btn">Load model</button>
+      <span id="model-status" class="status">Not loaded. The weights are kept in this browser after the first download.</span>
+    </div>
+    <progress id="load-progress" max="1" value="0" hidden></progress>
+  </section>
+
+  <section class="panel">
+    <div class="panel-label">Ask it something</div>
+    <p class="lede small">
+      Ask about something Wikipedia covers. If a name or number in your question appears in none of
+      the passages found, the page says so instead of answering: a small model given passages that
+      don't mention what you asked tends to answer anyway.
+    </p>
+    <div class="suggested-queries" id="suggested-queries">
+      <button type="button" class="chip" data-q="What is the capital of Australia?">What is the capital of Australia?</button>
+      <button type="button" class="chip" data-q="Who painted the Mona Lisa?">Who painted the Mona Lisa?</button>
+      <button type="button" class="chip" data-q="How many legs does a spider have?">How many legs does a spider have?</button>
+      <button type="button" class="chip" data-q="When did Zorblax Island become independent?">When did Zorblax Island become independent?</button>
+    </div>
+    <form id="query-form">
+      <input type="text" id="query-input" placeholder="load the model, then ask…" disabled autocomplete="off">
+      <button type="submit" id="ask-btn" disabled>Answer</button>
+    </form>
+    <div id="pack-status" class="status">Mounting wikipedia.pikelet…</div>
+  </section>
+
+  <section class="panel" id="answer-panel" hidden>
+    <div class="panel-label">Answer</div>
+    <div class="answer-box" id="answer" aria-live="polite"></div>
+    <button type="button" id="anyway-btn" hidden>Answer anyway</button>
+    <div class="answer-stats" id="answer-stats"></div>
+  </section>
+
+  <section class="panel" id="passages-panel" hidden>
+    <div class="panel-label">The passages it was given</div>
+    <div id="passages"></div>
+  </section>
+
+  <section class="about" aria-labelledby="about-title">
+    <h2 id="about-title">How this works</h2>
+    <ul>
+      <li><strong>Search:</strong> pikelet's browser reader embeds your question with the encoder inside
+        the file and range-reads the nearest passages, as on the search page.</li>
+      <li><strong>Model:</strong> SmolLM2 (Hugging Face, Apache-2.0), quantized to 8 bits, on a dependency-free
+        WebAssembly kernel from pikelet's decoder spike. It uses several threads when the browser allows
+        it, and gives the same answer, token for token, at any thread count.</li>
+      <li><strong>Prompt:</strong> the three passages and your question, with an instruction to answer only from
+        them, or to say the passages don't contain the answer.</li>
+      <li><strong>Limits:</strong> these are small models. In testing on 70 questions written from this pack's
+        passages, the 360M model answered 54 correctly from the top three passages, against 2 with no passages.
+        It can still misread a passage or answer when it shouldn't, so check the passages below the answer.</li>
+    </ul>
+    <p class="back-link"><a href="./">← Back to the search playground</a> ·
+      <a href="https://github.com/mcn92/pikelet/tree/main/examples/one-file-search/decoder-spike">the decoder spike</a></p>
+  </section>
+
+  <footer>
+    the file is the search environment · <a href="https://github.com/mcn92/pikelet" target="_blank" rel="noopener">github.com/mcn92/pikelet</a>
+  </footer>
+</div>
+<script type="module" src="./answer.mjs"></script>
+</body>
+</html>

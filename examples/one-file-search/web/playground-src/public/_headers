@@ -1,0 +1,14 @@
+# The answer page runs its model on WebAssembly threads, which need a
+# cross-origin-isolated page: COOP and COEP on the page and on its worker
+# scripts. Only the answer page and llm/ get them, so nothing on the search
+# page can be blocked by them. Everything the answer page loads from another
+# origin (the pack and weights on R2, Google Fonts) is fetched with CORS.
+/answer
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+/answer.html
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+/llm/*
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
