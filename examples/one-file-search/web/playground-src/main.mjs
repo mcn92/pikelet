@@ -60,6 +60,20 @@ function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+// grounding (computed by the reader for every pack): the question's content
+// words the best-matching of the top five passages contains and lacks. An
+// asked-for name or value in `uncovered` is one that passage does not state.
+// `results` names that passage when it is not the top result.
+function groundingHtml(out, results = out.results) {
+    const g = out.grounding;
+    if (!g) return '';
+    if (!g.uncovered.length) return 'the best-matching passage contains every word of the question';
+    const words = g.uncovered.map((w) => `<span class="badge lacks">${escapeHtml(w)}</span>`).join(' ');
+    const best = results.find((r) => r.id === g.recordId);
+    const which = best && best !== results[0] ? ` (best match: ${escapeHtml(best.title || `record ${best.id}`)})` : '';
+    return `the best-matching passage lacks ${words}${which}`;
+}
+
 function formatBytes(n) {
     if (n < 1024) return `${n} B`;
     if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
@@ -458,16 +472,17 @@ async function runQuery() {
     const before = { ...stats };
     const t0 = performance.now();
     try {
-        const out = await search.query(text, { k: 5 });
+        // showAbstained: results always ship, as pikelet mcp returns them;
+        // the wiki pack's old calibration would otherwise withhold some.
+        const out = await search.query(text, { k: 5, showAbstained: true });
         const ms = performance.now() - t0;
         const usedReq = stats.requests - before.requests;
         const usedBytes = stats.bytes - before.bytes;
-        const badge = `<span class="badge ${out.matchQuality}">${out.matchQuality}</span>`;
-        const confidence = out.confidence !== undefined ? ` · confidence ${out.confidence.toFixed(3)}` : '';
-        els.verdict.innerHTML = `${badge}${confidence} · ${ms.toFixed(0)} ms · `
-            + `${usedReq} range reads · ${formatBytes(usedBytes)} fetched`;
+        const grounding = groundingHtml(out);
+        els.verdict.innerHTML = `${ms.toFixed(0)} ms · ${usedReq} range reads · ${formatBytes(usedBytes)} fetched`
+            + (grounding ? `<br>${grounding}` : '');
         els.results.innerHTML = out.results.length === 0
-            ? '<p class="empty">No results — the file knows this corpus cannot answer that.</p>'
+            ? '<p class="empty">No results.</p>'
             : out.results.map((r) => `
                 <article class="hit" data-id="${escapeHtml(String(r.id))}">
                   <h3>${escapeHtml(r.title)}</h3>
@@ -528,18 +543,13 @@ const VEYRA_BASE = 'https://pub-6da2384a3bca4a44b2b2fa29a94cc811.r2.dev';
 // one example — a single hardcoded before/after reads as cherry-picked.
 // Each entry here was individually compiled (one fact removed from the
 // 94-fact corpus, corpus-<fact>/) and verified end to end against a real
-// build before being listed, against two bars: the FULL pack must answer
-// with a strong verdict at k=1 (otherwise there's no contrast to show),
-// and the ABLATED pack must then abstain (or, for the counting question,
-// correctly decline to guess a wrong count). More candidate removals were
-// tried than are listed here — some failed the first bar (the full pack
-// already hedges on a multi-hop question before anything is removed) and
-// some failed the second (the retriever finds a plausible-looking but
-// wrong passage after the fact is gone — a different fact about the same
-// project, or an unrelated passage that happens to share vocabulary with
-// a broken reasoning chain). That's a real, known limitation of the
-// retrieval/calibration signal, not something to paper over by only ever
-// showing the cases that work without saying so.
+// build before being listed. Against the 0.15.0 reader, on every pack below,
+// the FULL pack's top result states the fact and its best-matching passage
+// contains every question word, and on the ABLATED pack that passage is
+// about another project and grounding lists the asked-for project's name
+// as uncovered. Removals where the retriever still found a plausible but
+// wrong passage after the fact was gone were left out; that is a real
+// limit of the signal, not hidden by picking only the cases that work.
 // Each scenario also carries a "contradicted" variant for the third panel:
 // a pack identical to the full one except that this same fact's record was
 // edited to state a different, still-plausible value (another clearance
@@ -678,14 +688,13 @@ async function runAblationPanel(url, question, badgeEl, answerEl, recordEl) {
         const source = httpRangeSource(url);
         const packSearch = await openPikeletFile(source);
         answerEl.textContent = 'Querying…';
-        // No showAbstained: an abstained verdict here should visibly
-        // withhold its results the way a real caller who wants that
-        // behavior sees it, not surface the nearest-but-wrong passage
-        // next to a "none" badge as if it were an answer.
-        const out = await packSearch.query(question, { k: 1 });
-        badgeEl.innerHTML = `<span class="badge ${out.matchQuality}">${out.matchQuality}</span> confidence ${out.confidence?.toFixed(3) ?? '—'}`;
+        // The nearest passage is shown even when the fact is gone, as an
+        // agent would receive it; grounding is what says it does not
+        // answer. k: 5 so the best-matching passage can be named.
+        const out = await packSearch.query(question, { k: 5, showAbstained: true });
+        badgeEl.innerHTML = groundingHtml(out);
         if (out.results.length === 0) {
-            answerEl.textContent = 'No results — the file knows this corpus cannot answer that.';
+            answerEl.textContent = 'No results.';
             recordEl.innerHTML = '';
             return;
         }
@@ -693,7 +702,7 @@ async function runAblationPanel(url, question, badgeEl, answerEl, recordEl) {
         answerEl.textContent = top.preview || top.text || '';
         recordEl.innerHTML = `record ${escapeHtml(String(top.id))} — ${escapeHtml(top.title || '')}`;
     } catch (err) {
-        badgeEl.innerHTML = '<span class="badge none">error</span>';
+        badgeEl.innerHTML = '<span class="badge lacks">error</span>';
         answerEl.textContent = String(err?.message || err);
     }
 }
@@ -708,7 +717,7 @@ async function runFullPanel(question) {
         fullPackAnswerCache.set(question, (async () => {
             const source = httpRangeSource(`${VEYRA_BASE}/veyra.pikelet`);
             const packSearch = await openPikeletFile(source);
-            return packSearch.query(question, { k: 1 });
+            return packSearch.query(question, { k: 5, showAbstained: true });
         })());
     }
     ablationEls.fullBadge.innerHTML = '';
@@ -716,13 +725,13 @@ async function runFullPanel(question) {
     ablationEls.fullRecord.innerHTML = '';
     try {
         const out = await fullPackAnswerCache.get(question);
-        ablationEls.fullBadge.innerHTML = `<span class="badge ${out.matchQuality}">${out.matchQuality}</span> confidence ${out.confidence?.toFixed(3) ?? '—'}`;
+        ablationEls.fullBadge.innerHTML = groundingHtml(out);
         const top = out.results[0];
         ablationEls.fullAnswer.textContent = top ? (top.preview || top.text || '') : 'No results.';
         ablationEls.fullRecord.innerHTML = top ? `record ${escapeHtml(String(top.id))} — ${escapeHtml(top.title || '')}` : '';
     } catch (err) {
         fullPackAnswerCache.delete(question);
-        ablationEls.fullBadge.innerHTML = '<span class="badge none">error</span>';
+        ablationEls.fullBadge.innerHTML = '<span class="badge lacks">error</span>';
         ablationEls.fullAnswer.textContent = String(err?.message || err);
     }
 }

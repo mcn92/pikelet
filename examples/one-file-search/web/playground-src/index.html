@@ -30,7 +30,7 @@
       "@type": "SoftwareSourceCode",
       "@id": "https://github.com/mcn92/pikelet#software",
       "name": "Pikelet",
-      "description": "Pikelet compiles a corpus into one self-contained, queryable .pikelet file carrying the source text, semantic and BM25 indexes, the query encoder, retrieval calibration, evaluation queries, and integrity commitments. Readers in Node.js, browsers and Cloudflare Workers search it locally or over HTTP Range without a vector database, embedding API or retrieval server, and an MCP server exposes packs to LLM agents.",
+      "description": "Pikelet compiles a corpus into one self-contained, queryable .pikelet file carrying the source text, semantic and BM25 indexes, the query encoder, evaluation queries, and integrity commitments. Readers in Node.js, browsers and Cloudflare Workers search it locally or over HTTP Range without a vector database, embedding API or retrieval server, and an MCP server exposes packs to LLM agents.",
       "codeRepository": "https://github.com/mcn92/pikelet",
       "license": "https://www.apache.org/licenses/LICENSE-2.0",
       "programmingLanguage": ["JavaScript", "C++", "WebAssembly"],
@@ -477,9 +477,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .badge.strong { background: color-mix(in srgb, var(--strong) 20%, transparent); color: var(--strong); }
-  .badge.weak { background: color-mix(in srgb, var(--weak) 20%, transparent); color: var(--weak); }
-  .badge.none { background: color-mix(in srgb, var(--none) 25%, transparent); color: var(--ink-dim); }
+  .badge.lacks { background: color-mix(in srgb, var(--weak) 20%, transparent); color: var(--weak); text-transform: none; }
 
   #results {
     display: flex;
@@ -735,13 +733,11 @@
     <section class="panel">
       <div class="panel-label">Ask it something</div>
       <p class="lede small">
-        The badge on each answer is match quality, not a fact-check: it measures how well the
-        retrieved passage matches your question, not whether that passage actually contains the
-        specific claim you asked about. At Wikipedia's scale almost every question has some
-        topically related article, so <code>strong</code> mostly means "an article about this
-        exists" — it can be confidently wrong on a specific detail the article doesn't cover. The
-        one place this file reliably withholds is when the topic itself is missing, which is what
-        the <a href="#" id="link-to-ablation-tab">fact-removal tab</a> shows.
+        Each answer lists the passages nearest your question and names any of your words the
+        best-matching passage lacks. At Wikipedia's scale almost every question has a related
+        article, so a close passage is not proof that it says what you asked: read it. When the
+        name or value you asked about is among the missing words, that passage does not establish
+        it, which is what the <a href="#" id="link-to-ablation-tab">fact-removal tab</a> shows.
       </p>
       <div class="suggested-queries" id="suggested-queries">
         <button type="button" class="chip" data-q="Why do tectonic plates cause earthquakes?">Why do tectonic plates cause earthquakes?</button>
@@ -842,9 +838,9 @@
       <div class="panel-label">Same fact, contradicted</div>
       <p class="lede small">
         A third file for the fact selected above: identical to the full pack except that this one
-        record was edited to state a different, still-plausible value. The model answers
-        confidently either way — confidence measures how well the passage matches the question,
-        not whether the file's facts are internally consistent.
+        record was edited to state a different, still-plausible value. The passage matches the
+        question just as well either way: retrieval reports what the file says, not whether the
+        file's facts are true or consistent.
       </p>
       <div class="ablation-question" id="ablation-question-c43">loading…</div>
       <button type="button" class="run-query-btn" id="ablation-c43-run-btn">Run query on the contradicted file</button>
@@ -861,8 +857,8 @@
       <strong>Pikelet</strong> is an open-source (Apache-2.0) tool that compiles a folder of
       documents or a website into one self-contained, queryable <code>.pikelet</code> file. The
       file carries the source text, a semantic (vector) index and a BM25 keyword index, the query
-      encoder that turns a question into a vector, a calibrated match-quality model, evaluation
-      queries, and integrity hashes over all of it. Its identity is a SHA-256 hash of its
+      encoder that turns a question into a vector, evaluation queries, and integrity hashes over
+      all of it. Its identity is a SHA-256 hash of its
       contents, so an answer can cite the exact version of the knowledge it came from.
     </p>
     <p>
@@ -888,12 +884,14 @@
       </li>
     </ul>
 
-    <h3>Match quality</h3>
+    <h3>Grounding</h3>
     <p>
-      Each answer carries <code>matchQuality</code>: <code>strong</code>, <code>weak</code> or
-      <code>none</code>, a calibrated signal of how well the file's best passages match the
-      question. It is not a fact-check: a passage on the right topic can still lack the specific
-      detail asked for, so read the passage before relying on it.
+      Each answer carries <code>grounding</code>: the words of the question that the
+      best-matching of the top five passages contains, and the ones it lacks. If the thing you
+      asked about is in the lacking list, that passage does not state it. It is not a
+      fact-check: a passage that contains every word can still be wrong or out of date, so read
+      it before relying on it. Pikelet used to add a calibrated relevance verdict; measured on
+      real questions it did not help, and 0.15.0 dropped it.
     </p>
 
     <h3>Use it</h3>
