@@ -11,6 +11,7 @@ D), wv (KVH*HD x D), wo (D x H*HD), ffn_norm (D), w_gate (F x D), w_up
 (F x D), w_down (D x F); final norm (D); lm_head (V x D) only if untied.
 Every array is a multiple of 16 bytes, as in export_decoder.py."""
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -25,10 +26,24 @@ MODEL = sys.argv[2] if len(sys.argv) > 2 else 'HuggingFaceTB/SmolLM2-135M-Instru
 NAME = sys.argv[3] if len(sys.argv) > 3 else 'smollm2-135m'
 assert BITS in (8, 5)
 
-model = AutoModelForCausalLM.from_pretrained(MODEL, torch_dtype=torch.float32).eval()
+# The checkpoint's own dtype (bf16 for SmolLM2); each tensor becomes f32
+# only while it is written, which is exact, so the blob is the same as from
+# an f32 load at a fraction of the memory. SKIP_DEQ=1 also skips the
+# dequantized copy (.deq.pt, for llama_ref.py), which a 1.7B model cannot
+# hold alongside the rest in 11 GB.
+model = AutoModelForCausalLM.from_pretrained(MODEL, torch_dtype='auto').eval()
+SKIP_DEQ = os.environ.get('SKIP_DEQ') == '1'
 cfg = model.config
 assert cfg.hidden_act == 'silu' and not getattr(cfg, 'attention_bias', False) and cfg.rope_scaling is None
-sd = {k: v.float().numpy() for k, v in model.state_dict().items()}
+state = model.state_dict()
+
+
+class F32View:
+    def __getitem__(self, k):
+        return state[k].float().numpy()
+
+
+sd = F32View()
 V, D, F, L = cfg.vocab_size, cfg.hidden_size, cfg.intermediate_size, cfg.num_hidden_layers
 H, KVH = cfg.num_attention_heads, cfg.num_key_value_heads
 HD = D // H
@@ -69,7 +84,8 @@ def emit_quant(name):
     else:
         q, s, o, deq = quant_u8(sd[name])
         emit(q); emit(s); emit(o)
-    deq_sd[name] = deq
+    if not SKIP_DEQ:
+        deq_sd[name] = deq
 
 
 header = np.zeros(16, dtype=np.int32)
@@ -88,11 +104,13 @@ for i in range(L):
 emit(sd['model.norm.weight'])
 if not tied:
     emit_quant('lm_head.weight')
-(HERE / f'{NAME}-u{BITS}.bin').write_bytes(bytes(blob))
+with open(HERE / f'{NAME}-u{BITS}.bin', 'wb') as f:
+    f.write(blob)
 print(f'{NAME}-u{BITS}.bin {len(blob) / 1e6:.1f} MB  V={V} D={D} F={F} L={L} H={H} KVH={KVH} HD={HD} tied={tied}')
 
 # The dequantized weights, for torch references of exactly what the blob holds.
-torch.save({k: torch.from_numpy(v) for k, v in deq_sd.items()}, HERE / f'{NAME}-u{BITS}.deq.pt')
+if not SKIP_DEQ:
+    torch.save({k: torch.from_numpy(v) for k, v in deq_sd.items()}, HERE / f'{NAME}-u{BITS}.deq.pt')
 
 tok = AutoTokenizer.from_pretrained(MODEL)
 tj = json.loads(tok.backend_tokenizer.to_str())

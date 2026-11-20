@@ -3,9 +3,11 @@
 // weights): tokenizer ids, chat-prompt logits and greedy text, and a
 // teacher-forced long text decoded one token per call and in 200-token
 // calls (argmax agreement, next-token log-prob and checkpoint logits).
-// bits 5 runs the u5 blob expanded to format 6.
+// bits 5 runs the u5 blob expanded to format 6. THREADS=n runs llama-mt.mjs
+// with n threads, whose logits are bit-identical to llama.mjs's (mt_check.mjs).
 import { readFileSync } from 'node:fs';
-import createLlama from './llama.mjs';
+import { fileURLToPath } from 'node:url';
+import { loadBlob } from './load_blob.mjs';
 import { createBpeFromJson } from './bpe.mjs';
 
 const HERE = new URL('.', import.meta.url);
@@ -23,14 +25,18 @@ for (const t of ref.tokenizer) {
 }
 console.log(`tokenizer: ${tokOk}/${ref.tokenizer.length} test strings identical to Hugging Face`);
 
+const THREADS = Number(process.env.THREADS || 1);
+const { default: createLlama } = await import(THREADS > 1 ? './llama-mt.mjs' : './llama.mjs');
 const mod = await createLlama();
-const raw = readFileSync(new URL(`${NAME}-u${BITS}.bin`, HERE));
-let blob = mod._malloc(raw.length);
-mod.HEAPU8.set(raw, blob);
+if (THREADS > 1) console.log(`threads: ${mod._llama_set_threads(THREADS)}`);
+// Pointers can pass 2 GB with a large blob: read them unsigned (>>> 0) and
+// index the heap with >>>, never >>. The blob is read straight into the
+// module's memory (load_blob.mjs), with no JavaScript copy kept.
+let blob = loadBlob(mod, fileURLToPath(new URL(`${NAME}-u${BITS}.bin`, HERE))).ptr;
 let fmt = 8;
 if (BITS === '5') {
   const size = Number(mod._llama_expand_u5(blob, 0));
-  const out = mod._malloc(size);
+  const out = mod._malloc(size) >>> 0;
   mod._llama_expand_u5(blob, out);
   mod._free(blob);
   blob = out;
@@ -40,12 +46,12 @@ const MAXCTX = 2048;
 const rc = mod._llama_init(blob, fmt, MAXCTX);
 if (rc) throw new Error(`llama_init ${rc}`);
 const V = mod._llama_dim(0);
-const idsPtr = mod._malloc(4 * 256), lg = mod._malloc(4 * V * 200);
+const idsPtr = mod._malloc(4 * 256) >>> 0, lg = mod._malloc(4 * V * 200) >>> 0;
 const fwd = (ids, pos0, all = false) => {
-  mod.HEAP32.set(ids, idsPtr >> 2);
+  mod.HEAP32.set(ids, idsPtr >>> 2);
   const r = mod._llama_forward(blob, idsPtr, ids.length, pos0, lg, all ? 1 : 0);
   if (r) throw new Error(`llama_forward ${r}`);
-  return mod.HEAPF32.subarray(lg >> 2, (lg >> 2) + V * (all ? ids.length : 1));
+  return mod.HEAPF32.subarray(lg >>> 2, (lg >>> 2) + V * (all ? ids.length : 1));
 };
 const argmax = (row) => { let b = 0; for (let i = 1; i < row.length; i++) if (row[i] > row[b]) b = i; return b; };
 const logsumexp = (row) => { let m = -Infinity; for (const x of row) if (x > m) m = x; let s = 0; for (const x of row) s += Math.exp(x - m); return m + Math.log(s); };

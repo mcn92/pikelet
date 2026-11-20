@@ -6,7 +6,9 @@ logits (top 20 and max |logit|) and 40 greedy tokens; and a teacher-forced
 long text (up to 1000 tokens) with each position's argmax and log-prob of
 the next token, plus every position's full logits for a few checkpoints.
 The same run with the fp32 weights (no deq) is stored alongside for the
-quantization gap."""
+quantization gap. With no .deq.pt (export_llama.py SKIP_DEQ=1, for models too
+large to hold it), u8 weights are dequantized from <name>-u8.bin itself, one
+tensor at a time, into the loaded model."""
 import json
 import sys
 from pathlib import Path
@@ -56,11 +58,57 @@ def run(model):
 
 ref = {'model': MODEL, 'tokenizer': [{'text': t, 'ids': tok(t).input_ids} for t in TOKENIZER_TESTS]}
 ref['fp32'] = run(model)
-deq = torch.load(HERE / f'{NAME}-u{BITS}.deq.pt')
+
+
+def blob_tensors(path):
+    """(name, f32 tensor) in export_llama.py's emit order: u8 matrices
+    dequantized as the kernel does (code * scale + offset per block of 64),
+    norms as stored."""
+    b = np.memmap(path, dtype=np.uint8, mode='r')
+    h = np.frombuffer(b[:64].tobytes(), dtype=np.int32)
+    assert h[0] == 0x314D4C4C and h[8] == 8, 'only u8 blobs are read directly'
+    V, D, F, L, H, KVH, HD, _, tied = (int(x) for x in h[1:10])
+    QD, KVD = H * HD, KVH * HD
+    pos = 64
+
+    def take(n, dtype):
+        nonlocal pos
+        a = np.frombuffer(b[pos:pos + n * np.dtype(dtype).itemsize].tobytes(), dtype=dtype)
+        pos += a.nbytes
+        return a
+
+    def quant(rows, cols):
+        q = take(rows * cols, np.uint8).reshape(rows, cols // 64, 64)
+        sc = take(rows * cols // 64, np.float32).reshape(rows, cols // 64, 1)
+        of = take(rows * cols // 64, np.float32).reshape(rows, cols // 64, 1)
+        return torch.from_numpy((q.astype(np.float32) * sc + of).reshape(rows, cols))
+
+    yield 'model.embed_tokens.weight', quant(V, D)
+    for i in range(L):
+        p = f'model.layers.{i}.'
+        yield p + 'input_layernorm.weight', torch.from_numpy(take(D, np.float32).copy())
+        for w, (r, c) in zip(('q_proj', 'k_proj', 'v_proj', 'o_proj'), ((QD, D), (KVD, D), (KVD, D), (D, QD))):
+            yield p + f'self_attn.{w}.weight', quant(r, c)
+        yield p + 'post_attention_layernorm.weight', torch.from_numpy(take(D, np.float32).copy())
+        for w, (r, c) in zip(('gate_proj', 'up_proj', 'down_proj'), ((F, D), (F, D), (D, F))):
+            yield p + f'mlp.{w}.weight', quant(r, c)
+    yield 'model.norm.weight', torch.from_numpy(take(D, np.float32).copy())
+    if not tied:
+        yield 'lm_head.weight', quant(V, D)
+    assert pos == len(b), f'blob has {len(b) - pos} unread bytes'
+
+
 sd = model.state_dict()
+deq_path = HERE / f'{NAME}-u{BITS}.deq.pt'
 with torch.no_grad():
-    for k, v in deq.items():
-        sd[k].copy_(v)
+    if deq_path.exists():
+        for k, v in torch.load(deq_path).items():
+            sd[k].copy_(v)
+    else:
+        for k, v in blob_tensors(HERE / f'{NAME}-u{BITS}.bin'):
+            if k.endswith('norm.weight'):
+                assert torch.equal(sd[k], v), f'{k} in the blob differs from the model'
+            sd[k].copy_(v)
     if model.config.tie_word_embeddings:
         assert model.lm_head.weight.data_ptr() == model.model.embed_tokens.weight.data_ptr()
 ref['quant'] = run(model)

@@ -10,11 +10,22 @@
 // of 64, f32 s/o) and 6 (u5 expanded at load by llama_expand_u5: u8 codes in
 // blocks of 32, f32 s/o). The u5 file format (5) is only read by the
 // expansion.
+//
+// Built with -pthread (llama-mt.mjs), llama_set_threads(n) starts n-1 worker
+// threads sharing the module's memory. Each GEMM splits its output rows
+// across them and attention splits its (token, head) pairs, so every output
+// value is computed by the same instructions as in the single-thread build:
+// logits are bit-identical for any thread count.
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <math.h>
 #include <wasm_simd128.h>
+#ifdef __EMSCRIPTEN_PTHREADS__
+#include <pthread.h>
+#include <atomic>
+#include <emscripten/threading.h>
+#endif
 
 namespace {
 
@@ -91,7 +102,7 @@ void quantize_acts(const float* X, int seq, int cols) {
 
 // decoder.cpp's gemm_int_tile for u8 codes (formats 8 and 6).
 template <int NT, int FMT>
-void gemm_int_tile(const QuantMat& m, int rows, int cols, int t0, float* Y) {
+void gemm_int_tile(const QuantMat& m, int r0, int r1, int rows, int cols, int t0, float* Y) {
     constexpr int BS = FMT == 8 ? B8 : QB;
     constexpr int NV = BS / 8;
     const int nblocks = cols / BS;
@@ -99,7 +110,7 @@ void gemm_int_tile(const QuantMat& m, int rows, int cols, int t0, float* Y) {
     const float* xsum0 = (FMT == 8 ? g_xsum8 : g_xsum) + t0 * nblocks;
     const float* S = (const float*)m.s;
     const float* O = (const float*)m.o;
-    for (int r = 0; r < rows; r++) {
+    for (int r = r0; r < r1; r++) {
         const uint8_t* arow = m.q + (size_t)r * cols;
         const size_t sbase = (size_t)r * nblocks;
         v128_t facc[NT];
@@ -130,20 +141,84 @@ void gemm_int_tile(const QuantMat& m, int rows, int cols, int t0, float* Y) {
     }
 }
 
+// Output rows r0..r1 of Y = A X, for every token.
 template <int FMT>
-void gemm_q(const QuantMat& m, int rows, int cols, int seq, float* Y) {
+void gemm_q(const QuantMat& m, int r0, int r1, int rows, int cols, int seq, float* Y) {
     int t = 0;
-    for (; t + 8 <= seq; t += 8) gemm_int_tile<8, FMT>(m, rows, cols, t, Y);
-    for (; t + 4 <= seq; t += 4) gemm_int_tile<4, FMT>(m, rows, cols, t, Y);
-    for (; t + 2 <= seq; t += 2) gemm_int_tile<2, FMT>(m, rows, cols, t, Y);
-    for (; t < seq; t++) gemm_int_tile<1, FMT>(m, rows, cols, t, Y);
+    for (; t + 8 <= seq; t += 8) gemm_int_tile<8, FMT>(m, r0, r1, rows, cols, t, Y);
+    for (; t + 4 <= seq; t += 4) gemm_int_tile<4, FMT>(m, r0, r1, rows, cols, t, Y);
+    for (; t + 2 <= seq; t += 2) gemm_int_tile<2, FMT>(m, r0, r1, rows, cols, t, Y);
+    for (; t < seq; t++) gemm_int_tile<1, FMT>(m, r0, r1, rows, cols, t, Y);
+}
+
+// --- Thread pool ------------------------------------------------------------
+// parallel(fn, ctx) runs fn(ctx, i, n) for i in 0..n-1, i = 0 on the calling
+// thread, and returns when all have finished. Workers spin briefly between
+// jobs (a token runs hundreds of short ones) and then sleep on a futex.
+typedef void (*JobFn)(void* ctx, int index, int count);
+int g_threads = 1;
+#ifdef __EMSCRIPTEN_PTHREADS__
+std::atomic<uint32_t> g_epoch{0};
+std::atomic<int> g_pending{0};
+JobFn g_fn;
+void* g_ctx;
+constexpr int SPIN = 1 << 15;
+
+void* worker_main(void* arg) {
+    const int index = (int)(intptr_t)arg;
+    uint32_t seen = 0;
+    for (;;) {
+        uint32_t e;
+        int spins = 0;
+        while ((e = g_epoch.load(std::memory_order_acquire)) == seen) {
+            if (++spins < SPIN) continue;
+            emscripten_futex_wait((volatile void*)&g_epoch, seen, INFINITY);
+        }
+        seen = e;
+        g_fn(g_ctx, index, g_threads);
+        g_pending.fetch_sub(1, std::memory_order_acq_rel);
+    }
+    return nullptr;
+}
+#endif
+
+void parallel(JobFn fn, void* ctx) {
+#ifdef __EMSCRIPTEN_PTHREADS__
+    if (g_threads > 1) {
+        g_fn = fn;
+        g_ctx = ctx;
+        g_pending.store(g_threads - 1, std::memory_order_relaxed);
+        g_epoch.fetch_add(1, std::memory_order_release);
+        emscripten_futex_wake((volatile void*)&g_epoch, g_threads - 1);
+        fn(ctx, 0, g_threads);
+        while (g_pending.load(std::memory_order_acquire) != 0) {}
+        return;
+    }
+#endif
+    fn(ctx, 0, 1);
+}
+
+// The share [lo, hi) of 0..n that part `index` of `count` takes.
+inline void share(int n, int index, int count, int& lo, int& hi) {
+    lo = (int)((int64_t)n * index / count);
+    hi = (int)((int64_t)n * (index + 1) / count);
+}
+
+struct GemmJob { const QuantMat* m; int rows, cols, seq; float* Y; };
+void gemm_part(void* p, int index, int count) {
+    const GemmJob& j = *(const GemmJob*)p;
+    int r0, r1;
+    share(j.rows, index, count, r0, r1);
+    if (r0 == r1) return;
+    if (g_fmt == 6) gemm_q<6>(*j.m, r0, r1, j.rows, j.cols, j.seq, j.Y);
+    else gemm_q<8>(*j.m, r0, r1, j.rows, j.cols, j.seq, j.Y);
 }
 
 // Y = A X; quantize=false reuses the previous call's activations.
 void gemm(const QuantMat& m, int rows, int cols, const float* X, int seq, float* Y, bool quantize = true) {
     if (quantize) quantize_acts(X, seq, cols);
-    if (g_fmt == 6) gemm_q<6>(m, rows, cols, seq, Y);
-    else gemm_q<8>(m, rows, cols, seq, Y);
+    GemmJob job{ &m, rows, cols, seq, Y };
+    parallel(gemm_part, &job);
 }
 
 void dequant_row(const QuantMat& m, int row, int cols, float* out) {
@@ -239,7 +314,19 @@ void attend(const float* q, const float* kc, const float* vc, int i, float* sc, 
     for (int k = 0; k < hv; k++) wasm_v128_store(out + 4 * k, ov[k]);
 }
 
-float *bx, *bn, *bq, *bctx, *bo, *bg, *bu, *kcache, *vcache, *scores;
+float *bx, *bn, *bq, *bctx, *bo, *bg, *bu, *kcache, *vcache, *scores;  // scores: one row per thread
+
+struct AttendJob { const float *kc, *vc; int seq, pos0, group; };
+void attend_part(void* p, int index, int count) {
+    const AttendJob& j = *(const AttendJob*)p;
+    int lo, hi;
+    share(j.seq * H, index, count, lo, hi);
+    float* sc = scores + (size_t)index * (MAXCTX + 4);
+    for (int w = lo; w < hi; w++) {
+        const int t = w / H, h = w % H, kvh = h / j.group;
+        attend(bq + (size_t)t * QD + h * HD, j.kc + kvh * HD, j.vc + kvh * HD, j.pos0 + t, sc, bctx + (size_t)t * QD + h * HD);
+    }
+}
 
 int read_header(const uint8_t* blob) {
     const int32_t* h = (const int32_t*)blob;
@@ -260,6 +347,24 @@ template <typename T> T* alloc(size_t n) { return (T*)aligned_alloc(16, ((n * si
 } // namespace
 
 extern "C" {
+
+// Sets the thread count (1 to 64) for later calls: call it once, before
+// llama_init, which sizes per-thread buffers from it. Returns the count in
+// effect: always 1 in the single-thread build.
+int llama_set_threads(int n) {
+#ifdef __EMSCRIPTEN_PTHREADS__
+    if (n < 1 || n > 64 || g_threads != 1 || kcache) return g_threads;
+    for (int i = 1; i < n; i++) {
+        pthread_t th;
+        if (pthread_create(&th, nullptr, worker_main, (void*)(intptr_t)i) != 0) break;
+        pthread_detach(th);
+        g_threads = i + 1;
+    }
+#else
+    (void)n;
+#endif
+    return g_threads;
+}
 
 // Reads the blob's header and allocates the KV cache (maxctx positions) and
 // work buffers. Call once per module before llama_forward. bits: the
@@ -285,7 +390,7 @@ int llama_init(const uint8_t* blob, int bits, int maxctx) {
     bu = alloc<float>((size_t)MAXSEQ * F);
     kcache = alloc<float>((size_t)L * MAXCTX * KVD);
     vcache = alloc<float>((size_t)L * MAXCTX * KVD);
-    scores = alloc<float>((size_t)MAXCTX + 4);
+    scores = alloc<float>((size_t)g_threads * (MAXCTX + 4));
     const int half = HD / 2;
     g_cos = alloc<float>((size_t)MAXCTX * half);
     g_sin = alloc<float>((size_t)MAXCTX * half);
@@ -396,13 +501,8 @@ int llama_forward(const uint8_t* blob, const int* ids, int seq, int pos0, float*
             }
             for (int h = 0; h < KVH; h++) rope(kc + (size_t)i * KVD + h * HD, i);
         }
-        for (int t = 0; t < seq; t++) {
-            const int i = pos0 + t;
-            for (int h = 0; h < H; h++) {
-                const int kvh = h / group;
-                attend(bq + (size_t)t * QD + h * HD, kc + kvh * HD, vc + kvh * HD, i, scores, bctx + (size_t)t * QD + h * HD);
-            }
-        }
+        AttendJob aj{ kc, vc, seq, pos0, group };
+        parallel(attend_part, &aj);
         gemm(ly.wo, D, QD, bctx, seq, bo);
         for (size_t i = 0; i < (size_t)seq * D; i++) bx[i] += bo[i];
         for (int t = 0; t < seq; t++) rmsnorm(bx + (size_t)t * D, ly.ffn_norm, bn + (size_t)t * D);
