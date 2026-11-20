@@ -39,7 +39,7 @@ async function main() {
     console.log(`Q: ${question}`);
     const result = await client.call('search', { query: question, k: 3 });
     const section = Array.isArray(result?.results) ? result : result?.sections?.[0];
-    console.log(`question words no top passage contains: ${section?.grounding?.uncovered?.join(', ') || '(none)'}`);
+    console.log(`question words the best passage lacks: ${section?.grounding?.uncovered?.join(', ') || '(none)'}`);
     for (const r of section?.results ?? []) {
       const preview = (r.text || '').replace(/\s+/g, ' ').slice(0, 160);
       console.log(`  [${r.distance?.toFixed(4)}] ${r.title} — ${preview}...`);

@@ -60,7 +60,7 @@ export function formatSearch(out) {
     const uncovered = section.grounding?.uncovered;
     if (Array.isArray(uncovered) && uncovered.length) {
       lines.push('');
-      lines.push(`Question words no top passage contains: ${uncovered.join(', ')}`);
+      lines.push(`Question words the best passage lacks: ${uncovered.join(', ')}`);
     }
   }
   return lines.join('\n');

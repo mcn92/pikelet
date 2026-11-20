@@ -12,7 +12,7 @@
 //   path, anchor, and source — so an answer can cite the exact knowledge
 //   state it was derived from.
 // - Relevance is judged by whoever reads the passages: results carry their
-//   distances and grounding (the query words no top passage contains), not
+//   distances and grounding (the query words the best passage lacks), not
 //   a verdict. A score computed from distances cannot tell a passage on the
 //   question's topic from one that answers it (docs/calibration.md), and the
 //   model reading the results can.
@@ -149,12 +149,12 @@ function toolDefinitions(packs, { mounting = false, journalPending = false } = {
       description: 'Search the mounted .pikelet knowledge packs. Returns the closest chunks '
         + 'with full provenance (pack, immutable pack identity, title, heading path, source), each '
         + 'with a distance (lower is closer in meaning), and grounding: which of the query\'s '
-        + 'content words the best passage restates (covered) and which no passage contains '
-        + '(uncovered). Closeness is similarity, not evidence: a close passage can be on the right '
+        + 'content words the best-matching passage restates (covered) and which it lacks '
+        + '(uncovered; another passage may still contain one). Closeness is similarity, not evidence: a close passage can be on the right '
         + 'subject without containing the specific value asked for (right entity, wrong attribute, '
         + 'or a fact the pack never states). Read the passages and cite only one whose text states '
-        + 'the answer; if the thing you were asked for appears in grounding.uncovered, the passages '
-        + 'do not establish it — never state a value the returned text does not contain. A '
+        + 'the answer; if the thing you were asked for appears in grounding.uncovered, do not cite '
+        + 'the best passage for it unless you find it stated in a passage\'s text — never state a value the returned text does not contain. A '
         + 'question that chains two facts (which floor is X\'s project on: project→chamber, then '
         + 'chamber→floor) returns only the first hop; take the entity the passage names and search '
         + 'again for the rest rather than answering from one hop.',
@@ -1267,8 +1267,9 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
               + 'provenanced passages ranked by closeness of meaning, each with a distance (lower is '
               + 'closer). Closeness is not evidence that the answer is there: read the passages and '
               + 'cite only one whose text states the answer. Each section carries '
-              + 'grounding.uncovered, the query words no passage contained: if what you were asked '
-              + 'for is in that list, the passage does not establish it. Chained questions return '
+              + 'grounding.uncovered, the query words the best-matching passage lacks: if what you '
+              + 'were asked for is in that list, that passage does not establish it; cite another '
+              + 'only if its text states it. Chained questions return '
               + 'only their first hop — search again for the next. A search that lists packs under '
               + 'mounting did not search them yet; search again shortly. verify_pack runs the tests '
               + 'a pack carries inside itself; list_packs reports identities for citation pinning.',

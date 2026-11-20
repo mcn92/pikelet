@@ -1498,8 +1498,7 @@ console.log('chain calibration: inherited and drift-exceeded with a real fit');
     }
 
     // A chain returns the base scorer's grounding, as a single file does:
-    // which passage grounded the verdict and which query words no passage
-    // contains. The chain kept only matchQuality and confidence, so a layered
+    // which passage grounded the verdict and which query words it lacks. The chain kept only matchQuality and confidence, so a layered
     // pack served over MCP lost grounding.uncovered, the fact check a
     // relevance verdict leaves to the reader.
     {
@@ -1531,7 +1530,7 @@ console.log('chain calibration: inherited and drift-exceeded with a real fit');
         const g = out.grounding;
         check('a chain query returns grounding from the inherited scorer',
             !!g && Array.isArray(g.uncovered) && Array.isArray(g.covered), JSON.stringify(g));
-        check('grounding names the query words no passage contains',
+        check('grounding names the query words the best passage lacks',
             !!g && g.uncovered.includes('zeppelin') && g.covered.includes('record') && g.covered.includes('body'),
             JSON.stringify(g));
         check('grounding recordId is a chain-global id inside the chain',

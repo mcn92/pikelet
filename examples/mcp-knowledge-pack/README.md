@@ -43,8 +43,8 @@ The two searches:
   concrete, confident-sounding detail, because that content is genuinely
   in the corpus, at close distances: the pack does cover the topic. What
   gives it away is `grounding.uncovered`: "farming, techniques, swift,
-  raising, healthier, eat" appear in none of the top passages, so they
-  are on the subject without stating what was asked.
+  raising, healthier, eat" are missing from the best-matching passage, so
+  it is on the subject without stating what was asked.
   **Distance tells you the pack has relevant-looking text. It does not
   tell you the premise is true.** Only
   reading the passage does. That's the thing an agent citing a pack has to

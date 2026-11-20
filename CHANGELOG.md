@@ -39,7 +39,12 @@ first.
   `verify_pack` drops `abstentionProbes`, its `calibration` figures and
   the chain's calibration fields, and passes or fails on the golden
   queries alone; `list_packs` drops a chain's `calibrationStatus`. `pikelet
-  query` prints each result's distance instead of a verdict line. The
+  query` prints each result's distance instead of a verdict line, and
+  both describe `grounding.uncovered` as the words the best-matching
+  passage lacks, which is what it computes (they said no top
+  passage contains them; counting a word as covered when any of the top
+  five has it separated unanswerable from answerable questions worse, AUC
+  0.626 against 0.744 on the questions below). The
   reason: on a 1,377-article Wikipedia pack the verdict called 278 of 512
   unanswerable questions `strong`, and Sonnet and Haiku agents answered no
   better with it than without it (`docs/calibration.md`).

@@ -291,9 +291,10 @@ heading path, anchor, and source — so an answer can cite the exact
 knowledge state it was derived from, and a pinned identity means the
 citation survives pack rebuilds detectably. Each result carries its
 distance, and each pack's section carries `grounding`: which of the
-question's words the best of the top passages contains, and which none of
-them does. An asked-for value in `grounding.uncovered` is one no passage
-states. There is no relevance verdict: whether a passage answers is left
+question's words the best of the top passages contains, and which it
+lacks. An asked-for value in `grounding.uncovered` is one that passage does
+not state; another passage may, so the model is told to cite only a
+passage whose text states the answer. There is no relevance verdict: whether a passage answers is left
 to the model reading it, and with Sonnet and Haiku a distance-based
 verdict changed nothing the model did (`docs/calibration.md`). `list_packs` reports names, identities, record counts, licenses,
 and each pack's sample queries; `get_record` hydrates one full chunk

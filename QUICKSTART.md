@@ -117,7 +117,7 @@ most of the question's words still lacks some of them, a last line lists
 them:
 
 ```text
-Question words no top passage contains: best, pizza, chicago
+Question words the best passage lacks: best, pizza, chicago
 ```
 
 That line is the useful signal. A passage can be the nearest one in the pack

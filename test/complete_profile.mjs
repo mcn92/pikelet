@@ -2354,8 +2354,8 @@ console.log('compile: an uncalibrated pack with golden queries that reproduce');
         asJson.query === 'how do bees dance' && asJson.sections.length === 1 && asJson.sections[0].results.length === 2,
         JSON.stringify(asJson).slice(0, 300));
     const offAnswer = cli(['query', out, 'best mortgage refinance rates']);
-    check('an off-topic question still lists its results, then the words no top passage contains',
-        /\n1\. /.test(offAnswer) && /\nQuestion words no top passage contains: [^\n]*mortgage/.test(offAnswer), offAnswer.slice(-300));
+    check('an off-topic question still lists its results, then the words the best passage lacks',
+        /\n1\. /.test(offAnswer) && /\nQuestion words the best passage lacks: [^\n]*mortgage/.test(offAnswer), offAnswer.slice(-300));
     const noPack = failure(['query', path.join(tmp, 'absent.pikelet'), 'anything']);
     check('query names a missing pack', noPack && /Pack not found: .*absent\.pikelet/.test(noPack.stderr), JSON.stringify(noPack).slice(0, 200));
     const noQuestion = failure(['query', out]);
