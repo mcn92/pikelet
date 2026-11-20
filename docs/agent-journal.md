@@ -125,10 +125,10 @@ easiest to orient by. They are the shape a journal should produce natively.
   an explicit user command (`journal export`), never a tool. The journal can
   hold sensitive material (conversation-derived notes, internal decisions),
   which is why sharing waits until the feature has been proven in private use.
-- **Unscored.** A journal is built and appended without calibration and reports
-  `matchQuality: 'unscored'`. Notes are personal working records; the reader
-  judges them by reading. This also means drift never pushes the journal into a
-  refit, so compaction is only about chain length.
+- **Unscored.** A journal is built and appended without calibration, as
+  every pack is since `compile` stopped fitting one. Notes are personal
+  working records; the reader judges them by reading. Compaction is only
+  about chain length.
 - **The model cannot delete.** Removal is a user action through the CLI. The
   model may supersede its own notes (see `update_note`).
 
@@ -270,8 +270,8 @@ Imported notes are labelled with how they were produced.
 | Remove a record | `--remove` | `journal remove` wrapper |
 | Serve a base plus layers | chain mounting in `pikelet mcp` | remount after each write |
 | Fold layers back into one file | `compact` | background trigger by layer count or size |
-| Unscored packs | `--skip-calibration` | none |
-| Grounding on unscored packs | coverage is computed only inside the calibrated scorer | coverage without a fit, useful for every unscored pack |
+| Unscored packs | every pack `compile` builds | none |
+| Grounding on unscored packs | computed for every pack | none |
 | Note-shaped records | `publicChunk` whitelists document fields | a note record builder |
 | Write tools, orient/latest/timeline | — | new MCP tools and the `--journal` flag |
 | Locking, limits, review | — | new |
@@ -343,8 +343,8 @@ Imported notes are labelled with how they were produced.
   removed records and the seed.
 - **Labelling.** Journal results in `search`, `get_record` and `latest` carry
   `agentWritten: true` and the note metadata; a search response that includes
-  the journal carries a `journalNote` in place of the generic unscored
-  warning; `list_packs` marks the journal `writable`.
+  the journal carries a `journalNote`; `list_packs` marks the journal
+  `writable`.
 - **`pikelet journal list`** prints notes newest first; **`pikelet journal
   compact`** folds the layers by hand; **`pikelet mcp install --journal`**
   writes it into the client config.

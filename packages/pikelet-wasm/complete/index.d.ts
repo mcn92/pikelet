@@ -144,7 +144,7 @@ export interface CompleteQueryResult {
    * it measures retrieval relevance: 'none' means the pack does not appear
    * to cover the query's topic, 'strong' that it does — not that a
    * returned passage states the specific fact asked for. 'unscored': the
-   * pack ships no fitted calibrator.
+   * pack ships no fitted calibrator, as every pack compiled after 0.14.0.
    */
   matchQuality: 'strong' | 'weak' | 'none' | 'unscored';
   confidence?: number;
@@ -157,10 +157,10 @@ export interface CompleteQueryResult {
   results: Array<{ id: number; distance: number } & Record<string, unknown>>;
   /**
    * Which of the query's content words the best of the top five passages
-   * contains (covered) and which none of them does (uncovered). Computed for
-   * every pack, calibrated or not; absent only when the query has no
-   * gradable word. An asked-for value in `uncovered` is one no top passage
-   * states, whatever matchQuality says.
+   * (the one containing the most of them) contains (covered) and lacks
+   * (uncovered). Computed for every pack, calibrated or not; absent only
+   * when the query has no gradable word. An asked-for value in `uncovered`
+   * is one the best passage does not state, whatever matchQuality says.
    */
   grounding?: {
     /** Id of the passage that covered the most query words. */

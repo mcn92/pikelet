@@ -2,7 +2,7 @@
 
 **Knowledge that ships as a file.**
 
-A `.pikelet` file is a searchable corpus in a single file. It holds the source text, a vector index and a keyword (BM25) index, the neural encoder that turns a question into a vector, a calibration model that judges how well the corpus covers a question, and the tests the pack was built to pass. Its identity is a SHA-256 digest that commits to all of it, so the file fixes not just what the corpus says but how it is queried: the model that encodes a question, the indexes that find candidates, and when the honest answer is "this corpus doesn't say." **The format makes retrieval semantics part of the versioned knowledge artifact.**
+A `.pikelet` file is a searchable corpus in a single file. It holds the source text, a vector index and a keyword (BM25) index, the neural encoder that turns a question into a vector, and the tests the pack was built to pass. Its identity is a SHA-256 digest that commits to all of it, so the file fixes not just what the corpus says but how it is queried: the model that encodes a question, the indexes that find candidates, and the order they rank passages in. **The format makes retrieval semantics part of the versioned knowledge artifact.**
 
 The layout is built for byte-range reads. A reader opens the file from a small prefix and then fetches only the index rows and records a query needs, verifying each against the identity, so a pack can sit on disk, S3, R2, a CDN or any static HTTP host, with no vector database, embedding API or retrieval server behind it. [FORMAT.md](FORMAT.md) describes the binary structure, the embedded encoder, the indexes, the integrity commitments, versioning, compatibility and the format's limits.
 
@@ -19,22 +19,22 @@ npx pikelet compile ./docs --out docs.pikelet
 ```
 
 ```text
-Ingested 3 docs -> 27 chunks
-Embedded 27/27 chunks with inline transformer
-4/27 chunks exceeded the 512-token encoder window and were mean-pooled across windows
-Validated self-recall@1 on 27 sampled chunks
-Calibrated matchQuality: cross-validated AUC 1.000 separating 72 on-topic from 104 off-topic questions
-Built complete .pikelet artifact with 24.64 MiB
+Ingested 3 docs -> 16 chunks
+Embedded 16/16 chunks with inline transformer
+2/16 chunks exceeded the 512-token encoder window and were mean-pooled across windows
+Validated self-recall@1 on 16 sampled chunks
+Embedded 24 golden queries, each verified to retrieve its source
+Built complete .pikelet artifact with 24.59 MiB
 Compiled docs.pikelet
-  24.64 MiB, 27 records, identity dbe8be15c79e...
+  24.59 MiB, 16 records, identity 5fcdaeac75d4...
 Next:
-  pikelet query docs.pikelet "a question"       search it here
-  pikelet mcp install --pack docs.pikelet       give it to Claude Code
+  pikelet query docs.pikelet "a question"   search it here
+  pikelet mcp install --pack docs.pikelet   give it to Claude Code
 ```
 
 Every `.pikelet` is at least ~25 MiB, because the query encoder ships inside it: a 5-file folder and a 500-file folder both start around that size. The first run downloads the encoder from a GitHub release and caches it.
 
-Compiling is mostly embedding, at about two chunks a second per CPU core, plus roughly 20 to 30 seconds of calibration: 655 chunks took 83 seconds on 8 cores, so a few thousand chunks take several minutes, and longer on a 2-core machine.
+Compiling is mostly embedding, at about one chunk a second per CPU core: 828 chunks took 110 seconds on 8 cores, so a few thousand chunks take several minutes, and longer on a 2-core machine.
 
 Search it from the terminal:
 
@@ -43,10 +43,10 @@ npx pikelet query docs.pikelet "why is a pack one file"
 ```
 
 ```text
-docs: strong: the pack covers this topic (confidence 1.00)
+docs: 5 results
 
 1. Why make knowledge a file
-   why-a-file.md#why-make-knowledge-a-file
+   why-a-file.md#why-make-knowledge-a-file · distance 0.617
    The reasoning behind the single-artifact design. ...
 ```
 
@@ -63,9 +63,9 @@ Or query it from code:
 ```js
 import { openPikeletFile } from 'pikelet-wasm/complete';
 const pack = await openPikeletFile('docs.pikelet');
-const out = await pack.query('how do workers restore snapshots', { k: 5 });
-console.log(out.matchQuality, out.results[0]?.title);
-// 'strong' 'Snapshot restore'
+const out = await pack.query('how is a remote pack verified', { k: 5 });
+console.log(out.results[0]?.title, out.grounding?.uncovered);
+// 'How a .pikelet query runs' []
 ```
 
 `compile` also takes a live URL (`--source https://docs.example.com`), a repository's commit history (`--git ./repo`), or exported chats (`--conversations <file|folder>`). To install instead of using `npx`, run `npm install -g pikelet`. `create` builds a deployed search app (a Worker and UI) rather than a file. [QUICKSTART.md](QUICKSTART.md) walks the whole lifecycle; [`packages/pikelet/README.md`](packages/pikelet/README.md) is the full CLI reference.
@@ -112,13 +112,15 @@ npx pikelet append --parent docs.0001.pikelet --remove 412 --out docs.0002.pikel
 npx pikelet mcp --pack docs.0002.pikelet
 ```
 
-On a 20-record test pack with a 24.6 MiB base, deleting a record took a 1.2 KiB layer and replacing one took 6.9 KiB. Deleting hides a record from search but does not erase it: the older files still hold its bytes, and `get_record` still serves it by id, marked `tombstoned`, so old citations resolve. `compact` writes a new base without it. Mounting the newest layer finds and verifies the rest of the chain, locally or over HTTP, and `#<sha256>` on it pins the whole history. Layers inherit the base's calibration until the chain drifts past 20% of the base's records; then it serves `unscored` until `compact` folds it into a fresh base. `append` refuses to write a layer that would cross that line unless given `--allow-drift`. The format is specified in [`LAYERED_PROFILE.md`](LAYERED_PROFILE.md).
+On a 20-record test pack with a 24.6 MiB base, deleting a record took a 1.2 KiB layer and replacing one took 4.3 KiB. Deleting hides a record from search but does not erase it: the older files still hold its bytes, and `get_record` still serves it by id, marked `tombstoned`, so old citations resolve. `compact` writes a new base without it. Mounting the newest layer finds and verifies the rest of the chain, locally or over HTTP, and `#<sha256>` on it pins the whole history. Each layer adds a file to fetch and an index to search, so fold a long chain into a fresh base with `compact`. The format is specified in [`LAYERED_PROFILE.md`](LAYERED_PROFILE.md).
 
-## Match quality
+## Does the pack answer the question?
 
-A nearest neighbour is not automatically evidence that a corpus covers a question. At build time Pikelet fits a classifier over retrieval signals against queries the corpus does not cover, and every result carries `matchQuality: strong | weak | none`. It measures topic relevance: `strong` means the pack covers the question's topic, not that a passage states the fact asked for. For that, each result lists the question's words no top passage contains (`grounding.uncovered`). When calibration can't separate on-topic from off-topic queries, the pack reports `unscored` rather than manufacturing confidence. [How abstention is decided](docs/how-a-query-runs.md#how-abstention-is-decided) covers the details, including how the library and MCP differ in what they return under `none`.
+A nearest neighbour is not evidence that a corpus answers a question: every query returns *something*. Pikelet does not try to decide for you. Each result carries its `distance`, and each response lists the question's words missing from whichever of the top five passages contains the most of them (`grounding.uncovered`). "How do I keep snapshots forever" against a pack whose snapshot page never mentions keeping them forever comes back with `keep` and `forever` uncovered; the MCP server tells the model to cite only a passage that states the answer.
 
-`matchQuality` is evidence about retrieval support. It is **not** a guarantee that an LLM will never hallucinate.
+Earlier releases also shipped a relevance verdict (`matchQuality: strong | weak | none`) fitted at build time. On a 1,377-article Wikipedia pack it called 278 of 512 questions whose answer article was not in the pack `strong`, and agents given the verdict declined unanswerable questions no more often than agents without it: they read the passages either way. So `compile` no longer fits one; packs calibrated by earlier releases keep theirs in the library. [docs/calibration.md](docs/calibration.md#why-the-verdict-was-dropped-2026-11) has the measurements.
+
+None of this is a guarantee that an LLM will never hallucinate.
 
 ## When it fits, and when it doesn't
 
@@ -130,7 +132,7 @@ It is also not new retrieval research. HNSW is HNSW, BM25 is BM25, HTTP Range is
 
 ## Deeper dives
 
-- [How a `.pikelet` query runs](docs/how-a-query-runs.md) — what is inside the file, what a query costs on the wire, integrity checks on the read path, and abstention.
+- [How a `.pikelet` query runs](docs/how-a-query-runs.md) — what is inside the file, what a query costs on the wire, integrity checks on the read path, and grounding.
 - [The Wikipedia demonstration](docs/wikipedia-demonstration.md) — the agent transcript, the network table, and what cold processes cost.
 - [The Veyra ablation](docs/veyra-ablation.md) — what happens to answers when the supporting record is edited or removed.
 - [Why make knowledge a file](docs/why-a-file.md) — the reasoning behind the single-artifact design.
@@ -158,7 +160,7 @@ The **range proof** uses a server that does not understand Pikelet and reports m
 
 ## Status
 
-Pikelet is early: the implementation is real, the format is not frozen, and there is one primary author. Prebuilt WASM, local and HTTP readers, the embedded encoder, BM25 hybrid retrieval, content identity with lazy-read verification, calibrated abstention, MCP mounting, layered updates, and the experimental journal all ship today. `npm test` runs the engine, artifact-profile, MCP, ingestion, and format-hardening conformance suites.
+Pikelet is early: the implementation is real, the format is not frozen, and there is one primary author. Prebuilt WASM, local and HTTP readers, the embedded encoder, BM25 hybrid retrieval, content identity with lazy-read verification, query-word grounding, MCP mounting, layered updates, and the experimental journal all ship today. `npm test` runs the engine, artifact-profile, MCP, ingestion, and format-hardening conformance suites.
 
 Previously known as **Pancake** (renamed September 2026); files from before the rename remain readable — see [`docs/history.md`](docs/history.md). Pikelet is unrelated to the Pikelet programming language.
 

@@ -1,15 +1,18 @@
 # Calibration: design notes
 
-`packages/pikelet/src/calibrate.mjs` fits the model behind a pack's
-`matchQuality` verdicts. This page holds the reasoning and measurements
-behind that design, including the approaches that were tried and dropped,
-so the source comments can stay focused on what the code does now. Release-
-visible changes are recorded in the [CHANGELOG](../CHANGELOG.md).
+`packages/pikelet/src/calibrate.mjs` fit the model behind a pack's
+`matchQuality` verdicts. `compile` no longer runs it (the next section says
+why); packs calibrated by 0.14.0 and earlier keep their fit, and the
+`pikelet-wasm` library still scores them with it. This page holds the
+reasoning and measurements behind that design, including the approaches
+that were tried and dropped. Release-visible changes are recorded in the
+[CHANGELOG](../CHANGELOG.md).
 
 ## Why the verdict was dropped (2026-11)
 
-`pikelet mcp` and `pikelet query` no longer report `matchQuality`; results
-carry their distances and `grounding` instead. Three measurements led there.
+`pikelet mcp` and `pikelet query` no longer report `matchQuality`, and
+`compile` and `compact` no longer fit it; results carry their distances and
+`grounding` instead. Three measurements led there.
 
 **A broad corpus breaks the fit.** A 1,377-article English Wikipedia pack
 (RAGPerf's text workload: its first 1,000 articles plus 377 articles that
@@ -55,7 +58,7 @@ states the answer, plus `grounding.uncovered`, which every pack now returns.
 Both tests used general-knowledge questions; a private corpus the model
 knows nothing about was not tested.
 
-## What is fit today (v6, `self-templates-v6`)
+## What was fit through 0.14.0 (v6, `self-templates-v6`)
 
 - **Signals.** Four topic features (`d0`, `margin`, `mean10`, `known_frac`)
   plus `coverage1`, the weighted fraction of the query's content words found

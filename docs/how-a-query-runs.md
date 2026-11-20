@@ -10,7 +10,7 @@ semantic index  resident sketch rows, full affine-u8 rows, row commitments
 corpus          source records, offsets, per-record commitments
 query encoder   WordPiece vocabulary, quantized MiniLM weights, encoder declaration
 lexical index   BM25 postings
-calibration     supported / unsupported retrieval model
+calibration     relevance model (packs built by 0.14.0 and earlier only)
 evaluation      golden queries / expected behavior
 ```
 
@@ -99,22 +99,14 @@ The point is not that static HTTP is magically reliable. The point is that a sta
 
 ---
 
-## How abstention is decided
+## Grounding: which question words the passages contain
 
-`compile` fits a logistic classifier over five signals of each retrieval and ships it in the artifact; a query computes the same signals from its own hits and maps the score to `strong`, `weak` or `none`:
+A query does not decide whether its results answer the question. It returns the nearest passages with their distances, and grades the question's words against the top five passages in ranked order (fused order on a hybrid pack):
 
-```text
-d0          distance of the best hit
-margin      gap between the best hit and the next ones
-mean10      mean distance of the top ten hits
-known_frac  share of the query's words the corpus vocabulary contains
-coverage1   share of the query's content words the top passages contain
-```
+- **Which words.** The question is lower-cased and split into words; possessives are stripped, and stopwords and question scaffolding ("what", "how", "explain", "overview" and the like) are dropped, along with words under three letters unless they hold a digit, so "v8" and "3d" count.
+- **What counts as contained.** A word is covered by a passage's body if the body has it, its plural or singular, or a word with the same light stem ("restore" and "restoring"). A word found only in the passage's heading, its first line, counts half.
+- **What comes back.** The passage that covers the most of the question's words is the one reported: `grounding.recordId`, its `coverage` (the covered share, 0 to 1), `covered`, and `uncovered`, the words that passage lacks.
 
-The first four say whether the corpus discusses the area; `coverage1` says whether the returned passages contain the question's own terms.
+`grounding` needs nothing from the pack but the passages' text, so every pack returns it, on a chain as on a single file. It is absent only when the question has no gradable word. An asked-for value in `uncovered` (a version number, a name, "forever") is one the best passage does not state, however close it is; the MCP server tells the model to read `uncovered` before citing.
 
-The classifier is fit on on-topic probes against off-topic ones. On-topic probes are questions generated from the corpus's titles and content, kept only when retrieval finds their source. Off-topic probes are a built-in bank of foreign queries, minus any the corpus turns out to cover, plus gibberish. `none` starts at the 95th percentile of the off-topic scores. So `matchQuality` measures retrieval relevance: whether the pack covers the question's topic. It does not say whether a passage holds the specific fact asked for. Earlier versions fit against on-topic questions the corpus cannot answer instead; on hand-written evaluation questions that fit separated answerable from unanswerable at an AUC of 0.61 and withheld about half of the answerable ones, because these signals cannot tell a passage on the right subject from one that states the fact. That check is left to whoever reads the passages, helped by `coverage1`'s per-word detail, which a query returns as `grounding.covered` and `grounding.uncovered`.
-
-The calibrator still generates on-topic questions the corpus cannot answer (the answer's passage excluded, an entity swapped, a whole document held out) and records how well the score separates them from answerable ones as `cvAucHard`. It is a diagnostic, not a gate, and reads higher on these synthetic questions than on real ones.
-
-The signals are always computed over the same fixed window the fit used, whatever `k` a caller asks for, so the verdict does not depend on `k`. The fit is gated on cross-validated AUC against the off-topic probes; when it fails, the pack ships `unscored` and records why. On a chain of layers, the base's fit is applied to the merged results, with the layers' vocabulary added to `known_frac`, until the chain outgrows its drift limit.
+Packs compiled by 0.14.0 and earlier also carry a fitted relevance verdict, which the `pikelet-wasm` library still reports as `matchQuality` (`strong`, `weak` or `none`, with a `none` withholding results unless the caller passes `showAbstained: true`). Newer packs report `unscored`. [docs/calibration.md](calibration.md) describes that fit and the measurements that led to dropping it.

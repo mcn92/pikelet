@@ -123,7 +123,8 @@ exact property the layers approximated.
    `unscored` with a reason, per contract 4.7. The gate bounds *how much
    changed*, not the error that change causes (4.5, 5.4). The effective
    limit is the stricter of the producer's declared envelope and the
-   host's policy (5.5). Compaction refits.
+   host's policy (5.5). Compaction never carries the inherited fit over
+   (6.3).
 7. **Two depth limits, of different kinds.** The format's interoperability
    ceiling is 16 layers above the base: a reader MUST reject deeper
    chains, and changing this number is a format change. The producer's
@@ -135,7 +136,7 @@ exact property the layers approximated.
 8. **Compaction is semantic maintenance, and it renumbers.** A compacted
    base drops tombstoned records, renumbers survivors, restores exact
    lexical statistics, clears the historical vocabulary from the bloom,
-   resets depth to zero and refits calibration (6.3). It carries a
+   resets depth to zero and either refits calibration or ships none (6.3). It carries a
    lineage segment naming **every head of the compacted chain**, its
    final tombstone state and every supersession edge with its depth, so a
    citation against any of those heads translates, and the new identity
@@ -1147,10 +1148,12 @@ depth limits exist to force it to happen. It produces a
    order.
 3. Rebuild the corpus segment over live records and the lexical index
    over live records with the base's tokenizer; statistics are now exact.
-4. Refit calibration with the chain's encoder (the fit needs the encoder
-   to embed its generated queries; a kind-3 base carries it), building
-   the vocabulary bloom from live records only. If the producer cannot
-   refit, it MUST ship `unscored`, never the inherited fit.
+4. A producer MAY refit calibration with the chain's encoder (the fit
+   needs the encoder to embed its generated queries; a kind-3 base carries
+   it), building the vocabulary bloom from live records only. If it does
+   not refit, it MUST ship `unscored`, never the inherited fit. The
+   reference `compact` no longer refits (from the release after 0.14.0, as
+   `compile` no longer fits).
 5. Record `compactedFrom: { identity: <old head>, depth, liveRecords,
    tombstones }` in the manifest and write the lineage segment (kind 7,
    below), which is REQUIRED for a base compacted from a chain.
@@ -1169,8 +1172,8 @@ unchanged. It does **not** preserve rankings, and it is not meant to:
 layered BM25 scored with statistics that included tombstoned documents,
 compaction scores with exact live statistics; layered vector retrieval
 generated candidates per layer and merged, compaction scans one sketch
-over the unified corpus; the calibration is refit and the bloom is
-live-only. If the layered approximations had any observable effect, a
+over the unified corpus; the calibration is refit or dropped, never
+inherited, and any bloom is live-only. If the layered approximations had any observable effect, a
 compaction that reproduced the chain's rankings would have failed at its
 job. Conformance therefore tests corpus preservation and retrieval
 correctness separately (section 10, E) and records golden-query rankings

@@ -2,8 +2,8 @@
 
 A `.pikelet` file is a searchable corpus in one file. It holds the source
 text, a vector index, an optional keyword (BM25) index, the neural encoder
-that turns a question into a vector, a calibration model that says how well
-the corpus covers a question, and the tests the pack was built to pass. A
+that turns a question into a vector, and the tests the pack was built to
+pass. A
 single SHA-256 digest, the file's **identity**, commits to all of it.
 
 The layout is designed for byte-range reads. A reader fetches a small
@@ -178,24 +178,33 @@ The encoder and the calibration share a segment and a version because
 the calibration is fit to that encoder's outputs; neither can change
 without the other.
 
-The calibration (`retrieval-signals-v1`) is a small fitted model plus a
-base64 bloom filter of the corpus vocabulary. At query time it scores the
-search's distance signals and the query's word coverage into a
-`matchQuality` verdict: `strong`, `weak` or `none`, or `unscored` when a
-pack has no fitted calibration. Packs compiled by the current release also
-carry a second, distance-only model (`gate`) that alone decides `none`, so
-a question worded differently from its passage is not hidden for that
-reason; word coverage then only separates `strong` from `weak`. Readers
-that predate the gate ignore it. The verdict measures whether the corpus
-covers the question's topic, not whether a passage states the answer.
+Packs compiled after 0.14.0 carry an empty calibration
+(`{"kind":"retrieval-signals-v1","asset":null,"vocabBloomBase64":""}`),
+and the reference reader reports their `matchQuality` as `unscored`. A
+query on any pack also returns `grounding`, the question's words the best
+of the top five passages contains and lacks, computed from the passages'
+text alone ([how a query runs](docs/how-a-query-runs.md#grounding-which-question-words-the-passages-contain)).
+
+Packs compiled by 0.14.0 and earlier may carry a fitted calibration
+(`retrieval-signals-v1`): a small model plus a base64 bloom filter of the
+corpus vocabulary. At query time it scores the search's distance signals
+and the query's word coverage into a `matchQuality` verdict: `strong`,
+`weak` or `none`. Packs from the last of those releases also carry a
+second, distance-only model (`gate`) that alone decides `none`; word
+coverage then only separates `strong` from `weak`. Readers that predate
+the gate ignore it. The verdict measures whether the corpus covers the
+question's topic, not whether a passage states the answer.
+[docs/calibration.md](docs/calibration.md) says why `compile` stopped
+fitting it.
 
 ### Evaluation segment (kind 4)
 
-UTF-8 JSON: the golden queries the pack was built with (expected records
-and verdicts), the recall-versus-rerank-depth sweep that chose
-`recommendedRerank`, and the calibration's fit metrics. `compile` replays
-the goldens against the finished file before reporting success, and
-`verify_pack` (MCP) replays them on demand. A reader can serve queries
+UTF-8 JSON: the golden queries the pack was built with (each a question
+and the record or title it must retrieve in the top 10) and the
+recall-versus-rerank-depth sweep that chose `recommendedRerank`; packs
+compiled by 0.14.0 and earlier also hold expected verdicts and the
+calibration's fit metrics. `compile` keeps only goldens the assembled
+pack passes, and `verify_pack` (MCP) replays them on demand. A reader can serve queries
 without ever reading this segment.
 
 ## Identity and integrity
@@ -343,7 +352,8 @@ header and doclens are read at open, and term windows and postings are
 fetched per query (see [integrity](#identity-and-integrity) for the cost).
 
 The tokenizer keeps lowercase `[a-z0-9']` runs of 2–32 characters. The
-same rule drives the calibration's word coverage. BM25 parameters are
+same rule drives a fitted calibration's word coverage; `grounding` grades
+words of three letters or more, or any word holding a digit. BM25 parameters are
 k1 = 1.2, b = 0.75.
 
 ### How the indexes combine
@@ -379,13 +389,14 @@ ancestor.
   `(oldId, newId)` pairs in the same segment.
 - A layer carries no encoder. Its query-interpretation segment is kind 4
   (`inherited-v1`), which names the base's identity and the digest of the
-  base's encoder segment; its calibration region holds a bloom filter of
-  the layer's own vocabulary.
+  base's encoder segment; when the base is calibrated, its calibration
+  region holds a bloom filter of the layer's own vocabulary.
 - A chain is at most 16 layers deep; by default `append` stops at 8.
-- The base's calibration is trusted until accumulated change (records
-  appended plus records deleted, over the base's record count) passes a
-  limit of 0.20; past it the chain is served `unscored` and `append`
-  refuses unless given `--allow-drift`.
+- A base calibrated by 0.14.0 or earlier keeps its calibration until
+  accumulated change (records appended plus records deleted, over the
+  base's record count) passes a limit of 0.20; past it the chain is
+  served `unscored` and `append` refuses unless given `--allow-drift`. A
+  base with no calibration has no such limit.
 - `pikelet compact` folds a chain into a new base whose lineage segment
   (kind 7) translates every earlier head's ids forward.
 
@@ -442,8 +453,8 @@ the ingestion declaration in 0.9.2 and row maps in 0.11.0.
 
 - **About 25 MiB minimum.** The encoder is in every pack, and the first
   query on a remote pack downloads it.
-- **English-shaped text processing.** The keyword index and the coverage
-  behind `matchQuality` keep only `[a-z0-9']` runs, so accented words are
+- **English-shaped text processing.** The keyword index and the word
+  coverage behind `grounding` keep only `[a-z0-9']` runs, so accented words are
   split (`café` is indexed as `caf`) and Greek, Cyrillic and CJK text
   produce no keywords. The default encoder was trained on English.
   Chunking needs whitespace-separated words and at least 25 of them, so
@@ -468,7 +479,8 @@ the ingestion declaration in 0.9.2 and row maps in 0.11.0.
   of at most 16 MiB and at most 64 segments; reads capped as above. The
   kind-3 encoder is loaded whole (about 25 MiB of memory per open pack).
 - **Updates are append-only.** Layers grow a chain up to 16 deep, and
-  heavy change makes calibration go stale until a compaction rebuilds it.
+  each adds a file to fetch and an index to search until a compaction
+  folds the chain into one base.
   A pack with a row map cannot be layered.
 - **No signatures.** Identity establishes which bytes you have, not who
   made them.

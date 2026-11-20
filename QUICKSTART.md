@@ -7,8 +7,7 @@ The last section covers the engine layer underneath, for when you already
 have vectors and want the index alone.
 
 The outputs below come from a real run over eight short Markdown pages
-documenting a file-sync tool. Your identities, sizes and calibration numbers
-will differ.
+documenting a file-sync tool. Your identities and sizes will differ.
 
 ## 1. Install
 
@@ -35,7 +34,7 @@ a live site:
 ```bash
 pikelet compile ./docs --out docs.pikelet \
   --name ferry-docs --license MIT \
-  --calibration-queries questions.jsonl
+  --golden-queries questions.jsonl
 # or crawl a site's docs:
 pikelet compile https://docs.example.com/guide/ --out docs.pikelet
 ```
@@ -49,21 +48,23 @@ unless `--max-pages` says otherwise.
 Ingested 8 docs -> 8 chunks
 Embedded 8/8 chunks with inline transformer
 Validated self-recall@1 on 8 sampled chunks
-Calibrated matchQuality: cross-validated AUC 1.000 separating 67 on-topic from 105 off-topic questions; your 5 questions: AUC 1.000
+Embedded 24 golden queries, each verified to retrieve its source (5 of your 5 questions)
 Built complete .pikelet artifact with 24.55 MiB
 Compiled docs.pikelet
-  24.55 MiB, 8 records, identity cbec6b68845d34d9e48bf43f4192110eb0f90219124342129dd051fe2143eece
+  24.55 MiB, 8 records, identity a8df9bb053b8369c06a01b62666b5a565690cd4b9f531f989053700fe734e17b
 Next:
-  pikelet query docs.pikelet "a question"       search it here
-  pikelet mcp install --pack docs.pikelet       give it to Claude Code
+  pikelet query docs.pikelet "a question"   search it here
+  pikelet mcp install --pack docs.pikelet   give it to Claude Code
 ```
 
-`--verbose` also prints the build's internals: index sizes, the rerank
-sweep, and the calibration fit's diagnostics.
+This took 3 seconds. Compiling is mostly embedding, so time grows with the
+corpus: about one chunk a second per CPU core, so 828 chunks took 110
+seconds on 8 cores. `--verbose` also prints the
+build's internals, such as index sizes and the rerank sweep.
 
 The file carries the corpus records, the semantic index, a BM25 lexical
-index, the inline MiniLM query encoder, integrity commitments, the
-calibrated abstention threshold, and the evaluation fixtures. There is no
+index, the inline MiniLM query encoder, integrity commitments, and golden
+queries the finished pack was checked against. There is no
 service, no model host and no vector database behind it. The `identity` on
 the last line is the sha256 that names this exact pack; keep it, because
 you pin it when you publish (step 5).
@@ -78,7 +79,7 @@ The flags in the example are optional but worth setting:
   result (default: the source folder's name, or the site's host name).
 - `--license` is recorded in the manifest and surfaced by `list_packs`; set it
   on anything you will redistribute.
-- `--calibration-queries` takes questions a reader would really ask, one JSON
+- `--golden-queries` takes questions a reader would really ask, one JSON
   object per line, each naming the page that answers it:
 
   ```json
@@ -86,25 +87,41 @@ The flags in the example are optional but worth setting:
   {"text": "what does a 403 error mean", "expectTitle": "Troubleshooting"}
   ```
 
-  They validate the abstention fit (they are never training data for it) and
-  become golden queries stored in the pack, which `verify_pack` replays.
+  Each one is kept only if the finished pack returns the named page in its
+  top 10, and is stored in the pack as a golden query that `verify_pack`
+  replays. `compile` names any it drops. Questions it generates from the
+  corpus fill the rest, up to 24.
 
 Try it from the terminal before giving it to anything else:
 
 ```bash
-pikelet query docs.pikelet "how do I roll back to an earlier snapshot"
+pikelet query docs.pikelet "how do I restore an earlier snapshot" --limit 2
 ```
 
 ```text
-ferry-docs: strong: the pack covers this topic (confidence 0.97)
+ferry-docs: 2 results
 
 1. Snapshots and restore
-   snapshots.md#snapshots-and-restore
-   Every write creates a new snapshot. To return the bucket to an earlier state, ...
+   snapshots.md#snapshots-and-restore · distance 0.388
+   Every write creates a new snapshot. To return the bucket to an earlier state, list the snapshots with ferry snapshots, pick the one you want by its timestamp, and run ferry restore <snapshot-id>. A restore writes the old files back as a new snapshot, so the restore itself can be…
+
+2. Command reference
+   cli.md#command-reference · distance 0.693
+   ferry init <bucket-url> sets up a folder to sync with a bucket. ferry status shows pending uploads, downloads and conflicts. ferry pause and ferry resume stop and restart syncing without quitting the daemon. ferry snapshots lists the bucket's snapshots, newest first. ferry resto…
 ```
 
 `query` prints what the MCP `search` tool would return for the same question
 (`--json` prints that response unchanged, `--limit` sets how many results).
+A smaller distance is a closer match. When the passage that matches the
+most of the question's words still lacks some of them, a last line lists
+them:
+
+```text
+Question words no top passage contains: best, pizza, chicago
+```
+
+That line is the useful signal. A passage can be the nearest one in the pack
+without saying what was asked.
 
 Other flags: `--force` overwrites the output, `--max-pages` caps a crawl, and
 `--include`/`--exclude` filter a folder. `pikelet compile --help` lists the
@@ -135,13 +152,13 @@ import { openPikeletFile } from 'pikelet-wasm/complete';
 
 const pack = await openPikeletFile('docs.pikelet');
 
-const out = await pack.query('how do I roll back to an earlier snapshot', { k: 3 });
-console.log(out.matchQuality, out.results[0].title, out.results[0].id);
-// strong Snapshots and restore 5
+const out = await pack.query('how do I restore an earlier snapshot', { k: 3 });
+console.log(out.results[0].title, out.results[0].id, out.results[0].distance.toFixed(3));
+// Snapshots and restore 6 0.388
 
 const miss = await pack.query('what is the best pizza in Chicago', { k: 3 });
-console.log(miss.matchQuality, miss.results.length);
-// none 0
+console.log(miss.results[0].distance.toFixed(3), miss.grounding.uncovered);
+// 1.020 [ 'best', 'pizza', 'chicago' ]
 
 const record = await pack.record(out.results[0].id);  // full text and provenance
 console.log(record.title, record.sourcePath);
@@ -150,17 +167,19 @@ console.log(record.title, record.sourcePath);
 await pack.close();
 ```
 
-`query()` returns `matchQuality` — `'strong' | 'weak' | 'none' |
-'unscored'` — alongside the results. An off-domain query abstains instead of
-answering, and a `none` verdict withholds `results` unless you pass
-`showAbstained: true`. The threshold was fit from the corpus at build time
-and stored in the file, so the refusal behavior travels with the pack rather
-than living in your application code.
+`query()` returns the nearest passages, each with its `distance`, and does not
+judge whether they answer the question. `grounding.uncovered` lists the
+question's words missing from whichever of the top five passages contains
+the most of them; whoever reads
+the passages, a person or a model, decides from there. The off-topic
+question above still returns its nearest passages, at a much larger
+distance, with every content word uncovered.
 
-`matchQuality` measures whether the pack covers the question's topic, not
-whether a passage states the exact fact asked for. Each result's
-`grounding.uncovered` lists the question's words no top passage contains;
-step 4 shows it.
+The response also carries `matchQuality`. Packs compiled after 0.14.0
+report `'unscored'`. Packs calibrated by earlier releases keep their verdict
+(`'strong' | 'weak' | 'none'`), and a `none` withholds `results` unless you
+pass `showAbstained: true`. [docs/calibration.md](docs/calibration.md)
+explains why the verdict was dropped.
 
 ## 4. Give it to an LLM
 
@@ -187,7 +206,7 @@ MCP client can run `pikelet mcp --pack ./docs.pikelet` directly, with no
 install step. The server offers four tools:
 
 - `search`: per-pack results with provenance, distances, and the question
-  words no top passage contains
+  words the best-matching passage lacks
 - `list_packs`: names, licenses and immutable identities, for citation pinning
 - `get_record`: one record's full text
 - `verify_pack`: replays the golden queries stored inside the pack, and
@@ -201,10 +220,10 @@ I keep snapshots forever" returns, trimmed:
 ```json
 {
   "pack": "ferry-docs",
-  "packIdentity": "cbec6b68845d34d9e48bf43f4192110eb0f90219124342129dd051fe2143eece",
-  "grounding": { "recordId": 5, "covered": ["snapshots"], "uncovered": ["keep", "forever"] },
+  "packIdentity": "a8df9bb053b8369c06a01b62666b5a565690cd4b9f531f989053700fe734e17b",
+  "grounding": { "recordId": 6, "coverage": 0.333, "covered": ["snapshots"], "uncovered": ["keep", "forever"] },
   "results": [
-    { "id": 5, "title": "Snapshots and restore", "source": "snapshots.md", "text": "..." }
+    { "id": 6, "title": "Snapshots and restore", "source": "snapshots.md", "distance": 0.461, "text": "..." }
   ]
 }
 ```
@@ -231,10 +250,10 @@ pikelet doctor https://example.com/docs.pikelet
 ```text
 [ info ] size: 24.55 MiB
 [  ok  ] Accept-Ranges header: bytes
-[  ok  ] ETag: W/"245770-25745192-2026-10-14T20:37:06.185Z"
+[  ok  ] ETag: W/"649833-25739378-2026-11-19T23:02:44.402Z"
 [  ok  ] Range GET: 206, correct 64-byte slice
 [  ok  ] Range GET with ?r= cache key: 206 — Chromium cache-lock workaround will function
-[  ok  ] artifact: complete artifact (PSF1), identity cbec6b68845d34d9…
+[  ok  ] artifact: complete artifact (PSF1), identity a8df9bb053b8369c…
 ```
 
 It also reports the HTTP protocol and the round-trip time, and exits 1 if any
@@ -249,7 +268,7 @@ bare string as a local path, so wrap the URL:
 import { openPikeletFile, httpRangeSource } from 'pikelet-wasm/complete';
 
 const pack = await openPikeletFile(httpRangeSource('https://example.com/docs.pikelet'), {
-  expectedIdentity: 'cbec6b68845d34d9e48bf43f4192110eb0f90219124342129dd051fe2143eece',
+  expectedIdentity: 'a8df9bb053b8369c06a01b62666b5a565690cd4b9f531f989053700fe734e17b',
 });
 ```
 
@@ -262,14 +281,14 @@ encoded; browsers and Workers use their own `fetch`. Pass
 one 64-byte read in, before anything else is fetched:
 
 ```text
-.pikelet identity mismatch: expected 0000…, found cbec6b68845d…
+.pikelet identity mismatch: expected 0000…, found a8df9bb053b8…
 ```
 
 Give the same URL to an LLM, pinned with `#<identity>`:
 
 ```bash
 pikelet mcp install --client claude-code \
-  --pack 'https://example.com/docs.pikelet#cbec6b68845d34d9e48bf43f4192110eb0f90219124342129dd051fe2143eece'
+  --pack 'https://example.com/docs.pikelet#a8df9bb053b8369c06a01b62666b5a565690cd4b9f531f989053700fe734e17b'
 ```
 
 `--pack` repeats for several packs; if one fails to mount (an unreachable
@@ -302,10 +321,10 @@ pikelet append --parent docs.pikelet --source ./changed --out docs.0001.pikelet
 
 ```text
 Planned layer: depth 1, rowBase 8, +1 record(s), 0 new tombstone(s), 0 supersession(s)
-  calibrationDrift would be 0.1250 against limit 0.2
+Embedding 1 chunk(s) with the base's own encoder (sentence-transformers/all-MiniLM-L6-v2)
 ...
 Wrote docs.0001.pikelet
-  7.0 KiB, depth 1, +1 record(s), identity 5b4a937595bed28b226aece374f6fd50b69ff31a6b8e068e9471c834d89607d7
+  4.3 KiB, depth 1, +1 record(s), identity 3d408e74cb129144fda6ed536ec965d66a0fbc5cbe520eb623092d45c3254495
 ```
 
 A layer can also delete records (`--remove <id>`, one id per flag, using the
@@ -321,26 +340,19 @@ The search from step 4 now finds the new "Snapshot retention" page, with
 nothing left in `uncovered`. Publish the layer next to its parent, so a
 reader mounting it by URL finds the base the same way.
 
-A chain keeps the base's calibration only while records added plus deleted
-stay within 20% of the base's records. Past that, `append` refuses:
-
-```text
-this append would take calibrationDrift to 0.2500, past the chain's effective
-limit 0.2; pass --allow-drift to emit it anyway (the chain then serves unscored)
-```
-
-That is the point to fold the chain into one fresh base, with the
-calibration refit:
+Each layer is one more file to fetch and verify, and one more index to
+search. Once a chain has grown long, fold it into one fresh base:
 
 ```bash
-pikelet compact --head docs.pikelet --head docs.0001.pikelet --out docs-v2.pikelet
+pikelet compact --head docs.0001.pikelet --out docs-v2.pikelet
 ```
 
 ```text
+Mounted chain: 2 member(s), 9 records (9 live), 0 tombstone(s), depth 1
 Compacting to 9 live record(s), reclaiming 0 id(s)
-Refitting calibration over 9 live record(s) with the base's own encoder ...
+...
 Wrote docs-v2.pikelet
-  24.55 MiB, 9 records, depth 0, identity 363c71e6b1f48066025f705f2ef366e8df64bce2ca61ad2473a981f50f938846
+  24.55 MiB, 9 records, depth 0, identity e1f24cd6aaa2b290f1e96c78a59a7e4f94f15a686664dc363c5758497c040fe0
 ```
 
 The compacted file is an ordinary pack: open it with `openPikeletFile`, mount
@@ -387,8 +399,8 @@ and [docs/agent-journal.md](docs/agent-journal.md).
 Everything above is the artifact layer. Underneath it is the HNSW engine,
 which you can use directly when you already have vectors and want an index
 rather than a queryable pack. At this layer you supply the embedding model,
-the query vectors, and the metadata hydration yourself; `matchQuality`,
-abstention, the lexical index and the corpus records are all artifact-layer
+the query vectors, and the metadata hydration yourself; grounding, the
+lexical index, golden queries and the corpus records are all artifact-layer
 features that do not exist here.
 
 Reach for it when you are embedding with your own model and only need
@@ -644,16 +656,17 @@ A string argument is a local path. Wrap a URL: `openPikeletFile(httpRangeSource(
 
 ### `append` refuses with `calibrationDrift`
 
-The chain has changed more than 20% of the base's records since it was
-compiled. Run `compact` over the chain (step 6) and append to the result, or
-pass `--allow-drift` and accept that the chain serves `unscored`.
+The base was compiled, and calibrated, by 0.14.0 or earlier, and the
+chain has changed more than 20% of the base's records since. Run `compact`
+over the chain (step 6) and append to the result, or pass `--allow-drift`
+and accept that the chain serves `unscored` in the library. Bases compiled
+since carry no calibration and are never refused for drift.
 
-### Every query comes back `unscored`
+### `query()` always reports `matchQuality: 'unscored'`
 
-The pack has no calibration: the corpus was too small for a trustworthy fit
-(`compile` logs the reason), it was compiled with `--skip-calibration`, or a
-chain passed its drift limit. Results still come back; they carry no
-confidence verdict.
+That is expected for a pack compiled after 0.14.0: `compile` no longer fits
+a relevance verdict (step 3). Results still come back; use each result's
+`distance` and the response's `grounding.uncovered`.
 
 ### `loadJsonFile()` rejects my file
 

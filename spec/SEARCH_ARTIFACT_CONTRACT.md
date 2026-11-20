@@ -228,7 +228,10 @@ declare the thresholds and data used to calibrate that behavior.
 
 A reader implementing abstention MUST follow the artifact's declared policy. A
 reader that does not implement abstention MUST report that limitation instead of
-returning confident-looking uncalibrated results.
+returning confident-looking uncalibrated results. A host that reports no
+confidence of its own, only each result's distance and which query words the
+results contain, returns nothing confident-looking and MAY pass results through
+without applying the policy; the reference MCP server does this for every pack.
 
 ### 4.8 Execution
 

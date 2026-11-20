@@ -289,12 +289,15 @@ sketch-style) instead of resident — v1 readers load the blob whole.
 In all kinds, encoder and calibration are loaded together and verified
 together under the shared version. A reader that cannot evaluate the
 calibration MUST report results as uncalibrated rather than inventing
-confidence (contract section 4.7).
+confidence (contract section 4.7). The calibration MAY be empty
+(`{"kind":"retrieval-signals-v1","asset":null,"vocabBloomBase64":""}`);
+the reference compiler writes it empty for every pack after 0.14.0, and a
+reader reports such a pack's `matchQuality` as `unscored`.
 
 ### 3.7 Evaluation segment (kind 4)
 
-UTF-8 JSON: golden queries with expected top-k ids and match-quality
-labels, recall-vs-C measurements for the embedded sketch geometry, and
+UTF-8 JSON: golden queries with expected top-k ids (packs compiled by
+0.14.0 and earlier also carry match-quality labels), recall-vs-C measurements for the embedded sketch geometry, and
 teacher/student fidelity metrics. The golden queries double as the
 conformance fixtures for readers (section 5).
 
@@ -454,10 +457,17 @@ a partial success. u64 fields above `2^53 - 1` are rejected.
 4. Calibrate: score match quality from hits + feature stream, where hits
    are the distance-sorted top-k (fusion affects the returned order, not
    the calibrated signals); a `none` verdict returns zero results with the
-   score.
+   score. A pack with an empty calibration skips this step and reports
+   `unscored`.
+5. Ground: grade the query's content words against the first five
+   passages in returned order and report the passage that contains the
+   most of them, with the words it contains and lacks. This needs only the
+   passages' text, so it runs for every pack; it is absent only when the
+   query has no gradable word.
 
 Result shape: `{ matchQuality, confidence, results: [{ id, distance,
-title, text, sourcePath, ... }] }` — ids, distances, and hydrated records
+title, text, sourcePath, ... }], grounding: { recordId, passageIndex,
+coverage, covered, uncovered } }` — ids, distances, and hydrated records
 in one response; returning bare ids does not satisfy this profile. `id`
 and `distance` are reserved result names: they MUST come from the search,
 and a corpus record carrying fields of those names MUST NOT replace them

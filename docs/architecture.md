@@ -9,8 +9,8 @@ compaction ordering; the ground-up read dates from 2026-07-19)
 **Status:** Reflects the current source tree under `packages/pikelet-wasm/` (`engine/`, `src/core/pikelet-core.js`,
 `native/`, `examples/legacy/reference-worker*`). This document was written from a ground-up
 re-read of the code. It covers the engine and its wrappers only; the
-`.pikelet` artifact formats, the inline encoder, and abstention
-calibration are specified in `spec/` and `complete/`.
+`.pikelet` artifact formats, the inline encoder, and grounding are
+specified in `spec/` and `complete/`.
 
 > Verification note: every mechanism below was read out of the source. Where a
 > behavior is subtle (default divergence between layers, deletion state on

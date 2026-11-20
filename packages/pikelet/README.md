@@ -20,13 +20,15 @@ npx pikelet compile --source https://docs.helix-editor.com --out search.pikelet
 import { openPikeletFile } from 'pikelet-wasm/complete';
 const search = await openPikeletFile('search.pikelet');
 const out = await search.query('how do I remap keys', { k: 5 });
-// out.results, out.matchQuality ('strong' | 'weak' | 'none'), out.confidence
+// out.results (each with its distance), out.grounding.uncovered
 ```
 
 The file carries the corpus records, sketch index, inline MiniLM query
-encoder, calibrated abstention, and evaluation data — no service, no model
-host, no Cloudflare. Off-domain queries return `matchQuality: "none"` with
-zero results instead of confidently wrong ones. See
+encoder, and golden queries it was verified against — no service, no model
+host, no Cloudflare. A query returns the nearest passages and lists the
+question's words the best of them lacks (`grounding.uncovered`), so an
+off-domain question shows up as one whose words the passages don't
+contain. See
 [Compiling a complete `.pikelet` artifact](#compiling-a-complete-pikelet-artifact)
 for the details.
 
@@ -130,9 +132,8 @@ npx pikelet query search.pikelet "how do I configure auth"
 Passage embedding runs locally through the same inline encoder the artifact
 carries (the ~24 MiB weight blob is fetched once, digest-pinned, when the
 package copy is absent — registry installs ship without it), on a worker
-pool sized to your cores: about two chunks a second per core, plus
-roughly 20 to 30 seconds of calibration (655 chunks took 83 seconds on 8
-cores). Each worker holds its own kernel and weight copy, so the pool
+pool sized to your cores: about one chunk a second per core (828 chunks
+took 110 seconds on 8 cores). Each worker holds its own kernel and weight copy, so the pool
 trades a few hundred MB of build-time memory for the near-linear speedup;
 `PIKELET_EMBED_WORKERS` overrides the pool size (0 forces
 sequential). `compile` accepts `--source` (folder, single file or URL, or
@@ -168,37 +169,29 @@ unless you set `SOURCE_DATE_EPOCH` (whole seconds since 1970, the
 convention); then it records that time as the evaluation's
 `generatedAt`, and the build is still reproducible.
 
-Match quality is calibrated from the corpus at build time, so queries
-the artifact does not cover return `matchQuality: "none"` (or `"weak"`,
-shown with a caveat) instead of confidently wrong results. The calibrator
-generates on-topic queries from chunk titles and content words (each
-verified by retrieval before it counts) and fits the same
-retrieval-signals model the wiki pack ships against off-topic ones: a
-built-in off-domain bank, minus any entry the corpus turns out to cover,
-and out-of-vocabulary gibberish. Alongside the distance signals the model
-fits a grounding feature: the fraction of the query's content words that
-appear in the top retrieved passages' text. The verdict measures
-retrieval relevance — whether the pack covers the question's topic — not
-whether a passage states the specific fact asked for; a query returns
-the per-word detail (`grounding.covered` / `grounding.uncovered`) for
-that check. The calibrator also generates in-domain questions the corpus
-does not answer (an ablated source passage, a swapped entity, a held-out
-document) and reports how well the verdict separates them as a
-diagnostic (`cvAucHard`); they do not shape the fit. The asset records
-its method, target, per-class query counts, in-sample fit AUC, and
-cross-validated AUCs for inspection. The acceptance gates use the
-cross-validated numbers (a deterministic 5-fold split): an AUC against
-off-topic queries under 0.85, too few verified positives or off-topic
-negatives, or a distance weight with the wrong sign all log why and ship
-unscored rather than miscalibrated. `--calibration <file>` embeds a prebuilt
-retrieval-signals-v1 asset instead; `--skip-calibration` ships unscored
-deliberately.
+Every pack carries up to 24 golden queries that `verify_pack` replays
+against the shipped bytes. `compile` generates them from the corpus (title
+templates such as "what is <title>", and runs of a chunk's content words)
+and keeps each only when the finished pack returns its source in the top
+10. `--golden-queries <file.jsonl>` adds your own, one
+`{"text": ..., "expectTitle": ...}` (or `"expectId"`) per line; they come
+first, and one that names no record or does not retrieve its page is
+logged and left out.
+
+`compile` does not judge whether a pack covers a question. Through 0.14.0
+it fitted a relevance verdict (`matchQuality`) at build time; measured on
+a broad corpus and against agents it did not help, and `compile` no longer
+fits one ([docs/calibration.md](../../docs/calibration.md)). Packs built
+since report `matchQuality: "unscored"` in the library. `--calibration
+<file>` still embeds a prebuilt retrieval-signals-v1 asset; the old
+`--calibration-queries` and `--skip-calibration` flags are accepted
+(the first as `--golden-queries`, the second as a no-op).
 
 ## Attaching packs to an LLM (MCP)
 
 A compiled `.pikelet` is a portable knowledge pack: everything needed to
 query the knowledge it represents — corpus, semantic and lexical indexes,
-query encoder, calibrated abstention, integrity commitments — in one
+query encoder, golden queries, integrity commitments — in one
 immutable file. `mcp` serves packs over the Model Context Protocol on
 stdio, so any MCP client (Claude Code, Claude Desktop, agent frameworks)
 can attach them as a retrieval tool with no vector database, embedding
@@ -389,13 +382,14 @@ resolve. To actually drop the bytes, `compact` the chain into a new base and
 stop publishing the old members; anyone who already has a copy of them
 keeps the record.
 
-The base's encoder and calibration carry over. The chain keeps the base's
-abstention fit until the records added plus deleted exceed the drift limit
-(20% of the base's records by default); `append` refuses to cross it unless
-`--allow-drift`, after which the chain serves `unscored`. `compact
---head <base> --head <layer> ... --out new.pikelet` folds a chain into one
-fresh base with live records copied byte for byte and the calibration refit
-(`--no-refit` skips the refit). `rebase --layer <file> --onto <chain> ...`
+The base's encoder carries over. On a base calibrated by 0.14.0 or
+earlier, the chain keeps the base's fit until the records added plus
+deleted exceed the drift limit (20% of the base's records by default);
+`append` refuses to cross it unless `--allow-drift`, after which the chain
+serves `unscored` in the library. A base built since has no fit and no
+drift limit. `compact --head <layer> --out new.pikelet` folds a chain into
+one fresh base with live records copied byte for byte and no calibration
+(`--no-refit` is accepted and changes nothing). `rebase --layer <file> --onto <chain> ...`
 moves a layer onto a different parent, replaying only what that layer did.
 
 `append` needs to know how the base's records were made, so new records
@@ -501,7 +495,8 @@ scaffold is generated from. The work lives beside it:
 | `src/embed-worker.mjs` | the worker thread `embed.mjs` fans passage embedding out to |
 | `src/student-embedder.mjs` | the corpus-distilled student query encoder used by `--mode student` |
 | `src/complete-build.mjs` | kind-3 complete artifact assembly, the inline-encoder declaration, the pinned weights download |
-| `src/calibrate.mjs` | build-time abstention calibration: probe generation, the retrieval-signals fit, its acceptance gates |
+| `src/goldens.mjs` | golden queries: generated and author-written questions, each kept only when the assembled pack retrieves its source |
+| `src/calibrate.mjs` | the question generators `goldens.mjs` uses, `append`'s layer vocabulary bloom, and the retired relevance fit (research harness and BEIR measurements) |
 | `src/mcp.mjs` | the MCP server (`search`, `list_packs`, `get_record`, `verify_pack`), pack and chain mounting, shelves, `mcp install` |
 | `src/append.mjs` | `append`: a layer of new, deleted or superseded records over a chain |
 | `src/compact.mjs` | `compact` and `rebase` |
@@ -553,8 +548,8 @@ export default {
 
 On `docusaurus build`, the plugin indexes the rendered HTML in the build
 output directory and, by default, compiles it into a complete kind-3
-`search.pikelet` in `build/pikelet-search/` — hybrid retrieval, calibrated
-abstention, section anchors, one file. The widget serves it over HTTP
+`search.pikelet` in `build/pikelet-search/` — hybrid retrieval, section
+anchors, golden queries, one file. The widget serves it over HTTP
 range reads (opening on a fraction of the file, prefetching the inline
 encoder in the background from the moment the search panel first opens)
 and degrades to a bounded download-once on hosts that ignore `Range`.
@@ -600,7 +595,7 @@ assets are not what you want:
       weights: './pikelet-search/encoder-weights.bin', // default: fetched, digest-pinned
       maxTokens: 128,
       // vectors: './docs-vectors.f32',       // optional precomputed document vectors
-      // calibration: './calibration.json',   // optional abstention calibration
+      // calibration: './calibration.json',   // optional prebuilt relevance asset
     },
   },
 ]
@@ -656,7 +651,7 @@ Text handling is English-first. Content in other languages builds and
 serves, but three parts of the pipeline treat it worse:
 
 - **Keyword search and the coverage checks are ASCII-only.** The BM25 index,
-  and the word coverage behind `matchQuality` and `grounding.uncovered`, keep
+  and the word coverage behind `grounding.uncovered`, keep
   only runs of `a`-`z`, `0`-`9` and `'`, at least two characters long. Any
   other letter splits a word, and fragments shorter than two are dropped:
   `café` becomes `caf`, `crème` becomes `cr` and `me`, `één` disappears, and

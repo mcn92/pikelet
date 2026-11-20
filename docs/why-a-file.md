@@ -74,8 +74,8 @@ const pack = await openPikeletFile(httpRangeSource('https://example.com/docs.pik
 });
 const result = await pack.query('how do workers restore snapshots', { k: 5 });
 
-console.log(result.matchQuality);
-for (const hit of result.results) console.log(hit.title, hit.sourcePath);
+console.log(result.grounding?.uncovered);
+for (const hit of result.results) console.log(hit.title, hit.sourcePath, hit.distance);
 
 await pack.close();
 ```
