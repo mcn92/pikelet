@@ -222,9 +222,9 @@ const HELP = {
 
 Searches a pack and prints the passages an MCP agent would get for the same
 question: each result's title, source, distance and text, then the
-question's words the best-matching passage lacks. <pack> is a .pikelet file, an HTTP(S) URL (range-read, not
-downloaded), or either with '#<sha256>' to pin the identity. A layer is
-searched as its whole chain.
+question's words the best-matching passage lacks. <pack> is a .pikelet
+file, an HTTP(S) URL (range-read, not downloaded), or either with
+'#<sha256>' to pin the identity. A layer is searched as its whole chain.
 
 Options:
   --limit <n>   Results to show (default 5, at most 20)

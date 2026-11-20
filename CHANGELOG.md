@@ -8,7 +8,25 @@ Through 0.6.0 these were published as `pancake-wasm` and
 packages are pre-1.0: a minor bump may carry breaking changes, and each entry lists them
 first.
 
-## Unreleased
+## pikelet-wasm 0.15.0 / pikelet 0.15.0 — 2026-11-19
+
+`pikelet mcp` and `pikelet query` stop reporting a relevance verdict, and
+`compile` stops fitting one. Measured on a 1,377-article Wikipedia pack,
+the verdict called 278 of 512 unanswerable questions `strong`, and agents
+answered no better with it than without it. What remains is each result's
+distance and `grounding`, which every pack now returns: the question's
+words the best-matching passage lacks. `pikelet query` searches a pack
+from the terminal. `pikelet mcp` no longer stalls: requests run
+concurrently, packs are served as they mount, and a host that stops
+sending times out after 30 s instead of hanging every pack. Crawls stay
+under the seed's path and follow robots.txt, journals are private,
+packs and journal writes are atomic and durable, and remote reads are
+bounded. Packs compiled by earlier releases still verify and serve, and
+the `pikelet-wasm` library still reports their verdicts. Compiling the
+same inputs gives a new identity (no calibration is written, and no
+build time unless `SOURCE_DATE_EPOCH` is set), and a folder source may
+also get new record ids. Both packages move to 0.15.0 together, and `pikelet` requires
+`pikelet-wasm` ^0.15.0.
 
 ### Compatibility
 
@@ -20,8 +38,8 @@ first.
   only when the finished pack retrieves its source in the top 10, as
   before. `--calibration-queries` is now `--golden-queries` (the old name
   still works; giving both is refused), `--skip-calibration` and `compact
-  --no-refit` are accepted and change nothing, and `--calibration <file>`
-  still embeds a prebuilt asset. Builds skip the 20 to 30 seconds the fit
+  --no-refit` are accepted, change nothing and are no longer in the
+  help, and `--calibration <file>` still embeds a prebuilt asset. Builds skip the 20 to 30 seconds the fit
   took; a 21-chunk corpus now compiles in 9 s. Recompiling a pack changes its
   identity. `append` checks drift only on a chain whose base was
   calibrated by an earlier build; on a base without a fit it no longer
@@ -49,29 +67,25 @@ first.
   unanswerable questions `strong`, and Sonnet and Haiku agents answered no
   better with it than without it (`docs/calibration.md`).
 - **Every pack returns `grounding`, and it grades short tokens like
-  "v8".** The reader computed `grounding` (which query words the top
-  passages contain and which none does) only inside a fitted calibrator,
+  "v8".** The reader computed `grounding` (which query words the
+  best-matching top passage contains and which it lacks) only inside a
+  fitted calibrator,
   so an uncalibrated pack or chain returned none. It now grades the top
   five fused passages for every pack, calibrated or not. Tokens holding a
   digit count whatever their length ("v8", "3d"), where three letters
   was the minimum, so "how many cylinders does a v8 engine have" now
-  reports `v8` uncovered when no passage mentions it. Every word weighs
+  reports `v8` uncovered when the best passage does not mention it. Every word weighs
   the same: the calibrated coverage term discounts corpus-common words,
   and on a calibrated pack `coverage` and the chosen passage can differ
   from before. `matchQuality` and `confidence` are unchanged, since the
   calibrated verdict keeps its own coverage term.
-- **New packs hide fewer results under "none".** `compile` now fits a
-  second, distance-only model (`gate` in the calibration asset) that alone
-  decides `matchQuality: "none"`; the existing model, which weighs word
-  overlap heavily, now only separates `strong` from `weak`. A question
-  worded differently from its passage is no longer hidden because the
-  passage does not share its words. On held-out question sets the share
-  of answerable questions hidden fell from 18 of 60 to 1 of 60, with no
-  more off-topic questions accepted; `strong` verdicts are unchanged.
-  Packs compiled before this keep their old behaviour in every reader,
-  and readers that predate the gate ignore it. Recompiling changes a
-  pack's verdicts and its identity. A gate that is present but malformed
-  makes the pack `unscored`. Measurements are in `docs/calibration.md`.
+- **A calibration asset may carry a distance-only `gate`.** When present,
+  the library lets it alone decide `matchQuality: "none"`, and the main
+  model only separates `strong` from `weak`; a gate that is present but
+  malformed makes the pack `unscored`, and readers that predate it ignore
+  it. No pack built by a release carries one, and `compile` no longer
+  writes calibration, so this matters only for an asset passed with
+  `--calibration <file>`. Measurements are in `docs/calibration.md`.
 - **A pack records no build time unless `SOURCE_DATE_EPOCH` is set.**
   `compile` stamped the wall-clock time into the evaluation segment's
   `generatedAt`, so two builds of the same inputs had different
@@ -153,8 +167,7 @@ first.
   than `-h` and `-v` was taken as a stray argument and ignored, so
   `compile -o x.pikelet` wrote `search.pikelet`; it is now refused. Flags
   given with no command still start `create`, as before.
-- **`compile` prints less, and labels sizes MiB.** The calibration fit's
-  diagnostics, the lexical index size, the rerank sweep, the encoder
+- **`compile` prints less, and labels sizes MiB.** The lexical index size, the rerank sweep, the encoder
   verification vectors and the golden replay now print only with
   `--verbose`. Sizes are computed
   in MiB and were labelled MB, here and in `compact`. When stdout is not
@@ -167,8 +180,8 @@ first.
 
 - **`pikelet query <pack> "<question>"`** searches a pack from the
   terminal and prints what the MCP `search` tool returns for the same
-  question: the matchQuality verdict, then each result's title, source and
-  text. `--json` prints the tool's response unchanged and `--limit` sets
+  question: each result's title, source, distance and text, then the
+  question words the best passage lacks. `--json` prints the tool's response unchanged and `--limit` sets
   the number of results. It takes a file, a URL, a `#<sha256>` pin or a
   layer, like `mcp --pack`. `compile` now ends by naming this command and
   `mcp install` as next steps.
@@ -195,8 +208,7 @@ first.
   `pikelet <command> --help`, `-h`, or `pikelet help <command>`. `mcp
   --help` used to fail with "mcp requires at least one --pack", and every
   command's `--help` printed all 176 lines. `compile --help` now also
-  lists `--license`, `--calibration`, `--calibration-queries` and
-  `--skip-calibration`.
+  lists `--license`, `--calibration` and `--golden-queries`.
 - **NOTICE credits the encoder every pack carries:** the
   all-MiniLM-L6-v2 weights (quantized) and the bert-base-uncased WordPiece
   vocabulary, both Apache-2.0. It named only Pikelet before. Both npm
