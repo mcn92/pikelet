@@ -382,7 +382,7 @@ async function createJournalFiles(dir, log, { generation = 1, token, beforeCommi
     const { compileArtifact } = await import('./cli.mjs');
     const baseFile = `base-${String(generation).padStart(4, '0')}.pikelet`;
     await buildInPlace(dir, baseFile, token,
-      (staged) => compileArtifact({ source: seedDir, out: staged, 'skip-calibration': true, force: true }),
+      (staged) => compileArtifact({ source: seedDir, out: staged, force: true }, { summary: false }),
       beforeCommit);
     await writeState(dir, {
       format: JOURNAL_FORMAT,
@@ -479,7 +479,7 @@ async function compactLocked(dir, state, log, { assertOwned, token }) {
   const generation = (state.generation || 1) + 1;
   const baseFile = `base-${String(generation).padStart(4, '0')}.pikelet`;
   const written = await buildInPlace(dir, baseFile, token,
-    (staged) => compactChain({ head: state.members.map((m) => path.join(dir, m)), out: staged, 'no-refit': true, force: true }, { log }),
+    (staged) => compactChain({ head: state.members.map((m) => path.join(dir, m)), out: staged, force: true }, { log }),
     () => assertUnchanged(dir, state, assertOwned));
   const old = state.members;
   const next = { ...state, generation, members: [baseFile], lastCompacted: new Date().toISOString() };

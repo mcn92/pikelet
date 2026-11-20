@@ -377,7 +377,7 @@ their own every 8 notes).`,
 
 ${LAYER_TEXT}`,
   compact: `Usage:
-  pikelet compact --head <base> [--head <layer> ...] --out compacted.pikelet [--no-refit]
+  pikelet compact --head <base> [--head <layer> ...] --out compacted.pikelet
 
 ${LAYER_TEXT}`,
   rebase: `Usage:
@@ -738,7 +738,9 @@ function defaultInlineWeightsPath() {
   return path.join(modelCacheDir(), 'all-MiniLM-L6-v2', 'encoder-weights.bin');
 }
 
-export async function compileArtifact(flags) {
+// summary: false leaves out the Compiled/Next lines, for callers (journal
+// init) that write to a staging path the user never sees.
+export async function compileArtifact(flags, { summary = true } = {}) {
   const sources = ['source', 'git', 'conversations'].filter((f) => flags[f] !== undefined);
   if (sources.length > 1) throw new CliError(`compile takes one of --source, --git or --conversations, got --${sources.join(' and --')}`);
   if (!sources.length) throw new CliError('compile requires --source <path|url>, --git <repo> or --conversations <file|folder>');
@@ -878,6 +880,7 @@ export async function compileArtifact(flags) {
     await fs.mkdir(path.dirname(outPath), { recursive: true });
     // copyFile, not rename: os.tmpdir() and the output may be different mounts.
     await fs.copyFile(path.join(tmpDir, 'assets', config.runtime.fileName), outPath);
+    if (!summary) return;
     // The pack is named as the user would type it from here.
     const shown = displayPath(outPath);
     console.log(`Compiled ${shown}`);

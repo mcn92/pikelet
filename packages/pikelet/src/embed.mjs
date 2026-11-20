@@ -143,6 +143,33 @@ function inlineEmbedWorkerCount(chunkCount) {
   return Math.max(1, Math.min(cores - 1, 8, chunkCount));
 }
 
+// Progress for an embedding run. In a terminal it reports every 16 chunks;
+// when stdout is not a terminal (CI, a piped log) it reports at most once
+// per interval, so a long build writes a few lines rather than thousands.
+// The final count is always reported.
+function embedProgress(total, log, {
+  interactive = Boolean(process.stdout.isTTY),
+  intervalMs = 30_000,
+  now = Date.now,
+} = {}) {
+  let last = now();
+  return (done) => {
+    if (done === total) {
+      log(`Embedded ${done}/${total} chunks with inline transformer`);
+      return;
+    }
+    if (interactive) {
+      if (done % 16 === 0) log(`Embedded ${done}/${total} chunks with inline transformer`);
+      return;
+    }
+    const t = now();
+    if (t - last >= intervalMs) {
+      last = t;
+      log(`Embedded ${done}/${total} chunks with inline transformer`);
+    }
+  };
+}
+
 async function embedWithInlineWorkerPool(chunks, declaration, { vocabPath, weightsPath }, workerCount, log) {
   const { Worker } = await import('node:worker_threads');
   const workerUrl = new URL('./embed-worker.mjs', import.meta.url);
@@ -153,6 +180,7 @@ async function embedWithInlineWorkerPool(chunks, declaration, { vocabPath, weigh
   let next = 0;
   let maxSeq = null;
   log(`Embedding ${chunks.length} chunks with ${workerCount} inline-transformer workers`);
+  const progress = embedProgress(chunks.length, log);
   const workers = [];
   try {
     await Promise.all(Array.from({ length: workerCount }, () => new Promise((resolve, reject) => {
@@ -185,9 +213,7 @@ async function embedWithInlineWorkerPool(chunks, declaration, { vocabPath, weigh
         vectors[msg.idx] = msg.vector;
         if (msg.windows > 1) windowed++;
         completed++;
-        if (completed % 16 === 0 || completed === chunks.length) {
-          log(`Embedded ${completed}/${chunks.length} chunks with inline transformer`);
-        }
+        progress(completed);
         dispatch();
       });
     })));
@@ -231,15 +257,14 @@ async function embedWithInlineKernel(chunks, declaration, { vocabPath, weightsPa
   });
   const vectors = [];
   let windowed = 0;
+  const progress = embedProgress(chunks.length, log);
   try {
     for (let i = 0; i < chunks.length; i++) {
       const text = `${declaration.prefixPolicy?.passage || ''}${chunks[i].text}`;
       const embedded = await embedder.embed(text);
       if (embedded.windows > 1) windowed++;
       vectors.push(embedded.vector);
-      if ((i + 1) % 16 === 0 || i + 1 === chunks.length) {
-        log(`Embedded ${i + 1}/${chunks.length} chunks with inline transformer`);
-      }
+      progress(i + 1);
     }
   } finally {
     embedder.dispose();
@@ -315,6 +340,7 @@ export {
   embedChunks,
   trainStudentVectors,
   embedChunksWithInlineTransformer,
+  embedProgress,
   readF32Vectors,
   hashEmbedding,
   validateSelfRecall,

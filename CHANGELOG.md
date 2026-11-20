@@ -156,9 +156,12 @@ first.
 - **`compile` prints less, and labels sizes MiB.** The calibration fit's
   diagnostics, the lexical index size, the rerank sweep, the encoder
   verification vectors and the golden replay now print only with
-  `--verbose`; a one-line calibration summary remains. Sizes are computed
-  in MiB and were labelled MB, here and in `compact`. Scripts that read
-  compile's output should expect the new lines.
+  `--verbose`. Sizes are computed
+  in MiB and were labelled MB, here and in `compact`. When stdout is not
+  a terminal (CI, a piped log), the `Embedded N/M chunks` progress line
+  prints at most every 30 seconds plus the final count, instead of every
+  16 chunks. Scripts that read compile's output should expect the new
+  lines.
 
 ### Changed
 

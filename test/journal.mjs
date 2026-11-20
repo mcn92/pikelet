@@ -60,7 +60,22 @@ console.log('journal: naming and note validation');
 console.log('journal: init, write, read, compact');
 const dir = path.join(tmp, 'j');
 {
-    await initJournal({ nameOrPath: dir, log: quiet });
+    // compile writes its build lines straight to stdout/stderr; capture both.
+    let printed = '';
+    const writes = [process.stdout.write, process.stderr.write];
+    process.stdout.write = process.stderr.write = (chunk, ...rest) => {
+        printed += String(chunk);
+        const cb = rest.find((r) => typeof r === 'function');
+        if (cb) cb();
+        return true;
+    };
+    try {
+        await initJournal({ nameOrPath: dir, log: quiet });
+    } finally {
+        [process.stdout.write, process.stderr.write] = writes;
+    }
+    check('init prints no compile summary naming its staging file, and no flag notes',
+        !/\.tmp\b|^Next:|no effect/m.test(printed), printed.slice(-400));
     const state = JSON.parse(fs.readFileSync(path.join(dir, 'journal.json'), 'utf8'));
     check('init writes a one-member journal', state.format === 'pikelet-journal-v1' && state.members.length === 1);
     await rejectsLike('init refuses to replace a journal without --force',

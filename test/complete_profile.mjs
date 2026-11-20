@@ -2310,6 +2310,18 @@ console.log('compile: an uncalibrated pack with golden queries that reproduce');
     check('--flag=value is --flag value, and keeps any later =',
         parseArgs(['compile', '--out=a.pikelet', '--name=x=y']).flags.out === 'a.pikelet' && parseArgs(['compile', '--name=x=y']).flags.name === 'x=y');
     check('a boolean flag given a value is refused', /--force takes no value/.test((() => { try { parseArgs(['--force=yes']); } catch (e) { return e.message; } return ''; })()));
+    const { embedProgress } = await import('../packages/pikelet/src/embed.mjs');
+    const progressRun = (interactive) => {
+      const lines = [];
+      let clock = 0;
+      const progress = embedProgress(100, (m) => lines.push(m), { interactive, intervalMs: 1000, now: () => clock });
+      for (let done = 1; done <= 100; done++) { clock += 100; progress(done); }
+      return lines.map((l) => l.match(/Embedded (\d+)\/100/)?.[1]);
+    };
+    check('embed progress in a terminal reports every 16 chunks and the last',
+        JSON.stringify(progressRun(true)) === JSON.stringify(['16', '32', '48', '64', '80', '96', '100']), JSON.stringify(progressRun(true)));
+    check('embed progress off a terminal reports once per interval and the last',
+        JSON.stringify(progressRun(false)) === JSON.stringify(['10', '20', '30', '40', '50', '60', '70', '80', '90', '100']), JSON.stringify(progressRun(false)));
     const missingFolder = failure(['compile', path.join(tmp, 'no-such-folder'), '--out', path.join(tmp, 'never.pikelet')]);
     check('compile <path> reads the path as --source', missingFolder && /Source folder not found: .*no-such-folder/.test(missingFolder.stderr),
         JSON.stringify(missingFolder).slice(0, 200));
