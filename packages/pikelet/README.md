@@ -417,7 +417,9 @@ project's layout.
 crawler runs locally under your account and follows the URL *you* typed —
 including through the seed's own redirects (HTTP and meta-refresh, bounded
 at 5 hops), since sites routinely send their root to a canonical host or a
-localized landing page. Every other fetch skips redirects (contentless
+localized landing page. Each hop must be HTTP(S) and is checked against its
+own origin's robots.txt before it is requested. Every other fetch skips
+redirects (contentless
 meta-refresh pages are followed through the normal frontier filters instead
 of wasting page budget). The crawl stays under the seed's path:
 `https://example.com/docs/` (or `/docs`) reads `/docs/` and below, a seed

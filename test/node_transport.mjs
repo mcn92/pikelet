@@ -329,6 +329,68 @@ console.log('crawler');
     site.close();
 }
 
+{
+    // Seed redirects: every hop is checked against its own origin's
+    // robots.txt before it is requested. Two servers on different ports are
+    // two origins.
+    const page = (title) => `<html><title>${title}</title><body><p>${title} describes how the bucket stores `
+        + `snapshots and restores them on request.</p></body></html>`;
+    const serve = (robots, routes) => {
+        const requests = [];
+        const server = http.createServer((req, res) => {
+            requests.push(req.url);
+            if (req.url === '/robots.txt') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end(robots.text); return; }
+            const route = routes[req.url];
+            if (!route) { res.writeHead(404); res.end(); return; }
+            if (route.location) { res.writeHead(302, { location: route.location() }); res.end(); return; }
+            if (route.refresh) { res.writeHead(200, { 'content-type': 'text/html' }); res.end(`<meta http-equiv="refresh" content="0;url=${route.refresh()}">`); return; }
+            res.writeHead(200, { 'content-type': 'text/html' });
+            res.end(page(route.title));
+        });
+        return { server, requests, robots };
+    };
+    const listen = async (s) => { await new Promise((r) => s.server.listen(0, '127.0.0.1', r)); return `http://127.0.0.1:${s.server.address().port}`; };
+    const other = serve({ text: 'User-agent: pikelet\nDisallow: /docs/\n' }, { '/docs/': { title: 'Elsewhere' } });
+    const otherBase = await listen(other);
+    const home = serve({ text: 'User-agent: pikelet\nDisallow: /secret/\n' }, {
+        '/away': { location: () => `${otherBase}/docs/` },
+        '/away-refresh': { refresh: () => `${otherBase}/docs/` },
+        '/inside': { location: () => '/secret/' },
+        '/secret/': { title: 'Secret' },
+        '/file': { location: () => 'file:///etc/passwd' },
+    });
+    const homeBase = await listen(home);
+    const attempt = async (url) => {
+        try { return { docs: await ingestUrl({ url, maxPages: 3 }, () => {}, { delayMs: 0 }) }; } catch (error) { return { error: error.message }; }
+    };
+    const reset = () => { home.requests.length = 0; other.requests.length = 0; };
+
+    reset();
+    let got = await attempt(`${homeBase}/away`);
+    check('a seed redirected to another origin is refused when that origin\'s robots.txt disallows it, before it is fetched',
+        new RegExp(`${otherBase.replace(/[.]/g, '\\.')}/robots\\.txt does not allow crawling`).test(got.error || '')
+            && JSON.stringify(other.requests) === '["/robots.txt"]', `${got.error} | other saw ${other.requests.join(' ')}`);
+    reset();
+    got = await attempt(`${homeBase}/away-refresh`);
+    check('the same holds for a meta-refresh seed redirect',
+        /does not allow crawling/.test(got.error || '') && JSON.stringify(other.requests) === '["/robots.txt"]', `${got.error} | other saw ${other.requests.join(' ')}`);
+    reset();
+    got = await attempt(`${homeBase}/inside`);
+    check('a seed redirected onto a path its own robots.txt disallows is refused before that path is fetched',
+        /does not allow crawling .*\/secret\//.test(got.error || '') && !home.requests.includes('/secret/'), `${got.error} | ${home.requests.join(' ')}`);
+    reset();
+    got = await attempt(`${homeBase}/file`);
+    check('a seed redirected to a non-HTTP URL is refused', /not an HTTP\(S\) URL/.test(got.error || ''), got.error);
+    other.robots.text = 'User-agent: *\nAllow: /\n';
+    reset();
+    got = await attempt(`${homeBase}/away`);
+    check('a seed redirected to an origin that allows it is crawled there, robots.txt read first',
+        got.docs?.length === 1 && got.docs[0].title === 'Elsewhere' && other.requests[0] === '/robots.txt' && other.requests.includes('/docs/'),
+        `${got.error || got.docs?.map((d) => d.title)} | other saw ${other.requests.join(' ')}`);
+    home.server.close();
+    other.server.close();
+}
+
 console.log('range response bounds and retry delays');
 {
     const sourceFor = (body, contentRange = 'bytes 0-3/4') => httpRangeSource('https://range.test/pack', {

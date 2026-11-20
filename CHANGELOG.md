@@ -8,6 +8,23 @@ Through 0.6.0 these were published as `pancake-wasm` and
 packages are pre-1.0: a minor bump may carry breaking changes, and each entry lists them
 first.
 
+## Unreleased
+
+### Fixed
+
+- **A seed URL's redirects are checked against robots.txt before they are
+  fetched.** `compile --source <url>` (and `append --source <url>`)
+  follows the seed through up to five redirects, HTTP or meta refresh,
+  before crawling. Each hop was requested without a robots.txt check:
+  only the typed URL was checked first, and the final URL afterwards.
+  So a seed that redirected to another host had its page fetched before
+  that host's robots.txt was read, and a redirect onto a path the site's
+  own robots.txt disallows was fetched before the crawl refused it.
+  Every hop is now checked against its own origin's robots.txt, and that
+  origin's Crawl-delay applies, before it is requested. A seed that
+  redirects to a URL that is not HTTP(S) is refused with an error saying
+  so, where it failed with "Could not read null/robots.txt".
+
 ## pikelet-wasm 0.15.0 / pikelet 0.15.0 — 2026-11-19
 
 `pikelet mcp` and `pikelet query` stop reporting a relevance verdict, and

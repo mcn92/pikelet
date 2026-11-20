@@ -178,11 +178,14 @@ function metaRefreshTarget(html, baseHref) {
 // bounded) before the crawl starts, and the final URL defines the crawl
 // origin: sites often send their root to a canonical host or localized
 // landing page. Mid-crawl redirects are still skipped; the crawl finds
-// their targets through links.
-async function resolveSeedUrl(seed, log, pace = async () => {}) {
+// their targets through links. admit(url) runs before each hop is
+// requested, so every URL fetched, including one on another origin, has
+// passed that origin's robots.txt first; it throws to refuse.
+async function resolveSeedUrl(seed, log, pace = async () => {}, admit = async () => {}) {
   let current = seed;
   for (let hop = 0; hop < 5; hop++) {
     let response;
+    await admit(current);
     await pace();
     try {
       response = await nodeFetch(current.href, {
@@ -199,7 +202,7 @@ async function resolveSeedUrl(seed, log, pace = async () => {}) {
     const location = response.headers.get('location');
     if (response.status >= 300 && response.status < 400 && location) {
       await response.body?.cancel?.().catch(() => {});
-      const next = new URL(location, current);
+      const next = redirectTarget(location, current);
       log(`seed redirected: ${current.href} -> ${next.href}`);
       current = next;
       continue;
@@ -214,6 +217,7 @@ async function resolveSeedUrl(seed, log, pace = async () => {}) {
       }
       const refresh = metaRefreshTarget(html, current.href);
       if (refresh && refresh.href !== current.href) {
+        redirectTarget(refresh.href, current);
         log(`seed redirected (meta refresh): ${current.href} -> ${refresh.href}`);
         current = refresh;
         continue;
@@ -225,6 +229,16 @@ async function resolveSeedUrl(seed, log, pace = async () => {}) {
   }
   log(`warn: seed still redirecting after 5 hops; crawling ${current.href}`);
   return current;
+}
+
+// A seed redirect may change host but not leave HTTP(S).
+function redirectTarget(location, from) {
+  let next;
+  try { next = new URL(location, from); } catch { next = null; }
+  if (!next || !/^https?:$/.test(next.protocol)) {
+    throw new CliError(`The seed ${from.href} redirects to ${next ? next.href : JSON.stringify(location)}, which is not an HTTP(S) URL`, 1);
+  }
+  return next;
 }
 
 // The crawl stays under the seed's path: --source https://example.com/docs/
@@ -381,8 +395,13 @@ async function ingestUrl(source, log, { delayMs = DEFAULT_CRAWL_DELAY_MS } = {})
       log(`robots.txt asks for ${robots.crawlDelayMs / 1000} s between requests; waiting that long`);
     }
   };
-  obey(await robotsFor(typed.origin), typed.href);
-  const seed = await resolveSeedUrl(typed, log, pace);
+  // Each hop of the seed's redirect chain is checked against its own
+  // origin's robots.txt before it is requested. A chain cut off after 5
+  // hops ends on a URL not yet requested, so the seed is checked again.
+  const seed = await resolveSeedUrl(typed, log, pace, async (url) => {
+    if (url.origin !== typed.origin && !robotsByOrigin.has(url.origin)) log(`seed redirect leaves ${typed.origin}; reading ${url.origin}/robots.txt first`);
+    obey(await robotsFor(url.origin), url.href);
+  });
   const robots = await robotsFor(seed.origin);
   obey(robots, seed.href);
   // The scope comes from the URL as typed; a seed that redirected out of it
