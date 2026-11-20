@@ -5,11 +5,11 @@ generative model? This spike says yes, for small models. It is
 a spike, not a feature: nothing here is part of either package.
 
 - **Two dependency-free WASM kernels.** `decoder.cpp` runs GPT-Neo
-  (TinyStories-33M and TinyStories-Instruct-33M). `llama.cpp` (this
-  project's file, unrelated to the llama.cpp project) runs Llama-architecture
-  models (SmolLM2-135M and 360M Instruct). Both reuse
-  `encoder-spike/encoder.cpp`'s weight format and integer GEMM. The modules
-  are 57 KB and 42 KB.
+  (TinyStories-33M and TinyStories-Instruct-33M). `llama_kernel.cpp` runs
+  Llama-architecture models (SmolLM2-135M, 360M and 1.7B Instruct), single-
+  threaded or on WebAssembly threads. Both reuse
+  `encoder-spike/encoder.cpp`'s weight format and integer GEMM. The
+  single-threaded modules are 57 KB and 42 KB.
 - **Faithful to torch.** Greedy text matches torch running the same
   quantized weights token for token, and the kernel's perplexity matches
   torch's to four decimal places.
@@ -21,8 +21,8 @@ a spike, not a feature: nothing here is part of either package.
   70 with no passages. A simple check on the question's names catches all 15
   questions about things that don't exist.
 
-All numbers: Ryzen 9 4900HS, single thread, WASM SIMD128, 2026-10-26 to
-2026-10-28.
+All numbers: Ryzen 9 4900HS (8 cores), WASM SIMD128, single thread unless
+a thread count is given, 2026-10-26 to 2026-11-20.
 
 ## The GPT-Neo kernel
 
@@ -196,7 +196,7 @@ and 26.0; regrading u8 agreed with the first pass on 35 and 36 of 40 items).
 
 ## The Llama kernel: SmolLM2
 
-`llama.cpp` reads its shape from the blob header and adds RMSNorm,
+`llama_kernel.cpp` reads its shape from the blob header and adds RMSNorm,
 rotate-half RoPE, grouped-query attention and SwiGLU; `bpe.mjs` gained
 special tokens and digit splitting. u8 and u5 (expanded at load).
 
@@ -205,6 +205,7 @@ python3 export_llama.py 8                     # smollm2-135m-u8.bin + llama-toke
 python3 export_llama.py 8 HuggingFaceTB/SmolLM2-360M-Instruct smollm2-360m
 python3 llama_ref.py HuggingFaceTB/SmolLM2-135M-Instruct smollm2-135m 8
 node llama_check.mjs smollm2-135m 8
+THREADS=6 node llama_check.mjs smollm2-135m 8   # the same check on llama-mt.mjs
 ```
 
 - Tokenizer: 10/10 test strings and 100/100 chat prompts identical to
@@ -218,6 +219,80 @@ node llama_check.mjs smollm2-135m 8
 - Speed, 360M, Node, one thread: prompt reading 41 tokens/s, generation 24.
   At about 30 GFLOP/s it is compute-bound like the GPT-Neo kernel, so
   threads are the lever. 135M generates 70–84 tokens/s.
+
+### Threads
+
+`llama-mt.mjs` and `llama-mt.web.mjs` are the same source built with
+`-pthread`; `llama_set_threads(n)`, called before `llama_init`, picks up to
+16 threads. The GEMM splits output rows across threads and attention splits
+by (token, head); a futex-based pool spins briefly before sleeping, so a
+one-token step doesn't pay a wake-up per matrix. Each thread computes whole
+dot products in the same order as one thread would, so the output doesn't
+depend on the thread count: `mt_check.mjs` hashes every logit of a
+256-token prompt and 64 greedy tokens, and the hash is the same from
+`llama.mjs` and from `llama-mt.mjs` at 1 to 8 threads, for 360M and 1.7B.
+
+```bash
+node mt_check.mjs llama-mt.mjs 6 smollm2-360m 8   # hash afe3fad5b2b7ee19…, speed
+node mt_check.mjs llama.mjs 1 smollm2-360m 8      # the same hash, single-threaded
+```
+
+SmolLM2-1.7B-Instruct, u8, Node:
+
+| Threads | Prompt reading (tokens/s) | Generation (tokens/s) |
+| ---: | ---: | ---: |
+| 1 | 9.8 | 6.4 |
+| 2 | 18.0 | 10.8 |
+| 4 | 31.2 | 14.6 |
+| 6 | 38.7 | 16.5 |
+| 8 | 40.9 | 15.2 |
+
+360M goes from 52 to 205 tokens/s reading and from 27.7 to 66.6
+generating. Prompt reading is compute-bound and scales about 4×.
+Generation stops at about 2.6×: every token reads the whole 1.93 GB of
+weights, and 16.5 tokens/s is about 32 GB/s, near this laptop's memory
+bandwidth. 8 threads generate slower than 6, as the spinning workers
+compete with Node's own threads; use the core count minus one or two.
+
+### 1.7B
+
+SmolLM2-1.7B has no grouped-query attention (32 KV heads), so its KV cache
+is 393 KB per token in f32. The u8 blob is 1.93 GB, which is past 2 GB of
+wasm32 addresses once the cache is added, so JavaScript reads pointers
+unsigned (`>>> 0`, `>>> 2`). `export_llama.py` loads the checkpoint in its
+own dtype and writes the blob straight to disk; `SKIP_DEQ=1` skips the
+dequantized torch copy, and `llama_ref.py` then dequantizes from the blob.
+`load_blob.mjs` reads a blob into the module's memory in 64 MB chunks, so
+no second copy exists in JavaScript (process memory 2.6 GB rather than
+4.4 GB).
+
+```bash
+SKIP_DEQ=1 python3 export_llama.py 8 HuggingFaceTB/SmolLM2-1.7B-Instruct smollm2-1.7b
+python3 llama_ref.py HuggingFaceTB/SmolLM2-1.7B-Instruct smollm2-1.7b 8
+THREADS=6 node llama_check.mjs smollm2-1.7b 8
+```
+
+- Greedy chat replies identical to torch on u8 weights (8/8, 19/19 and
+  40/40 tokens).
+- 1,000 teacher-forced tokens: the top token agrees on 997. The largest
+  logit difference is again at position 0 (0.98), and falls to 0.09 by
+  position 10 and 0.02 by 999.
+- Perplexity: fp32 4.0089, u8 4.0018; u8 costs nothing measurable.
+
+### Chat
+
+```bash
+node chat.mjs                                     # SmolLM2-1.7B, a conversation on stdin
+node chat.mjs --model smollm2-360m "What is the capital of France?"
+node chat.mjs --temp 0.7 --seed 3                 # sampled, repeatable
+```
+
+`chat.mjs` (run from this directory, after exporting the model) uses
+SmolLM2's chat template and keeps the conversation in the KV cache, so each
+turn reads only its new tokens (up to 2,048 in all). It defaults to greedy
+decoding; with `--temp` it samples from the top-p 0.9 set with a seeded
+generator. Replies are fluent, but 1.7B reasons poorly: it is a
+demonstration of the kernel, not a useful assistant.
 
 ## Answering from a pack
 
@@ -274,7 +349,8 @@ as soon as the text is tokenized.
 
 ## Not done
 
-- Threads, and SIMD prompt reading for the Llama kernel.
+- The threaded build in a browser (`llama-mt.web.mjs` in a worker, on a
+  cross-origin-isolated page).
 - A ring-buffer cache for GPT-Neo's local layers.
 - GPT-2 124M.
 - Firefox outside Playwright.

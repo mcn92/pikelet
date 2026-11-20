@@ -1,4 +1,4 @@
-"""Torch references for llama.cpp (llama_check.mjs): `python3 llama_ref.py
+"""Torch references for llama_kernel.cpp (llama_check.mjs): `python3 llama_ref.py
 <hf id> <name> <bits>` loads the model with the blob's dequantized weights
 (<name>-u<bits>.deq.pt from export_llama.py) and writes llama_ref-<name>-u<bits>.json:
 HF token ids for tokenizer test strings; for chat prompts, the last-token

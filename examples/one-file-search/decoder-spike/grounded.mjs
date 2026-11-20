@@ -1,5 +1,5 @@
 // node grounded.mjs <name> <bits: 8|5> -- grounded QA over SQuAD v2 passages
-// (data/grounded_items.json, from grounded_items.py) with llama.cpp: each
+// (data/grounded_items.json, from grounded_items.py) with llama_kernel.cpp: each
 // item's passage and question in the model's chat format (grounded_score.mjs
 // SYSTEM), greedy reply up to 48 tokens, scored SQuAD-style. Writes
 // grounded_results-<name>-u<bits>.json and prints scores and speed.

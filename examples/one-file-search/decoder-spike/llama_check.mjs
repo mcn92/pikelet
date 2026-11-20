@@ -1,4 +1,4 @@
-// node llama_check.mjs <name> <bits: 8|5> -- llama.cpp against the torch
+// node llama_check.mjs <name> <bits: 8|5> -- llama_kernel.cpp against the torch
 // references from llama_ref.py (the model with the blob's own dequantized
 // weights): tokenizer ids, chat-prompt logits and greedy text, and a
 // teacher-forced long text decoded one token per call and in 200-token

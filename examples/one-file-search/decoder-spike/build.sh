@@ -17,11 +17,11 @@ emcc decoder.cpp -std=c++20 -O3 -msimd128 \
   -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPF32,HEAP32 \
   -sALLOW_MEMORY_GROWTH=1 \
   -o decoder.web.mjs
-# The Llama-architecture kernel (llama.cpp): its blobs and KV cache run to
+# The Llama-architecture kernel (llama_kernel.cpp): its blobs and KV cache run to
 # hundreds of MB, so memory may grow to the wasm32 limit.
 for env in node web,worker; do
   out=llama.mjs; [ "$env" = node ] || out=llama.web.mjs
-  emcc llama.cpp -std=c++20 -O3 -msimd128 \
+  emcc llama_kernel.cpp -std=c++20 -O3 -msimd128 \
     -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=$env \
     -sEXPORTED_FUNCTIONS=_llama_set_threads,_llama_init,_llama_forward,_llama_expand_u5,_llama_dim,_malloc,_free \
     -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPF32,HEAP32 \
@@ -34,7 +34,7 @@ done
 # without returning to the event loop first.
 for env in node web,worker; do
   out=llama-mt.mjs; [ "$env" = node ] || out=llama-mt.web.mjs
-  emcc llama.cpp -std=c++20 -O3 -msimd128 -pthread -sPTHREAD_POOL_SIZE=15 \
+  emcc llama_kernel.cpp -std=c++20 -O3 -msimd128 -pthread -sPTHREAD_POOL_SIZE=15 \
     -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=$env \
     -sEXPORTED_FUNCTIONS=_llama_set_threads,_llama_init,_llama_forward,_llama_expand_u5,_llama_dim,_malloc,_free \
     -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPF32,HEAP32 \

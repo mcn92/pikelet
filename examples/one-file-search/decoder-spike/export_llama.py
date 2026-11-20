@@ -1,4 +1,4 @@
-"""A Llama-architecture checkpoint (SmolLM2 by default) -> llama.cpp's blob:
+"""A Llama-architecture checkpoint (SmolLM2 by default) -> llama_kernel.cpp's blob:
 `python3 export_llama.py [8|5] [hf id] [name]` writes <name>-u<bits>.bin
 (u8 in blocks of 64, or u5 in blocks of 32, see quant_u5.py; u5 rows' high-bit
 plane padded to a multiple of 128 weights) and the
@@ -74,7 +74,7 @@ def emit_quant(name):
         # pack_u5's high-bit plane runs in groups of 128 weights; SmolLM2's
         # D (576, 960) is not a multiple of 128, so each row's codes are
         # zero-padded to one for that plane (ceil(cols / 128) * 16 bytes per
-        # row) and the nibble plane is cut back to cols / 2. llama.cpp only
+        # row) and the nibble plane is cut back to cols / 2. llama_kernel.cpp only
         # reads u5 when expanding it (format 6), never in the GEMM.
         q, s16, o16, deq = quant_u5(sd[name])
         rows, cols = q.shape

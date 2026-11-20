@@ -1,5 +1,5 @@
 // node kernel_run.mjs <name> <bits: 8|5> <rag_out file> -- reruns a
-// rag_ref.py condition through llama.cpp from the same prompt ids (greedy,
+// rag_ref.py condition through llama_kernel.cpp from the same prompt ids (greedy,
 // 48 tokens), reports how many replies equal torch's and the speed, and
 // writes the kernel's replies as rag_out-<name>-kernel-u<bits>-<condition>.json
 // for rag_score.mjs.
