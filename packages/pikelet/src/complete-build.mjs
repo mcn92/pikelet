@@ -149,8 +149,12 @@ async function buildCompleteArtifact({ projectDir, assetsDir, config, chunks, sn
   let result = assemble([], calibrationBytes);
   // Golden queries are verified against the assembled file's own retrieval,
   // then embedded by reassembling it; the evaluation segment feeds no
-  // retrieval, so they stay true of the final bytes.
-  const pack = await openPikeletFile(outPath);
+  // retrieval, so they stay true of the final bytes. The query encoder comes
+  // from loadInlineEncoderKernel (the web glue), as for the build's own
+  // embedder: under the Docusaurus plugin this module runs through jiti's
+  // CJS transform, where the reader's default node glue fails with
+  // "require is not a function".
+  const pack = await openPikeletFile(outPath, { createEncoder: await loadInlineEncoderKernel() });
   let picked;
   try {
     picked = await pickGoldenQueries({
