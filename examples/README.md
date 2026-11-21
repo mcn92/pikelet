@@ -7,13 +7,13 @@
 The current product, end to end, in the smallest form: compile a short
 public-domain text into a `.pikelet`, mount it with `pikelet mcp`, and run
 two queries — one straightforward, one whose premise is false — to show
-what `matchQuality` does and doesn't tell an agent. If you have five
-minutes, run this one.
+what distance and `grounding.uncovered` do and don't tell an agent. If you
+have five minutes, run this one.
 
 ### [`one-file-search/`](one-file-search/) — the file itself
 
-Compiles the five Search Artifact components (corpus, index, encoder,
-evaluation, calibration) into one content-addressed `.pikelet` and serves
+Compiles the Search Artifact components (corpus, index, encoder,
+evaluation) into one content-addressed `.pikelet` and serves
 queries from it in Node and in the browser over HTTP range requests, with
 no backend. This is what `mcp-knowledge-pack` mounts over MCP and what
 `pikelet compile` builds.
@@ -24,18 +24,17 @@ The offline pipeline that builds a 456k-passage Wikipedia pack: embed,
 compile, host on static/R2 storage, query entirely client-side. Also the
 data-prep step `one-file-search`'s wiki-scale scripts consume directly.
 
-If you have 15 seconds instead:
+If you have 15 seconds instead, search a published pack where it sits:
 
 ```bash
-npm run demo:artifact
+npx pikelet query "https://github.com/mcn92/pikelet/releases/download/knowledge-packs-v1/rust-book.pikelet#21f86277770e02b574ec18ceaa708c0526a93843fece63345cb8ba67551c9e03" "how do I borrow a value mutably"
 ```
 
-opens a committed docs search artifact, searches it lazily, and prints the
-range reads — the smallest possible proof that search can be a file your
-app ships. It runs the legacy `.pikelet-range` profile (see
-`legacy/range-artifact-demo/` below), not a `.pikelet`. To build a
-`.pikelet` from your own folder, or scaffold a deployable search app
-instead:
+The CLI range-reads the Rust book pack from a GitHub release, checks it
+against the pinned identity after `#`, runs the query encoder from inside
+the file, and prints the top passages; it never downloads the whole pack.
+To build a `.pikelet` from your own folder, or scaffold a
+deployable search app instead:
 
 ```bash
 npx pikelet compile --source ./docs --out docs.pikelet
@@ -71,7 +70,7 @@ direction.
   `test/test_worker_features.js`.
 - [`legacy/range-artifact-demo/`](legacy/range-artifact-demo/) — earlier
   `.pikelet-range` artifact demo and SIFT-shaped smoke harness. Wired into
-  `npm run demo:artifact`/`demo:sketch` and the 15-second hook above.
+  `npm run demo:artifact`/`demo:sketch`.
 
 There is also a raw, no-bundler browser page at
 [`technical-demo.html`](technical-demo.html).

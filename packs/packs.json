@@ -5,21 +5,21 @@
       "name": "simple-wikipedia",
       "url": "https://github.com/mcn92/pikelet/releases/download/artifact-wiki-inline-v4/pancake-wiki-inline.pancake",
       "identity": "1b180adf4c6cebb2dcd5615256df6a25dac5fda8738dbbc11d60af86046f97f3",
-      "description": "Simple English Wikipedia, 456,153 passages with inline MiniLM encoder, hybrid retrieval, and calibrated abstention. ~649 MiB served by range reads: mounting transfers ~52 MiB and each question costs ~127 range requests - nothing downloads the whole file.",
+      "description": "Simple English Wikipedia, 456,153 passages with inline MiniLM encoder and hybrid (vector + BM25) retrieval. ~649 MiB served by range reads: mounting transfers ~52 MiB and each question costs ~127 range requests - nothing downloads the whole file.",
       "license": "CC-BY-SA-4.0"
     },
     {
       "name": "astro-docs",
       "url": "https://github.com/mcn92/pikelet/releases/download/knowledge-packs-v1/astro-docs.pikelet",
       "identity": "e4d17aee1ec9298eb60f8f127b1fed7bdbcccc08fa2195ea7333eff77f1997e0",
-      "description": "docs.astro.build (English), 3,255 sections with inline MiniLM encoder, hybrid retrieval, calibrated abstention, and 23 replay-verified golden queries embedded for verify_pack.",
+      "description": "docs.astro.build (English), 3,255 sections with inline MiniLM encoder, hybrid (vector + BM25) retrieval, and 23 replay-verified golden queries embedded for verify_pack.",
       "license": "MIT"
     },
     {
       "name": "rust-book",
       "url": "https://github.com/mcn92/pikelet/releases/download/knowledge-packs-v1/rust-book.pikelet",
       "identity": "21f86277770e02b574ec18ceaa708c0526a93843fece63345cb8ba67551c9e03",
-      "description": "The Rust Programming Language book, 1,035 sections with inline MiniLM encoder, hybrid retrieval, calibrated abstention, and 20 replay-verified golden queries embedded for verify_pack.",
+      "description": "The Rust Programming Language book, 1,035 sections with inline MiniLM encoder, hybrid (vector + BM25) retrieval, and 20 replay-verified golden queries embedded for verify_pack.",
       "license": "MIT OR Apache-2.0"
     }
   ]

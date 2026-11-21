@@ -17,7 +17,7 @@ https://pub-6da2384a3bca4a44b2b2fa29a94cc811.r2.dev/wikipedia.pikelet
 
 The pack is a 648.5 MiB `.pikelet` file with 456,153 records, an embedded
 MiniLM query encoder, semantic and lexical retrieval, integrity metadata,
-and calibrated abstention. There is no `/search`, `/embed`, `/query`, or
+and calibration data from an earlier release. There is no `/search`, `/embed`, `/query`, or
 `/api` backend; the browser reads byte ranges from that one URL and the
 playground shows the range requests as they happen.
 
