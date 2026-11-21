@@ -2,9 +2,9 @@
 
 **Knowledge that ships as a file.**
 
-A `.pikelet` file is a searchable corpus in a single file. It holds the source text, a vector index and a keyword (BM25) index, the neural encoder that turns a question into a vector, and the tests the pack was built to pass. Its identity is a SHA-256 digest that commits to all of it, so the file fixes not just what the corpus says but how it is queried: the model that encodes a question, the indexes that find candidates, and the order they rank passages in. **The format makes retrieval semantics part of the versioned knowledge artifact.**
+A `.pikelet` file is a searchable corpus in a single file. It holds the source text, a vector index and a keyword (BM25) index, the neural encoder that turns a question into a vector, and the tests the pack was built to pass. Its identity is a SHA-256 digest that commits to all of it, so the file fixes not just what the corpus says but how a question reaches it: the model that encodes the question and the indexes that find candidates. **The corpus, its encoder and its indexes are one versioned artifact.** How the vector and keyword candidates are combined into one ranking (the fusion rule and BM25 parameters) belongs to the reader version, not the file, so a newer reader can order the same pack's results differently; see [FORMAT.md](FORMAT.md#operational-limitations).
 
-The layout is built for byte-range reads. A reader opens the file from a small prefix and then fetches only the index rows and records a query needs, verifying each against the identity, so a pack can sit on disk, S3, R2, a CDN or any static HTTP host, with no vector database, embedding API or retrieval server behind it. [FORMAT.md](FORMAT.md) describes the binary structure, the embedded encoder, the indexes, the integrity commitments, versioning, compatibility and the format's limits.
+The layout is built for byte-range reads. A reader opens the file from a small prefix and then fetches only the index rows and records a query needs, verifying each against the identity (a keyword index over 8 MiB is the exception: it is checked whole only by `verify_pack` with `full: true`, not on each read), so a pack can sit on disk, S3, R2, a CDN or any static HTTP host, with no vector database, embedding API or retrieval server behind it. [FORMAT.md](FORMAT.md) describes the binary structure, the embedded encoder, the indexes, the integrity commitments, versioning, compatibility and the format's limits.
 
 **Pikelet** is the open-source toolchain for the format: a compiler (`pikelet compile`) that builds packs from folders, websites, git history or exported chats; a reader library (`pikelet-wasm`) for browsers, Node and edge workers; and an MCP server (`pikelet mcp`) that mounts packs for LLM agents.
 
@@ -160,7 +160,7 @@ The **range proof** uses a server that does not understand Pikelet and reports m
 
 ## Status
 
-Pikelet is early: the implementation is real, the format is not frozen, and there is one primary author. Prebuilt WASM, local and HTTP readers, the embedded encoder, BM25 hybrid retrieval, content identity with lazy-read verification, query-word grounding, MCP mounting, layered updates, and the experimental journal all ship today. `npm test` runs the engine, artifact-profile, MCP, ingestion, and format-hardening conformance suites.
+Pikelet is early: the implementation is real, the format is not frozen, and there is one primary author. Prebuilt WASM, local and HTTP readers, the embedded encoder, BM25 hybrid retrieval, content identity with lazy-read verification (except large keyword indexes, as above), query-word grounding, MCP mounting, layered updates, and the experimental journal all ship today. `npm test` runs the engine, artifact-profile, MCP, ingestion, and format-hardening conformance suites.
 
 Previously known as **Pancake** (renamed September 2026); files from before the rename remain readable — see [`docs/history.md`](docs/history.md). Pikelet is unrelated to the Pikelet programming language.
 
