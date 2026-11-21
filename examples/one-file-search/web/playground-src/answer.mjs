@@ -10,13 +10,9 @@ import { httpRangeSource } from '../../sources.mjs';
 
 const R2 = 'https://pub-6da2384a3bca4a44b2b2fa29a94cc811.r2.dev';
 const PACK_URL = `${R2}/wikipedia.pikelet`;
-// ?models=<base URL> points the page at another copy of the weights (tests).
-const MODEL_BASE = new URLSearchParams(location.search).get('models') || `${R2}/models/`;
-const MODELS = {
-    'smollm2-360m': { file: 'smollm2-360m-instruct-u8.bin', size: 407228224 },
-    'smollm2-1.7b': { file: 'smollm2-1.7b-instruct-u8.bin', size: 1925587008 },
-};
-const TOKENIZER = 'smollm2-tokenizer.json';
+// The weights and tokenizer files; the worker checks them against the hashes
+// in llm/models.json, served from this page's origin.
+const MODEL_BASE = `${R2}/models/`;
 const SYSTEM = 'Answer the question using only the passages below. Reply with a short answer taken from the passages. '
     + 'If the passages do not contain the answer, reply exactly: Not in the passages.';
 const PASSAGES = 3;
@@ -82,7 +78,6 @@ function nextMessage(types, onOther) {
 
 async function loadModel() {
     const name = document.querySelector('input[name="model"]:checked').value;
-    const model = MODELS[name];
     if (worker) worker.terminate();
     modelReady = false;
     busy = true;
@@ -95,10 +90,7 @@ async function loadModel() {
     // and the kernel files beside it unbundled.
     worker = new Worker(new URL('llm/worker.mjs', document.baseURI), { type: 'module' });
     const threads = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 4) - 2));
-    worker.postMessage({
-        type: 'load', name, url: MODEL_BASE + model.file, size: model.size,
-        tokenizerUrl: MODEL_BASE + TOKENIZER, threads,
-    });
+    worker.postMessage({ type: 'load', name, base: MODEL_BASE, threads });
     try {
         const ready = await nextMessage(['ready'], (msg) => {
             if (msg.type !== 'progress') return;

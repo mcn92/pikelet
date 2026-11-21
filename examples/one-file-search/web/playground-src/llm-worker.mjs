@@ -10,7 +10,15 @@
 // (OPFS) when the browser allows it. A copy counts only once its marker file
 // records the full size, so an interrupted download is fetched again.
 //
-// Messages in:  {type:'load', name, url, size, tokenizerUrl, threads}
+// Nothing from the weights host is trusted. models.json, served beside this
+// worker from the page's own origin, gives each model's size and the SHA-256
+// of every chunkSize piece, and the tokenizer's SHA-256. Every piece is
+// checked as it arrives, and again when read back from the saved copy, before
+// the kernel sees it; a mismatch stops the load. Saved copies are named by
+// the model's SHA-256, so a copy saved before this check existed is never
+// read, and is deleted.
+//
+// Messages in:  {type:'load', name, base, threads}
 //               {type:'answer', system, passages, question, maxNew}
 //               {type:'hash', ids, steps}   (tests: logits hash, as mt_check.mjs)
 // Messages out: {type:'progress', phase, loaded, total}
@@ -28,6 +36,22 @@ const CHUNK = 256;  // prompt tokens per forward call
 let mod, blob, bpe, stop, V, idsPtr, lg;
 
 const post = (msg) => self.postMessage(msg);
+
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+// SHA-256 of heap bytes [from, to) at ptr. slice() copies into an ordinary
+// ArrayBuffer, which crypto.subtle needs when the heap is shared (threads).
+async function heapSha256(ptr, from, to) {
+  return hex(await crypto.subtle.digest('SHA-256', mod.HEAPU8.slice(ptr + from, ptr + to)));
+}
+
+// Checks heap piece i of the weights against the manifest.
+async function checkPiece(entry, chunkSize, ptr, i) {
+  const from = i * chunkSize, to = Math.min(entry.size, from + chunkSize);
+  if ((await heapSha256(ptr, from, to)) !== entry.chunks[i]) {
+    throw new Error(`${entry.file}: bytes ${from}-${to - 1} do not match the published SHA-256; refusing to run them`);
+  }
+}
 
 async function cacheDir() {
   try {
@@ -47,22 +71,41 @@ async function cachedSize(dir, name) {
   }
 }
 
-// Reads a cached copy into the heap at ptr, 16 MB at a time.
-async function readCache(dir, name, ptr, size) {
-  const file = await (await dir.getFileHandle(`${name}.bin`)).getFile();
-  if (file.size !== size) return false;
-  const STEP = 16 << 20;
-  for (let off = 0; off < size; off += STEP) {
-    const part = new Uint8Array(await file.slice(off, Math.min(size, off + STEP)).arrayBuffer());
+// Deletes saved files that belong to no model in the manifest: copies from
+// before the manifest (named by model) and copies of superseded weights.
+async function pruneCache(dir, keep) {
+  try {
+    const stale = [];
+    for await (const name of dir.keys()) if (!keep.has(name.replace(/\.(bin|ok)$/, ''))) stale.push(name);
+    for (const name of stale) await dir.removeEntry(name).catch(() => {});
+  } catch { /* nothing to prune */ }
+}
+
+// Reads a saved copy into the heap at ptr, one manifest piece at a time,
+// checking each. False if the copy is missing, short, or fails a check.
+async function readCache(dir, key, entry, chunkSize, ptr) {
+  const file = await (await dir.getFileHandle(`${key}.bin`)).getFile();
+  if (file.size !== entry.size) return false;
+  for (let i = 0; i < entry.chunks.length; i++) {
+    const off = i * chunkSize;
+    const part = new Uint8Array(await file.slice(off, Math.min(entry.size, off + chunkSize)).arrayBuffer());
     mod.HEAPU8.set(part, ptr + off);
-    post({ type: 'progress', phase: 'cache', loaded: off + part.length, total: size });
+    try {
+      await checkPiece(entry, chunkSize, ptr, i);
+    } catch {
+      return false;
+    }
+    post({ type: 'progress', phase: 'cache', loaded: off + part.length, total: entry.size });
   }
   return true;
 }
 
-// Streams the download into the heap at ptr, writing the cache alongside.
-// Returns null once a copy is saved, or why none was.
-async function download(url, dir, name, ptr, size) {
+// Streams the download into the heap at ptr, checking each manifest piece as
+// it completes and writing the cache alongside. The marker that makes a copy
+// count is written only after every piece has passed. Returns null once a
+// copy is saved, or why none was.
+async function download(url, dir, name, entry, chunkSize, ptr) {
+  const size = entry.size;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
   let handle = null, saveError = dir ? null : 'this browser gives the page no private file storage';
@@ -87,23 +130,32 @@ async function download(url, dir, name, ptr, size) {
     }
   }
   const reader = res.body.getReader();
-  let off = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (off + value.length > size) throw new Error(`${url}: larger than the expected ${size} bytes`);
-    mod.HEAPU8.set(value, ptr + off);
-    if (handle) {
-      try {
-        if (handle.write(value, { at: off }) !== value.length) throw new Error('short write');
-      } catch (error) {
-        await dropCopy(`writing failed at ${Math.floor(off / 2 ** 20)} MB: ${error?.message || error}`);
+  let off = 0, checked = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (off + value.length > size) throw new Error(`${url}: larger than the expected ${size} bytes`);
+      mod.HEAPU8.set(value, ptr + off);
+      if (handle) {
+        try {
+          if (handle.write(value, { at: off }) !== value.length) throw new Error('short write');
+        } catch (error) {
+          await dropCopy(`writing failed at ${Math.floor(off / 2 ** 20)} MB: ${error?.message || error}`);
+        }
       }
+      off += value.length;
+      while (checked < entry.chunks.length && Math.min(size, (checked + 1) * chunkSize) <= off) {
+        await checkPiece(entry, chunkSize, ptr, checked++);
+      }
+      post({ type: 'progress', phase: 'download', loaded: off, total: size });
     }
-    off += value.length;
-    post({ type: 'progress', phase: 'download', loaded: off, total: size });
+    if (off !== size) throw new Error(`${url}: got ${off} bytes, expected ${size}`);
+  } catch (error) {
+    reader.cancel().catch(() => {});
+    if (handle) await dropCopy('download failed');
+    throw error;
   }
-  if (off !== size) throw new Error(`${url}: got ${off} bytes, expected ${size}`);
   if (handle) {
     try {
       handle.flush();
@@ -121,11 +173,24 @@ async function download(url, dir, name, ptr, size) {
   return saveError;
 }
 
-async function load({ name, url, size, tokenizerUrl, threads }) {
+async function load({ name, base, threads }) {
   const t0 = performance.now();
   const isolated = self.crossOriginIsolated === true;
+  const manifestRes = await fetch(new URL('models.json', import.meta.url));
+  if (!manifestRes.ok) throw new Error(`models.json: HTTP ${manifestRes.status}`);
+  const manifest = await manifestRes.json();
+  const entry = manifest.models[name];
+  if (!entry) throw new Error(`no model named ${name} in models.json`);
+  const { chunkSize } = manifest;
+  const size = entry.size;
   const { default: create } = await import(isolated ? './llama-mt.web.mjs' : './llama.web.mjs');
-  const tokJson = await (await fetch(tokenizerUrl)).json();
+  const tokRes = await fetch(base + manifest.tokenizer.file);
+  if (!tokRes.ok) throw new Error(`${manifest.tokenizer.file}: HTTP ${tokRes.status}`);
+  const tokBytes = await tokRes.arrayBuffer();
+  if (hex(await crypto.subtle.digest('SHA-256', tokBytes)) !== manifest.tokenizer.sha256) {
+    throw new Error(`${manifest.tokenizer.file} does not match the published SHA-256; refusing to use it`);
+  }
+  const tokJson = JSON.parse(new TextDecoder().decode(tokBytes));
   bpe = createBpeFromJson(tokJson);
   stop = new Set([tokJson.eos, tokJson.specials['<|im_end|>']].filter((x) => x !== undefined));
   mod = await create();
@@ -134,11 +199,14 @@ async function load({ name, url, size, tokenizerUrl, threads }) {
   blob = mod._malloc(size) >>> 0;
   if (!blob) throw new Error(`could not allocate ${size} bytes for the weights`);
   const dir = await cacheDir();
+  const key = entry.sha256;
+  if (dir) await pruneCache(dir, new Set(Object.values(manifest.models).map((m) => m.sha256)));
   let source = 'network', saveError = null;
-  if (dir && (await cachedSize(dir, name)) === size && (await readCache(dir, name, blob, size).catch(() => false))) {
+  if (dir && (await cachedSize(dir, key)) === size
+      && (await readCache(dir, key, entry, chunkSize, blob).catch(() => false))) {
     source = 'cache';
   } else {
-    saveError = await download(url, dir, name, blob, size);
+    saveError = await download(base + entry.file, dir, key, entry, chunkSize, blob);
   }
   const rc = mod._llama_init(blob, 8, MAXCTX);
   if (rc) throw new Error(`llama_init returned ${rc}: not a usable weights file`);

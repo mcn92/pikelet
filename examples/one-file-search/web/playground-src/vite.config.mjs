@@ -10,6 +10,8 @@ import { resolve } from 'node:path';
 const SPIKE = resolve(__dirname, '..', '..', 'decoder-spike');
 const LLM_FILES = [
     [resolve(__dirname, 'llm-worker.mjs'), 'worker.mjs'],
+    // Model sizes and SHA-256s (decoder-spike/model_manifest.mjs).
+    [resolve(__dirname, 'llm-models.json'), 'models.json'],
     [resolve(SPIKE, 'bpe.mjs'), 'bpe.mjs'],
     ...['llama-mt.web.mjs', 'llama-mt.web.wasm', 'llama.web.mjs', 'llama.web.wasm']
         .map((f) => [resolve(SPIKE, f), f]),

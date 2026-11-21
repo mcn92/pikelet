@@ -3,12 +3,20 @@
 # scripts. Only the answer page and llm/ get them, so nothing on the search
 # page can be blocked by them. Everything the answer page loads from another
 # origin (the pack and weights on R2, Google Fonts) is fetched with CORS.
+#
+# The Content-Security-Policy limits the page and its workers to their own
+# scripts and to the R2 bucket for data, so nothing else can be fetched or
+# run even if a script were injected. The worker gets its own copy because a
+# worker's policy comes from its own response, not the page's.
 /answer
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://pub-6da2384a3bca4a44b2b2fa29a94cc811.r2.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 /answer.html
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://pub-6da2384a3bca4a44b2b2fa29a94cc811.r2.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 /llm/*
   Cross-Origin-Embedder-Policy: require-corp
   Cross-Origin-Resource-Policy: same-origin
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://pub-6da2384a3bca4a44b2b2fa29a94cc811.r2.dev
