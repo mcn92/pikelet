@@ -2359,8 +2359,11 @@ console.log('compile: an uncalibrated pack with golden queries that reproduce');
     // pikelet query prints what the MCP search tool returns, readably.
     console.log('cli: pikelet query');
     const answer = cli(['query', out, 'how do bees tell each other where flowers are']);
-    check('query prints numbered results with their source and distance, and no verdict',
-        /^\S+: 5 results\n\n1\. [^\n]+\n   \S+ · distance \d\.\d{3}\n/.test(answer) && !/strong|weak|matchQuality/.test(answer), answer.slice(0, 400));
+    check('query prints numbered results with their source, no distance, and no verdict',
+        /^\S+: 5 results\n\n1\. [^\n]+\n   \S+\n/.test(answer) && !/ · distance \d/.test(answer) && !/strong|weak|matchQuality/.test(answer), answer.slice(0, 400));
+    const verboseAnswer = cli(['query', out, 'how do bees tell each other where flowers are', '--verbose']);
+    check('query --verbose adds each result\'s distance after its source',
+        /^\S+: 5 results\n\n1\. [^\n]+\n   \S+ · distance \d\.\d{3}\n/.test(verboseAnswer), verboseAnswer.slice(0, 400));
     const asJson = JSON.parse(cli(['query', out, 'how', 'do', 'bees', 'dance', '--json', '--limit', '2']));
     check('query --json is the search tool\'s response, with --limit and an unquoted question',
         asJson.query === 'how do bees dance' && asJson.sections.length === 1 && asJson.sections[0].results.length === 2,

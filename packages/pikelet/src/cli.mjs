@@ -218,16 +218,19 @@ to --out when the parent is a local file under the output directory.`;
 
 const HELP = {
   query: `Usage:
-  pikelet query <pack> "<question>" [--limit <n>] [--json]
+  pikelet query <pack> "<question>" [--limit <n>] [--verbose] [--json]
 
 Searches a pack and prints the passages an MCP agent would get for the same
-question: each result's title, source, distance and text, then the
+question, best first: each result's title, source and text, then the
 question's words the best-matching passage lacks. <pack> is a .pikelet
 file, an HTTP(S) URL (range-read, not downloaded), or either with
 '#<sha256>' to pin the identity. A layer is searched as its whole chain.
 
 Options:
   --limit <n>   Results to show (default 5, at most 20)
+  --verbose     Also print each result's vector distance (lower is closer).
+                The ranking also weighs keyword matches, so these are not
+                always ascending.
   --json        Print the search tool's JSON response unchanged`,
   compile: `Usage:
   pikelet compile <path|url> --out docs.pikelet

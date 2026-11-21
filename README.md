@@ -46,7 +46,7 @@ npx pikelet query docs.pikelet "why is a pack one file"
 docs: 5 results
 
 1. Why make knowledge a file
-   why-a-file.md#why-make-knowledge-a-file · distance 0.617
+   why-a-file.md#why-make-knowledge-a-file
    The reasoning behind the single-artifact design. ...
 ```
 
@@ -116,7 +116,7 @@ On a 20-record test pack with a 24.6 MiB base, deleting a record took a 1.2 KiB 
 
 ## Does the pack answer the question?
 
-A nearest neighbour is not evidence that a corpus answers a question: every query returns *something*. Pikelet does not try to decide for you. Each result carries its `distance`, and each response lists the question's words missing from whichever of the top five passages contains the most of them (`grounding.uncovered`). "How do I keep snapshots forever" against a pack whose snapshot page never mentions keeping them forever comes back with `keep` and `forever` uncovered; the MCP server tells the model to cite only a passage that states the answer.
+A nearest neighbour is not evidence that a corpus answers a question: every query returns *something*. Pikelet does not try to decide for you. Each result carries its vector `distance` (results come in hybrid order, which also weighs keyword matches, so distances are not always ascending), and each response lists the question's words missing from whichever of the top five passages contains the most of them (`grounding.uncovered`). "How do I keep snapshots forever" against a pack whose snapshot page never mentions keeping them forever comes back with `keep` and `forever` uncovered; the MCP server tells the model to cite only a passage that states the answer.
 
 Earlier releases also shipped a relevance verdict (`matchQuality: strong | weak | none`) fitted at build time. On a 1,377-article Wikipedia pack it called 278 of 512 questions whose answer article was not in the pack `strong`, and agents given the verdict declined unanswerable questions no more often than agents without it: they read the passages either way. So `compile` no longer fits one; packs calibrated by earlier releases keep theirs in the library. [docs/calibration.md](docs/calibration.md#why-the-verdict-was-dropped-2026-11) has the measurements.
 

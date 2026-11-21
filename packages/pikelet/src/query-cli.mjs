@@ -35,10 +35,13 @@ export async function runQueryCommand(positionals, flags) {
     console.log(JSON.stringify(out, null, 2));
     return;
   }
-  console.log(formatSearch(out));
+  console.log(formatSearch(out, { verbose: !!flags.verbose }));
 }
 
-export function formatSearch(out) {
+// Results print in ranked order. Distance is vector similarity alone, and the
+// hybrid ranking also weighs keyword matches, so the printed distances are
+// not always ascending; they show only with --verbose.
+export function formatSearch(out, { verbose = false } = {}) {
   const lines = [];
   for (const section of out.sections) {
     if (lines.length) lines.push('');
@@ -48,7 +51,7 @@ export function formatSearch(out) {
       const source = r.source ? `${r.source}${r.anchor && !String(r.source).includes('#') ? `#${r.anchor}` : ''}` : null;
       lines.push('');
       lines.push(`${i + 1}. ${heading || `record ${r.id}`}`);
-      const distance = typeof r.distance === 'number' ? `distance ${r.distance.toFixed(3)}` : null;
+      const distance = verbose && typeof r.distance === 'number' ? `distance ${r.distance.toFixed(3)}` : null;
       const where = [source, distance].filter(Boolean).join(' · ');
       if (where) lines.push(`   ${where}`);
       // A chunk's text opens with its own heading, already printed above.

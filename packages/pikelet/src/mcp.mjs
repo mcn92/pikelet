@@ -146,9 +146,10 @@ function toolDefinitions(packs, { mounting = false, journalPending = false } = {
   return [
     {
       name: 'search',
-      description: 'Search the mounted .pikelet knowledge packs. Returns the closest chunks '
-        + 'with full provenance (pack, immutable pack identity, title, heading path, source), each '
-        + 'with a distance (lower is closer in meaning), and grounding: which of the query\'s '
+      description: 'Search the mounted .pikelet knowledge packs. Returns the best-ranked chunks, '
+        + 'best first, with full provenance (pack, immutable pack identity, title, heading path, '
+        + 'source), each with a vector distance (lower is closer in meaning; the ranking also weighs '
+        + 'keyword matches, so distances are not always ascending), and grounding: which of the query\'s '
         + 'content words the best-matching passage restates (covered) and which it lacks '
         + '(uncovered; another passage may still contain one). Closeness is similarity, not evidence: a close passage can be on the right '
         + 'subject without containing the specific value asked for (right entity, wrong attribute, '
@@ -1264,8 +1265,8 @@ export async function runMcpServer({ packPaths, journal = null, openPikeletFile,
             supportedVersions,
             capabilities: { tools: { listChanged: true } },
             instructions: 'This server mounts .pikelet knowledge packs. Use search to retrieve '
-              + 'provenanced passages ranked by closeness of meaning, each with a distance (lower is '
-              + 'closer). Closeness is not evidence that the answer is there: read the passages and '
+              + 'provenanced passages, best first, ranked by meaning and keyword match together. '
+              + 'A high rank is not evidence that the answer is there: read the passages and '
               + 'cite only one whose text states the answer. Each section carries '
               + 'grounding.uncovered, the query words the best-matching passage lacks: if what you '
               + 'were asked for is in that list, that passage does not establish it; cite another '

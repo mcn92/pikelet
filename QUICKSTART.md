@@ -102,11 +102,11 @@ pikelet query docs.pikelet "how do I restore an earlier snapshot" --limit 2
 ferry-docs: 2 results
 
 1. Snapshots and restore
-   snapshots.md#snapshots-and-restore · distance 0.388
+   snapshots.md#snapshots-and-restore
    Every write creates a new snapshot. To return the bucket to an earlier state, list the snapshots with ferry snapshots, pick the one you want by its timestamp, and run ferry restore <snapshot-id>. A restore writes the old files back as a new snapshot, so the restore itself can be…
 
 2. Command reference
-   cli.md#command-reference · distance 0.693
+   cli.md#command-reference
    ferry init <bucket-url> sets up a folder to sync with a bucket. ferry status shows pending uploads, downloads and conflicts. ferry pause and ferry resume stop and restart syncing without quitting the daemon. ferry snapshots lists the bucket's snapshots, newest first. ferry resto…
 ```
 

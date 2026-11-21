@@ -10,6 +10,20 @@ first.
 
 ## Unreleased
 
+### Changed
+
+- **`pikelet query` no longer prints distances unless asked.** Results
+  are in hybrid order, which weighs keyword matches as well as vector
+  distance, so the printed distances were not always ascending and read
+  as a ranking error. The numbered order is the ranking; `--verbose`
+  adds each result's distance. `--json` and the MCP `search` response
+  are unchanged and still carry `distance` on every result.
+- **The MCP server describes the ranking accurately.** The `search` tool
+  description and the server instructions said results were "ranked by
+  closeness of meaning"; they now say results come best first, ranked by
+  meaning and keyword match together, and that `distance` is vector
+  similarity only.
+
 ### Fixed
 
 - **A seed URL's redirects are checked against robots.txt before they are

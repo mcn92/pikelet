@@ -101,7 +101,7 @@ The point is not that static HTTP is magically reliable. The point is that a sta
 
 ## Grounding: which question words the passages contain
 
-A query does not decide whether its results answer the question. It returns the nearest passages with their distances, and grades the question's words against the top five passages in ranked order (fused order on a hybrid pack):
+A query does not decide whether its results answer the question. It returns the best-ranked passages with their vector distances (on a hybrid pack the order also weighs keyword matches, so distances are not always ascending), and grades the question's words against the top five passages in ranked order (fused order on a hybrid pack):
 
 - **Which words.** The question is lower-cased and split into words; possessives are stripped, and stopwords and question scaffolding ("what", "how", "explain", "overview" and the like) are dropped, along with words under three letters unless they hold a digit, so "v8" and "3d" count.
 - **What counts as contained.** A word is covered by a passage's body if the body has it, its plural or singular, or a word with the same light stem ("restore" and "restoring"). A word found only in the passage's heading, its first line, counts half.

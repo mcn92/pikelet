@@ -120,10 +120,10 @@ const search = await openPikeletFile('search.pikelet');
 const out = await search.query('how do I configure auth', { k: 5 });
 ```
 
-or search it from the terminal, which prints each result's title, source,
-distance and text, exactly what the MCP `search` tool
+or search it from the terminal, which prints each result's title, source
+and text, best first, from what the MCP `search` tool
 returns for the same question (`--json` prints that response unchanged,
-`--limit <n>` sets the result count):
+`--limit <n>` sets the result count, `--verbose` adds each distance):
 
 ```bash
 npx pikelet query search.pikelet "how do I configure auth"
@@ -290,7 +290,8 @@ pack name, the pack's immutable manifest identity (sha256), title,
 heading path, anchor, and source — so an answer can cite the exact
 knowledge state it was derived from, and a pinned identity means the
 citation survives pack rebuilds detectably. Each result carries its
-distance, and each pack's section carries `grounding`: which of the
+vector distance (results are in hybrid order, which also weighs keyword
+matches, so distances are not always ascending), and each pack's section carries `grounding`: which of the
 question's words the best of the top passages contains, and which it
 lacks. An asked-for value in `grounding.uncovered` is one that passage does
 not state; another passage may, so the model is told to cite only a
