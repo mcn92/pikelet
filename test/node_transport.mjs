@@ -368,7 +368,7 @@ console.log('crawler');
     reset();
     let got = await attempt(`${homeBase}/away`);
     check('a seed redirected to another origin is refused when that origin\'s robots.txt disallows it, before it is fetched',
-        new RegExp(`${otherBase.replace(/[.]/g, '\\.')}/robots\\.txt does not allow crawling`).test(got.error || '')
+        (got.error || '').includes(`${otherBase}/robots.txt does not allow crawling`)
             && JSON.stringify(other.requests) === '["/robots.txt"]', `${got.error} | other saw ${other.requests.join(' ')}`);
     reset();
     got = await attempt(`${homeBase}/away-refresh`);
