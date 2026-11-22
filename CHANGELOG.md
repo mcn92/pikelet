@@ -26,6 +26,14 @@ first.
 
 ### Fixed
 
+- **A student-mode `outDir` outside the project is refused instead of
+  deleted.** `create --mode student` and `rebuild` delete and recreate
+  `embedding.trainStudent.outDir` from `pikelet.config.json` before every
+  training run, and nothing kept it inside the project: `"outDir": "."`
+  deleted the whole project and `".."` its parent folder. The folder must
+  now resolve strictly inside the project, or the build stops with an error
+  naming the value before anything is removed. The scaffold and the
+  Docusaurus plugin write `"student"`, which is unaffected.
 - **The range-proof server stays inside its folder and survives bad
   requests** (`benchmarks/range-proof/dumb-server.mjs`, a benchmark tool,
   not part of either package). Its containment check compared paths

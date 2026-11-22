@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { embedChunks } from '../packages/pikelet/src/embed.mjs';
+import { embedChunks, studentOutDir, trainStudentVectors } from '../packages/pikelet/src/embed.mjs';
 import { DEFAULT_CONFIG, MODEL_MAP } from '../packages/pikelet/src/common.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -104,6 +104,38 @@ try {
     }
     server.close();
     fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// The student trainer's outDir is deleted and recreated on every build, so a
+// config value that resolves to the project, its parent, or anywhere outside
+// it must be refused before anything is removed.
+console.log('student outDir');
+{
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'pikelet-outdir-'));
+    const project = path.join(parent, 'project');
+    fs.mkdirSync(project);
+    const sentinel = path.join(project, 'keep.txt');
+    const sibling = path.join(parent, 'sibling-keep.txt');
+    fs.writeFileSync(sentinel, 'keep');
+    fs.writeFileSync(sibling, 'keep');
+    try {
+        for (const bad of ['.', '..', '../elsewhere', 'student/../..', project, parent, `${project}-other`]) {
+            let error = null;
+            try {
+                await trainStudentVectors([], { trainStudent: { enabled: true, outDir: bad } }, () => {}, project);
+            } catch (e) { error = e; }
+            check(`trainStudent.outDir ${JSON.stringify(bad)} is refused before anything is deleted`,
+                /must be a folder inside the project/.test(error?.message || '') && fs.existsSync(sentinel) && fs.existsSync(sibling),
+                error?.message);
+        }
+        check('the default and nested folders inside the project are accepted',
+            studentOutDir(project, undefined) === path.join(project, 'student')
+            && studentOutDir(project, 'student') === path.join(project, 'student')
+            && studentOutDir(project, 'build/student') === path.join(project, 'build', 'student')
+            && studentOutDir(project, path.join(project, 'x')) === path.join(project, 'x'));
+    } finally {
+        fs.rmSync(parent, { recursive: true, force: true });
+    }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

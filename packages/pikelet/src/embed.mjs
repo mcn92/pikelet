@@ -76,9 +76,21 @@ async function embedChunksForWorkersAi(chunks, config, log) {
   return embedWithInlineKernel(chunks, declaration, { vocabPath: PACKAGED_VOCAB, weightsPath }, log);
 }
 
+// The trainer's output folder is deleted and recreated on every build, so it
+// must lie strictly inside the project: "outDir": "." or ".." in a config
+// would otherwise delete the project or its parent.
+function studentOutDir(projectDir, configured) {
+  const root = path.resolve(projectDir);
+  const outDir = path.resolve(root, configured || 'student');
+  if (!outDir.startsWith(root + path.sep)) {
+    throw new CliError(`embedding.trainStudent.outDir must be a folder inside the project (${root}); got ${JSON.stringify(configured)}, which resolves to ${outDir}. It is deleted and recreated on every build.`, 1);
+  }
+  return outDir;
+}
+
 async function trainStudentVectors(chunks, embeddingConfig, log, projectDir) {
   const trainConfig = embeddingConfig.trainStudent || {};
-  const outDir = path.resolve(projectDir, trainConfig.outDir || 'student');
+  const outDir = studentOutDir(projectDir, trainConfig.outDir);
   const corpusPath = path.join(outDir, 'student-corpus.json');
   await fs.rm(outDir, { recursive: true, force: true });
   await fs.mkdir(outDir, { recursive: true });
@@ -338,6 +350,7 @@ function validateSelfRecall(index, chunks, vectors, log) {
 
 export {
   embedChunks,
+  studentOutDir,
   trainStudentVectors,
   embedChunksWithInlineTransformer,
   embedProgress,
