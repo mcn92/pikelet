@@ -60,7 +60,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: mymindstorm/setup-emsdk@v14
+      # Third-party action pinned to the commit v14 pointed at, so a moved tag
+      # cannot change what runs here.
+      - uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
         with:
           # Keep in sync with the version used for the committed dist/
           # artifacts (~/emsdk on the release machine).
