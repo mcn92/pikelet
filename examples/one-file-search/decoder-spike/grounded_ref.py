@@ -22,7 +22,7 @@ tok = AutoTokenizer.from_pretrained(MODEL)
 dev = 'cuda' if torch.cuda.is_available() else 'cpu'
 model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).eval()
 if VARIANT != 'fp32':
-    deq = torch.load(HERE / f'{NAME}-u{VARIANT}.deq.pt')
+    deq = torch.load(HERE / f'{NAME}-u{VARIANT}.deq.pt', weights_only=True)
     sd = model.state_dict()
     with torch.no_grad():
         for k, v in deq.items():

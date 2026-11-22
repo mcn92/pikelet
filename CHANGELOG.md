@@ -26,6 +26,16 @@ first.
 
 ### Fixed
 
+- **The range-proof server stays inside its folder and survives bad
+  requests** (`benchmarks/range-proof/dumb-server.mjs`, a benchmark tool,
+  not part of either package). Its containment check compared paths
+  without a trailing separator, so an encoded slash
+  (`/..%2Froot-secret/file`) could read a sibling folder whose name began
+  with the served folder's name; it now requires the path to be the
+  folder or under `folder/`, and answers 403 otherwise. A malformed
+  percent-escape (`/%E0%A4%A`) made `decodeURIComponent` throw and the
+  server exit; it now answers 400. A request for a directory, the root
+  included, crashed it with EISDIR; it now answers 404.
 - **A seed URL's redirects are checked against robots.txt before they are
   fetched.** `compile --source <url>` (and `append --source <url>`)
   follows the seed through up to five redirects, HTTP or meta refresh,

@@ -28,7 +28,8 @@ export function canonicalJson(value) {
   }
   if (value && typeof value === 'object') {
     const parts = [];
-    for (const k of Object.keys(value).sort()) {
+    // Code-unit order, not localeCompare: key order is part of the pack identity.
+    for (const k of Object.keys(value).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
       const serialized = canonicalJson(value[k]);
       if (serialized !== undefined) parts.push(`${JSON.stringify(k)}:${serialized}`);
     }

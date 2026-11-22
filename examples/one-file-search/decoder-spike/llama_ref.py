@@ -102,7 +102,7 @@ sd = model.state_dict()
 deq_path = HERE / f'{NAME}-u{BITS}.deq.pt'
 with torch.no_grad():
     if deq_path.exists():
-        for k, v in torch.load(deq_path).items():
+        for k, v in torch.load(deq_path, weights_only=True).items():
             sd[k].copy_(v)
     else:
         for k, v in blob_tensors(HERE / f'{NAME}-u{BITS}.bin'):

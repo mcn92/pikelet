@@ -228,7 +228,8 @@ async function listFiles(root) {
     }
   };
   await walk(root);
-  return out.sort();
+  // Code-unit order, not localeCompare: file order sets record order, part of the pack identity.
+  return out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 function exchangeText(conversation, exchange, index) {

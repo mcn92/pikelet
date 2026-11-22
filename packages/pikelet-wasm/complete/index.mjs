@@ -885,7 +885,7 @@ export async function openPikeletFile(input, options = {}) {
         // (inline-transformer-v1): the pinned teacher as data, executed by
         // reader-owned kernels, verified against its own test vectors.
         let embed;
-        let preScore = () => null;
+        let preScore = (_context) => null;
         let scoreQuality;
         let encoderInfo;
         let encoderVerified = null;

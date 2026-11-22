@@ -16,8 +16,16 @@ export function startDumbServer(dir, { port = 0, logToStdout = true } = {}) {
   const rootDir = path.resolve(dir);
   const server = http.createServer((req, res) => {
     const urlPath = new URL(req.url, 'http://localhost').pathname;
-    const filePath = path.join(rootDir, decodeURIComponent(urlPath));
-    if (!filePath.startsWith(rootDir)) {
+    let decoded;
+    try {
+      decoded = decodeURIComponent(urlPath);
+    } catch {
+      res.writeHead(400).end('bad request');
+      return;
+    }
+    const filePath = path.join(rootDir, decoded);
+    // root + sep, so a sibling sharing the root's name prefix is not inside.
+    if (filePath !== rootDir && !filePath.startsWith(rootDir + path.sep)) {
       res.writeHead(403).end();
       return;
     }
@@ -25,6 +33,11 @@ export function startDumbServer(dir, { port = 0, logToStdout = true } = {}) {
     try {
       stat = fs.statSync(filePath);
     } catch {
+      res.writeHead(404).end('not found');
+      return;
+    }
+    // A directory (the root included) has nothing to stream; reading one throws.
+    if (!stat.isFile()) {
       res.writeHead(404).end('not found');
       return;
     }

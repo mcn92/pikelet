@@ -32,7 +32,8 @@ const isCount = (v, max = MAX_RECORDS) => Number.isSafeInteger(v) && v >= 0 && v
 export function canonicalJson(value) {
     if (value === null || typeof value !== 'object') return JSON.stringify(value);
     if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-    const keys = Object.keys(value).filter((k) => value[k] !== undefined).sort();
+    // Code-unit order, not localeCompare: key order is part of the pack identity.
+    const keys = Object.keys(value).filter((k) => value[k] !== undefined).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
 }
 
