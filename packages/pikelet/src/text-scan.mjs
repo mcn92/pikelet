@@ -262,8 +262,17 @@ export function dropTableSeparatorRows(text) {
   return out;
 }
 
-const DASH_CELL = /^[ \t]*:?-+:?[ \t]*$/;
-const LAST_CELL = /^[ \t]*:?-*:?[ \t]*$/;
+// A table cell that /^[ \t]*:?-+:?[ \t]*$/ matches (minDashes 1) or
+// /^[ \t]*:?-*:?[ \t]*$/ (minDashes 0): an optional colon on each side of
+// a run of dashes, spaces and tabs around.
+function isDashCell(cell, minDashes) {
+  let s = trimSpaceTab(cell);
+  if (s[0] === ':') s = s.slice(1);
+  if (s.at(-1) === ':') s = s.slice(0, -1);
+  if (s.length < minDashes) return false;
+  for (const c of s) if (c !== '-') return false;
+  return true;
+}
 
 // Cells of dashes, each closed by '|', after an optional leading '|'; then
 // an optional last cell (its dashes optional) and an optional closing '|'.
@@ -273,9 +282,9 @@ export function isTableSeparatorRow(line) {
   const cells = row.split('|');
   if (cells.length < 2) return false;
   const tail = cells.pop();
-  if (cells.every((cell) => DASH_CELL.test(cell))) return LAST_CELL.test(tail);
+  if (cells.every((cell) => isDashCell(cell, 1))) return isDashCell(tail, 0);
   // The closing '|' ends the optional last cell rather than a dash cell.
   return tail === '' && cells.length >= 2
-    && cells.slice(0, -1).every((cell) => DASH_CELL.test(cell))
-    && LAST_CELL.test(cells[cells.length - 1]);
+    && cells.slice(0, -1).every((cell) => isDashCell(cell, 1))
+    && isDashCell(cells.at(-1), 0);
 }
