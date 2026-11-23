@@ -240,7 +240,9 @@ def extract_features(text: str, buckets: int, max_features: int) -> list[int]:
 
 
 def clean_title(value: str) -> str:
-    return re.sub(r"\s*[/|>]\s*", " ", str(value or "")).strip()
+    # re.sub(r"\s*[/|>]\s*", " ", value).strip(), without that pattern's
+    # rescan of every whitespace run not followed by a separator.
+    return " ".join(part.strip() for part in re.split(r"[/|>]", str(value or ""))).strip()
 
 
 def first_sentence(value: str, max_words: int = 28) -> str:

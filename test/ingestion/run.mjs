@@ -13,6 +13,7 @@ await import('./folder.mjs');
 await import('./git.mjs');
 await import('./conversations.mjs');
 await import('./short-docs.mjs');
+await import('./linear.mjs');
 
 const { passed, failed } = counts();
 console.log(`\nIngestion conformance: ${passed} passed, ${failed} failed`);

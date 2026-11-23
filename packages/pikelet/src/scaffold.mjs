@@ -6,6 +6,7 @@ import fssync from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PACKAGE_ROOT, CLI_VERSION, PIKELET_WASM_RANGE, CliError } from './common.mjs';
+import { trimChar } from './text-scan.mjs';
 
 async function writeProject(projectDir, config) {
   await fs.mkdir(path.join(projectDir, 'assets'), { recursive: true });
@@ -100,7 +101,7 @@ function generatedPackageJson(config) {
 }
 
 function tomlString(value) {
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '') || 'pikelet-search';
+  return trimChar(String(value).replace(/[^a-zA-Z0-9_-]/g, '-'), '-') || 'pikelet-search';
 }
 async function deployProject(projectDir) {
   const who = runNpmSync(['exec', '--', 'wrangler', 'whoami'], { cwd: projectDir, encoding: 'utf8' });

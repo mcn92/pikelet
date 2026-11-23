@@ -56,6 +56,18 @@ first.
   origin's Crawl-delay applies, before it is requested. A seed that
   redirects to a URL that is not HTTP(S) is refused with an error saying
   so, where it failed with "Could not read null/robots.txt".
+- **Ingestion no longer stalls on long runs of spaces, brackets or `<`.**
+  Several of the regular expressions that strip Markdown, read headings
+  and titles, flatten HTML and parse robots.txt restarted at every
+  character of a long run that was not followed by what they needed, so
+  their time grew with the square of the run: 40 KB of spaces in a
+  heading line took 14 s, and a crawled page or a document with a few
+  hundred KB of such text could hold `compile` for many minutes. They are
+  now linear scans (`packages/pikelet/src/text-scan.mjs`) that return
+  exactly what the expressions returned, so records, titles, anchors and
+  pack identities are unchanged. The same change covers route and
+  repository path trimming, the scaffold's project name, the Docusaurus
+  client's result links, and `clean_title` in the student trainer.
 
 ## pikelet-wasm 0.15.0 / pikelet 0.15.0 — 2026-11-19
 

@@ -6,6 +6,12 @@ import fssync from 'node:fs';
 import path from 'node:path';
 import { CliError, CLI_VERSION } from './common.mjs';
 import { nodeFetch } from 'pikelet-wasm/complete/node-fetch.mjs';
+import {
+  atxHeading, customIdSuffix, dropTableSeparatorRows, firstAtxTitle, mapLines,
+  refreshContentUrl, replaceTags, robotsField, spacePipes, stripClosingHashes,
+  stripClosingHashLine, titleBeforeSiteName, trimChar, trimCharEnd, trimSpaceTab,
+  unwrapLinks,
+} from './text-scan.mjs';
 
 // Internal provenance survives object spreads, but never JSON serialization.
 export const LOCAL_SOURCE_FILE = Symbol('localSourceFile');
@@ -169,9 +175,9 @@ function urlCrawlFilter(source) {
 function metaRefreshTarget(html, baseHref) {
   const meta = html.match(/<meta[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/i);
   if (!meta) return null;
-  const url = meta[0].match(/content\s*=\s*["']?[^"'>]*?url\s*=\s*([^"'>\s;]+)/i);
-  if (!url) return null;
-  try { return new URL(url[1], baseHref); } catch { return null; }
+  const url = refreshContentUrl(meta[0]);
+  if (url === null) return null;
+  try { return new URL(url, baseHref); } catch { return null; }
 }
 
 // The seed URL is followed through redirects (HTTP and meta refresh,
@@ -279,10 +285,10 @@ export function parseRobots(text, token = ROBOTS_TOKEN) {
   let inAgentRun = false;
   for (const raw of String(text).split(/\r?\n/)) {
     const line = raw.replace(/#.*/, '').trim();
-    const m = /^([A-Za-z-]+)\s*:\s*(.*)$/.exec(line);
+    const m = robotsField(line);
     if (!m) continue;
-    const key = m[1].toLowerCase();
-    const value = m[2].trim();
+    const key = m[0].toLowerCase();
+    const value = m[1].trim();
     if (key === 'user-agent') {
       if (!inAgentRun) {
         current = { agents: [], rules: [], delay: null };
@@ -551,7 +557,7 @@ function extractByExtension(text, file) {
   if (/\.html?$/i.test(file)) return extractHtml(text);
   if (/\.mdx?$/i.test(file)) return extractMarkdown(text);
   text = text.replace(/^﻿/, '');
-  const title = (text.match(/^#\s+(.+)$/m) || [])[1];
+  const title = firstAtxTitle(text);
   return { title, text: stripMarkdown(text) };
 }
 
@@ -564,9 +570,8 @@ function extractByExtension(text, file) {
 function makeSlugger() {
   const used = new Map();
   return (heading) => {
-    const base = String(heading || '')
-      .replace(/`([^`]*)`/g, '$1')
-      .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+    const base = unwrapLinks(String(heading || '')
+      .replace(/`([^`]*)`/g, '$1'), 'inline')
       .trim()
       .toLowerCase()
       .replace(/[^\p{L}\p{N} _-]/gu, '')
@@ -581,9 +586,8 @@ function makeSlugger() {
 // Underscores stay: snake_case identifiers (ACTION_QUERY_PARAMS) are far
 // more common in developer-doc headings than _underscore emphasis_, and
 // github-slugger keeps them.
-const cleanHeading = (heading) => normalizeText(String(heading || '')
-  .replace(/`([^`]*)`/g, '$1')
-  .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+const cleanHeading = (heading) => normalizeText(unwrapLinks(String(heading || '')
+  .replace(/`([^`]*)`/g, '$1'), 'inline')
   .replace(/[*~]/g, ''));
 
 // Split a markdown body into heading-delimited sections. Heading lines are
@@ -602,10 +606,10 @@ function markdownSections(body) {
       current.lines.push(line);
       continue;
     }
-    const h = !fence && line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    const h = !fence && atxHeading(line);
     if (h) {
       sections.push(current);
-      current = { ...headingParts(h[2], h[1].length), lines: [] };
+      current = { ...headingParts(h.text, h.depth), lines: [] };
       continue;
     }
     // Setext headings: a line of === (depth 1) or --- (depth 2, two or
@@ -630,10 +634,10 @@ function markdownSections(body) {
 // Split a raw heading into display text, depth, and an explicit id when
 // present ({#custom-id}, Docusaurus/Astro style — it wins over the slug).
 function headingParts(rawHeading, depth) {
-  let heading = rawHeading.replace(/\s+#+\s*$/, '');
-  const custom = heading.match(/\s*\{#([A-Za-z0-9_-]+)\}\s*$/);
+  let heading = stripClosingHashes(rawHeading);
+  const custom = customIdSuffix(heading);
   if (custom) heading = heading.slice(0, custom.index);
-  return { depth, heading: cleanHeading(heading), customId: custom ? custom[1] : null };
+  return { depth, heading: cleanHeading(heading), customId: custom ? custom.id : null };
 }
 
 // Assign heading paths and anchors to raw sections. The path includes the
@@ -709,10 +713,9 @@ function extractHtml(html) {
   // downstream (chunkDocs splits on \n{2,}); <br> is a soft line break
   // within a paragraph, so it stays a single \n. normalizeText collapses
   // any resulting run of 3+ newlines back down to exactly one blank line.
-  const flattenHtml = (fragment) => normalizeText(decodeEntities(String(fragment)
+  const flattenHtml = (fragment) => normalizeText(decodeEntities(replaceTags(String(fragment)
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|li|div|tr|pre|h[1-6])>/gi, '\n\n')
-    .replace(/<[^>]+>/g, ' ')));
+    .replace(/<\/(p|li|div|tr|pre|h[1-6])>/gi, '\n\n'), ' ')));
   // Heading tags delimit sections; an id attribute on the heading (or, as
   // fallback, on an anchor/element wrapping it) is the section anchor —
   // matching what the site's own anchor links use — with a derived slug
@@ -723,11 +726,11 @@ function extractHtml(html) {
   for (const m of body.matchAll(/<h([1-6])([^>]*)>([\s\S]*?)<\/h\1>/gi)) {
     raw.push({ ...last, body: body.slice(cursor, m.index) });
     const attrId = attrValue(m[2], 'id') || attrValue(m[3], 'id') || null;
-    last = { depth: Number(m[1]), heading: normalizeText(decodeEntities(m[3].replace(/<[^>]+>/g, ' '))), customId: attrId };
+    last = { depth: Number(m[1]), heading: normalizeText(decodeEntities(replaceTags(m[3], ' '))), customId: attrId };
     cursor = m.index + m[0].length;
   }
   raw.push({ ...last, body: body.slice(cursor) });
-  const pageTitle = title.split(/\s*[|·–—-]\s+/)[0] || title;
+  const pageTitle = titleBeforeSiteName(title) || title;
   const sections = sectionize(raw, pageTitle,
     (s) => (s.heading ? `${s.heading}\n${flattenHtml(s.body)}` : flattenHtml(s.body)).trim());
   return { title, text: flattenHtml(body), sections };
@@ -851,21 +854,19 @@ function stripMarkdown(text) {
 
   // 1. Protect code first, with the linear scanners below. Fenced blocks
   //    keep their body byte-for-byte; inline spans keep their contents.
-  let out = protectInlineCode(protectFences(src, keep), keep)
-    // 2. Images and links: keep alt/link text, drop the URL.
-    .replace(/!\[([^\]]*)]\([^)]*\)/g, '$1')
-    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
-    .replace(/\[([^\]]+)]\[[^\]]*]/g, '$1')
-    // 3. Block-level markers, anchored to line start.
-    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '')                // ATX heading hash
-    .replace(/[ \t]+#+[ \t]*$/gm, '')                         // trailing closing hashes
+  let out = protectInlineCode(protectFences(src, keep), keep);
+  // 2. Images and links: keep alt/link text, drop the URL.
+  out = unwrapLinks(unwrapLinks(unwrapLinks(out, 'image'), 'inline'), 'reference');
+  // 3. Block-level markers, anchored to line start.
+  out = out.replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '');      // ATX heading hash
+  out = mapLines(out, stripClosingHashLine)                  // trailing closing hashes
     .replace(/^[ \t]{0,3}(?:[-*_][ \t]*){3,}$/gm, '')         // horizontal rules
     .replace(/^[ \t]{0,3}(?:>[ \t]?)+/gm, '')                 // blockquote (nested ok)
     .replace(/^([ \t]*)[-*+][ \t]+(?=\S)/gm, '$1')            // unordered list bullet
-    .replace(/^([ \t]*)[-*+][ \t]+\[[ xX]][ \t]+/gm, '$1')    // task list checkbox
-    // 4. Tables: drop separator rows and pipe scaffolding.
-    .replace(/^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-*:?[ \t]*\|?[ \t]*\n/gm, '')
-    .replace(/^[ \t]*\|/gm, '').replace(/\|[ \t]*$/gm, '').replace(/[ \t]*\|[ \t]*/g, ' ')
+    .replace(/^([ \t]*)[-*+][ \t]+\[[ xX]][ \t]+/gm, '$1');   // task list checkbox
+  // 4. Tables: drop separator rows and pipe scaffolding.
+  out = spacePipes(dropTableSeparatorRows(out)
+    .replace(/^[ \t]*\|/gm, '').replace(/\|[ \t]*$/gm, ''))
     // 5. Inline emphasis, only at word boundaries so snake_case and
     //    intra-word asterisks survive.
     .replace(/(\*\*\*|___)(?=\S)([\s\S]*?\S)\1/g, '$2')
@@ -878,7 +879,7 @@ function stripMarkdown(text) {
 
   // Tidy prose lines, then restore protected code verbatim (after the
   // trim, so code indentation survives).
-  out = out.replace(/^[ \t]+|[ \t]+$/gm, '').replace(/[ \t]+/g, ' ');
+  out = mapLines(out, trimSpaceTab).replace(/[ \t]+/g, ' ');
   out = out.replace(/\u0000(\d+)\u0000/g, (_, i) => stash[Number(i)]);
   return String(out).replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
@@ -1129,11 +1130,11 @@ function dedupeChunks(chunks) {
 function applySourceRoutes(chunks, config) {
   const baseUrl = config.source?.routeBaseUrl;
   if (!baseUrl) return;
-  const routePrefix = String(config.source.routePrefix || '').replace(/^\/+|\/+$/g, '');
+  const routePrefix = trimChar(String(config.source.routePrefix || ''), '/');
   const join = (...parts) => {
     const prefix = String(baseUrl || '/').endsWith('/') ? String(baseUrl || '/') : `${baseUrl}/`;
     const suffix = parts
-      .map((part) => String(part || '').replace(/^\/+|\/+$/g, ''))
+      .map((part) => trimChar(String(part || ''), '/'))
       .filter(Boolean)
       .join('/');
     return `${prefix}${suffix}`;
@@ -1144,7 +1145,7 @@ function applySourceRoutes(chunks, config) {
     // Docusaurus route conventions: NN- prefixes order the sidebar but are
     // stripped from routes; index/README docs become the directory route.
     route = route.split('/').map((segment) => segment.replace(/^\d+-/, '')).join('/');
-    route = route.replace(/(^|\/)(index|readme)$/i, '$1').replace(/\/+$/, '');
+    route = trimCharEnd(route.replace(/(^|\/)(index|readme)$/i, '$1'), '/');
     if (chunk.slug) {
       // Front-matter slug: absolute replaces the whole doc path (still under
       // routePrefix); relative replaces the last path segment.

@@ -11,6 +11,7 @@ import fssync from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { CliError } from './common.mjs';
+import { trimCharEnd } from './text-scan.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -71,7 +72,7 @@ function commitUrlBase(remote) {
     }
   }
   if (host.toLowerCase() !== 'github.com') return null;
-  const parts = repoPath.replace(/^\/+/, '').replace(/\.git$/, '').replace(/\/+$/, '').split('/');
+  const parts = trimCharEnd(repoPath.replace(/^\/+/, '').replace(/\.git$/, ''), '/').split('/');
   if (parts.length !== 2 || !parts.every((p) => /^[A-Za-z0-9._-]+$/.test(p))) return null;
   return `https://github.com/${parts[0]}/${parts[1]}/commit/`;
 }

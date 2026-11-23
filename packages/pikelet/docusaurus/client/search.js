@@ -1,12 +1,13 @@
 import './search.css';
 import { computeMatchQuality, embedTextWithStudent, loadStudentModel } from '../../src/student-embedder.mjs';
+import { isLineTerminator, trimCharEnd } from '../../src/text-scan.mjs';
 
 const DEFAULT_K = 8;
 const DEFAULT_EF_SEARCH = 120;
 const DEFAULT_ASSET_BASE = '/pikelet-search';
 
 function normalizeBase(value) {
-  return String(value || DEFAULT_ASSET_BASE).replace(/\/+$/g, '');
+  return trimCharEnd(String(value || DEFAULT_ASSET_BASE), '/');
 }
 
 function createRangeSource(url) {
@@ -33,11 +34,19 @@ function createRangeSource(url) {
   };
 }
 
+// url.replace(/#.*$/, ''): from the first '#' whose rest of the string
+// holds no line terminator.
+function withoutFragment(url) {
+  let cut = -1;
+  for (let i = url.length - 1; i >= 0 && !isLineTerminator(url[i]); i--) if (url[i] === '#') cut = i;
+  return cut < 0 ? url : url.slice(0, cut);
+}
+
 function resultUrl(chunk) {
   if (!chunk) return '#';
   const url = chunk.url || chunk.sourcePath || '#';
   if (!chunk.anchor) return url;
-  return `${url.replace(/#.*$/, '')}#${chunk.anchor}`;
+  return `${withoutFragment(url)}#${chunk.anchor}`;
 }
 
 function htmlEscape(value) {
