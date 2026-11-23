@@ -348,7 +348,6 @@ async function loadPikelet() {
 
 export {
   sha256,
-  completeModulesPromise,
   loadCompleteModules,
   resolveChainMembers,
   plainHttpWarning,

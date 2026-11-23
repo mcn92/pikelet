@@ -52,7 +52,7 @@ export function planAppendability({ qiKind, corpusIngest = null, assertIngest = 
     else if (qiKind === 2) encoderSource = 'host';  // the host supplies the named encoder
     else throw new Error(`unsupported query-interpretation kind ${qiKind} for append`);
 
-    if (corpusIngest !== null && corpusIngest !== undefined) {
+    if (corpusIngest !== null) {
         if (assertIngest) {
             throw new Error('the base declares corpus.ingest; --assert-ingest would override an artifact\'s own declaration (6.1)');
         }

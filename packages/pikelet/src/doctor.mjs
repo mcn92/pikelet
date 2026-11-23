@@ -102,7 +102,7 @@ export async function probeHosting(url) {
   } else if (alpn === 'http/1.1') {
     check('WARN', 'protocol', 'HTTP/1.1 only — browsers cap ~6 connections per origin, so parallel rerank reads serialize (measured: p=6 turns a 1.5 s query into 6.9 s at 100 ms RTT)');
   } else {
-    check(url.startsWith('https:') ? 'WARN' : 'WARN', 'protocol',
+    check('WARN', 'protocol',
       url.startsWith('https:') ? 'ALPN probe failed' : 'plain http — no h2 without TLS, and the 6-connection cap applies');
   }
 

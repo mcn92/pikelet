@@ -212,13 +212,14 @@ function inlineEncoderDeclaration(config, encoder = {}) {
 // git, so this path never runs in-tree.
 const INLINE_WEIGHTS_URL = 'https://github.com/mcn92/pikelet/releases/download/inline-encoder-v1/encoder-weights.bin';
 const INLINE_WEIGHTS_SHA256 = '3b14685a73bd7f30477be8dad89902b6e4bb55e49ec325c9e071c462cf89089b';
+const INLINE_WEIGHTS_PIN = { url: INLINE_WEIGHTS_URL, sha256: INLINE_WEIGHTS_SHA256, urlEnv: 'PIKELET_ENCODER_WEIGHTS_URL' };
 
 // Fetches a digest-pinned weight blob to weightsPath. The default pin is the
 // packaged MiniLM blob; create's build-time BGE encoder passes its own
 // (MODEL_MAP in common.mjs). The bytes land under a temporary name and are
 // renamed into place, so an interrupted or concurrent download never leaves
 // a partial blob at weightsPath.
-async function fetchInlineEncoderWeights(weightsPath, pin = { url: INLINE_WEIGHTS_URL, sha256: INLINE_WEIGHTS_SHA256, urlEnv: 'PIKELET_ENCODER_WEIGHTS_URL' }) {
+async function fetchInlineEncoderWeights(weightsPath, pin = INLINE_WEIGHTS_PIN) {
   const url = process.env[pin.urlEnv] || pin.url;
   let body;
   try {
