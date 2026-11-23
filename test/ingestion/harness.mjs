@@ -1,6 +1,6 @@
-// Shared check/summary state for the ingestion conformance suite. Each
-// *.test.mjs imports check() and section(); run.mjs imports the test
-// modules for their side effects and exits on the shared counters.
+// Shared check/summary state for the ingestion conformance suite. Each test
+// module here imports check() and section(); run.mjs imports the modules by
+// name for their side effects and exits on the shared counters.
 let passed = 0;
 let failed = 0;
 

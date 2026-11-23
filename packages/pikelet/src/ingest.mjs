@@ -560,7 +560,7 @@ function extractByExtension(text, file) {
 // trim, lowercase, keep letters/numbers/space/hyphen/underscore (Unicode
 // letters included), and replace EACH space with a dash without collapsing
 // runs. Inline code and links are unwrapped first. Checked against the real
-// github-slugger by test/ingestion/anchors.test.mjs.
+// github-slugger by test/ingestion/anchors.mjs.
 function makeSlugger() {
   const used = new Map();
   return (heading) => {

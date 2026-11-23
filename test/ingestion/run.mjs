@@ -4,15 +4,15 @@
 // github-slugger (what Docusaurus renders). Part of npm test.
 import { counts } from './harness.mjs';
 
-await import('./markdown.test.mjs');
-await import('./mdx.test.mjs');
-await import('./html.test.mjs');
-await import('./anchors.test.mjs');
-await import('./strip.test.mjs');
-await import('./folder.test.mjs');
-await import('./git.test.mjs');
-await import('./conversations.test.mjs');
-await import('./short-docs.test.mjs');
+await import('./markdown.mjs');
+await import('./mdx.mjs');
+await import('./html.mjs');
+await import('./anchors.mjs');
+await import('./strip.mjs');
+await import('./folder.mjs');
+await import('./git.mjs');
+await import('./conversations.mjs');
+await import('./short-docs.mjs');
 
 const { passed, failed } = counts();
 console.log(`\nIngestion conformance: ${passed} passed, ${failed} failed`);

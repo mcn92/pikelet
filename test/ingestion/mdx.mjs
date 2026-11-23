@@ -1,7 +1,7 @@
 // MDX ingestion conformance: frontmatter title/slug, imports/exports and
 // JSX components around headings, explicit heading ids.
 import { check, section } from './harness.mjs';
-import { pipeline } from './markdown.test.mjs';
+import { pipeline } from './markdown.mjs';
 
 section('mdx: guide.mdx (frontmatter, components, explicit ids)');
 {

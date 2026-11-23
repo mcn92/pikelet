@@ -17,7 +17,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { check, section } from './harness.mjs';
-import { pipeline } from './markdown.test.mjs';
+import { pipeline } from './markdown.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CPS = path.resolve(here, '..', '..', 'packages', 'pikelet', 'src', 'ingest.mjs');
