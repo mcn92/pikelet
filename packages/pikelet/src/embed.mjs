@@ -146,7 +146,7 @@ async function trainStudentVectors(chunks, embeddingConfig, log, projectDir) {
 function inlineEmbedWorkerCount(chunkCount) {
   const env = process.env.PIKELET_EMBED_WORKERS ?? process.env.PIKELET_SEARCH_EMBED_WORKERS;
   if (env !== undefined) {
-    const parsed = parseInt(env, 10);
+    const parsed = Number.parseInt(env, 10);
     if (!Number.isInteger(parsed) || parsed < 0) throw new CliError('PIKELET_EMBED_WORKERS must be a non-negative integer');
     return Math.max(1, Math.min(parsed, chunkCount));
   }

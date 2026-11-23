@@ -1598,7 +1598,7 @@ export async function openPikeletFile(input, options = {}) {
                 if (!lexicalVerified) {
                     const seg = segments.get('lexical');
                     const expected = new Uint8Array(32);
-                    for (let b = 0; b < 32; b++) expected[b] = parseInt(seg.sha256.slice(2 * b, 2 * b + 2), 16);
+                    for (let b = 0; b < 32; b++) expected[b] = Number.parseInt(seg.sha256.slice(2 * b, 2 * b + 2), 16);
                     await verifySegmentSha256(source, seg.offset, seg.length, expected, 'lexical segment',
                         { chunkBytes: verifyOptions.chunkBytes, oneShotLimit: maxReadBytes });
                     lexicalVerified = true;

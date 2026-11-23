@@ -112,7 +112,7 @@ export function parsePositiveInt(value, name) {
 
 export function parseFraction(value, name) {
   const text = String(value).trim();
-  const parsed = /^(\d+(\.\d*)?|\.\d+)$/.test(text) ? Number(text) : NaN;
+  const parsed = /^(\d+(\.\d*)?|\.\d+)$/.test(text) ? Number(text) : Number.NaN;
   if (!(parsed >= 0 && parsed <= 1)) {
     throw new CliError(`${name} must be a number from 0 to 1, got ${JSON.stringify(String(value))}`);
   }
@@ -316,7 +316,7 @@ class CliError extends Error {
 function buildTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
   if (raw === undefined || raw === '') return new Date().toISOString();
-  const seconds = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  const seconds = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
   // 8.64e12 s is the last instant a JavaScript Date can represent.
   if (!Number.isSafeInteger(seconds) || seconds > 8.64e12) {
     throw new CliError(`SOURCE_DATE_EPOCH must be a whole number of seconds since 1970-01-01, got ${JSON.stringify(raw)}`, 1);

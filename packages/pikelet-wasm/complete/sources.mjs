@@ -15,7 +15,7 @@ export function httpRangeSource(url, options = {}) {
         // and a Retry-After of up to a minute; honoring it (capped) beats
         // guessing. Without one, exponential backoff capped at 15 s.
         const raw = response.headers.get('retry-after');
-        const after = raw?.trim() ? Number(raw) : NaN;
+        const after = raw?.trim() ? Number(raw) : Number.NaN;
         if (Number.isFinite(after) && after >= 0 && after <= 90) return after * 1000;
         return Math.min(15000, 250 * 2 ** attempt);
     };

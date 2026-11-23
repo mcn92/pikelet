@@ -100,7 +100,7 @@ for (const quantized of [0, 1]) {
   try {
     assert.equal(native.pikelet_add(nh, new Float32Array([1, 0, 0, 0])), 0);
     assert.equal(
-      native.pikelet_add(nh, new Float32Array([NaN, 0, 0, 0])),
+      native.pikelet_add(nh, new Float32Array([Number.NaN, 0, 0, 0])),
       0xFFFFFFFF,
       `quantized=${quantized}: insert must refuse a NaN component`
     );
@@ -109,7 +109,7 @@ for (const quantized of [0, 1]) {
       0xFFFFFFFF,
       `quantized=${quantized}: insert must refuse an infinite component`
     );
-    const result = native.pikelet_query(nh, new Float32Array([NaN, 0, 0, 0]), 1);
+    const result = native.pikelet_query(nh, new Float32Array([Number.NaN, 0, 0, 0]), 1);
     assert.equal(result.count, 0, `quantized=${quantized}: search must refuse a NaN query`);
   } finally {
     native.pikelet_dispose(nh);

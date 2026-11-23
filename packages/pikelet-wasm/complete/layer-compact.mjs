@@ -31,7 +31,7 @@ export const MAX_HEADS = 17;
 const isHex64 = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 const hexToBytes = (hex) => {
     const out = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    for (let i = 0; i < 32; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
     return out;
 };
 const bytesToHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
