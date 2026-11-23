@@ -15,6 +15,11 @@ on:
 permissions:
   contents: read
 
+# Every install runs with --ignore-scripts: no dependency's install script
+# runs on the runner. None of this repo's packages has lifecycle scripts,
+# and the dependencies that do (esbuild, workerd, sharp, core-js, fsevents)
+# resolve their platform binaries without them.
+
 env:
   # Browser binaries are only needed by test:browser, which has its own job.
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
@@ -39,7 +44,7 @@ jobs:
         with:
           path: ~/.cache/pikelet/models
           key: pikelet-models-bge-small-en-v1.5-u8-3be1ede5
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       # npm test = run_tests.js + model_c_loader + sketch_profile conformance;
       # running the script (not run_tests.js directly) keeps CI and the local
       # gate identical.
@@ -74,7 +79,7 @@ jobs:
         with:
           path: ~/.cache/pikelet/models
           key: pikelet-models-bge-small-en-v1.5-u8-3be1ede5
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: Rebuild both engine variants from packages/pikelet-wasm/engine
         run: npm run build:all
         env:
@@ -107,7 +112,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run test:browser
       # The inline-encoder kernel in all three engines: bit-identical to the
       # Node build, and still verifying the f32 kernel's test vectors (packs
@@ -142,7 +147,7 @@ jobs:
           done
       - name: Report runner SIMD capability
         run: grep -o 'avx512[a-z]*\|avx2\|sse2' /proc/cpuinfo | sort -u | tr '\n' ' '; echo
-      - run: npm ci
+      - run: npm ci --ignore-scripts
         working-directory: packages/pikelet-wasm/native
       - run: npm run build
         working-directory: packages/pikelet-wasm/native
@@ -162,8 +167,8 @@ jobs:
       # Root install first: it creates the workspace links (node_modules/pikelet,
       # node_modules/pikelet-wasm) that the docs-site's file: copies of the
       # packages resolve pikelet-wasm through.
-      - run: npm ci
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
         working-directory: docs-site
       - run: npm run build
         working-directory: docs-site
@@ -190,5 +195,5 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run test:scaffold
